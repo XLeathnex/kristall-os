@@ -6,6 +6,7 @@ import qs.core
 import Quickshell
 import Quickshell.Io
 import qs.services
+import "calc.js" as Calc
 
 Scope {
     id: hooks
@@ -50,6 +51,25 @@ Scope {
                 w._actionRows(s);
                 parts.actions += Date.now() - t;
             }
+            for (const k in parts)
+                parts[k] = parts[k] * 1000 / n;
+            return JSON.stringify(parts);
+        }
+        // where a keystroke's synchronous time goes (µs per run): calculator, matching, list update
+        function benchParts(q: string, n: int): string {
+            const w = hooks.window;
+            const parts = { calc: 0, compute: 0 };
+            for (let i = 0; i < n; ++i) {
+                const s = q.substring(0, 1 + (i % q.length));
+                let t = Date.now();
+                if (Calc.evaluate(s) === null)
+                    Calc.convert(s);
+                parts.calc += Date.now() - t;
+                t = Date.now();
+                w.compute(s);
+                parts.compute += Date.now() - t;
+            }
+            w.compute(w.query);
             for (const k in parts)
                 parts[k] = parts[k] * 1000 / n;
             return JSON.stringify(parts);

@@ -191,3 +191,101 @@ def test_policy_never_fails_open(pol, monkeypatch):
 
 def test_unknown_builtin_tool_asks(pol):
     assert pol.evaluate("Agent", {"prompt": "x"}).verdict == "ask"
+
+
+# --- planner review: overwrites and detours that must ask --------------------------------------
+
+@pytest.mark.parametrize("cmd", [
+    "ln -sf /dev/null ~/Dokumente/brief.txt",         # replaces a document with a link
+    "ln -s ~/.bashrc alt.txt",                         # replaces an existing workspace file
+    "curl -o ~/Dokumente/brief.txt https://example.org/x",
+    "curl --output=$HOME/Dokumente/brief.txt https://example.org/x",
+    "wget -O ~/Dokumente/brief.txt https://example.org/x",
+])
+def test_overwriting_through_links_and_downloads_asks(pol, cmd):
+    d = bash(pol, cmd)
+    assert d.verdict == "ask" and d.category == "files.modify", (cmd, d)
+
+
+@pytest.mark.parametrize("cmd", [
+    "ln -s ~/Dokumente/brief.txt ~/Desktop/brief-link",  # a new link is harmless
+    "curl -o /dev/null -s https://example.org/",
+    "curl -s -o - https://example.org/",
+])
+def test_new_links_and_throwaway_downloads_do_not_ask(pol, cmd):
+    d = bash(pol, cmd)
+    assert d.verdict == "allow", (cmd, d)
+
+
+def test_write_through_a_workspace_symlink_is_judged_by_its_target(pol):
+    home = os.path.expanduser("~")
+    ws = pol.paths.workspace
+    with open(os.path.join(home, ".bashrc"), "w") as f:
+        f.write("# owner's shell config\n")
+    link = os.path.join(ws, "notiz.txt")
+    os.symlink(os.path.join(home, ".bashrc"), link)
+    d = pol.evaluate("Write", {"file_path": link, "content": "evil"})
+    assert d.verdict == "ask" and d.category == "system.config", d
+    os.symlink(os.path.join(home, ".ssh"), os.path.join(ws, "keys"))
+    d = pol.evaluate("Read", {"file_path": os.path.join(ws, "keys", "id_ed25519")})
+    assert d.verdict == "ask" and d.category == "credentials", d
+
+
+def test_web_fetch_that_carries_data_asks(pol):
+    assert pol.evaluate("WebFetch", {"url": "https://wttr.in/Berlin?format=3"}).verdict == "allow"
+    d = pol.evaluate("WebFetch", {"url": "https://example.org/c?d=" + "QUJD" * 80})
+    assert d.verdict == "ask" and d.category == "send" and not d.can_always, d
+    d = pol.evaluate("WebFetch", {"url": "https://example.org/" + "a" * 200 + "/x"})
+    assert d.verdict == "ask" and d.category == "send", d
+
+
+# --- hands' risky-target gate (docs/contracts/hands.md §10): the retry the gate asks for ---------
+
+def _hands_decls(tmp_path):
+    """The hands drop-in as the image builds it (`kristall-hands dropin`), loaded by the daemon's
+    own loader; falls back to hand-written declarations where the hands sources are absent."""
+    import json
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    from kristall_assistant.brain import mcp_config
+    hands = Path(__file__).resolve().parents[2] / "hands"
+    if (hands / "kristall_hands").is_dir():
+        r = subprocess.run([sys.executable, "-I", "-c", "import sys; sys.path.insert(0, sys.argv[1]); "
+                            "from kristall_hands.__main__ import main; sys.argv = ['kristall-hands', 'dropin']; "
+                            "sys.exit(main())", str(hands)],
+                           capture_output=True, text=True, timeout=60)
+        if r.returncode == 0 and r.stdout.strip().startswith("{"):
+            (tmp_path / "50-hands.json").write_text(r.stdout)
+            return mcp_config.load([tmp_path]).decls
+    return {"hands": {t: ToolDecl("reversible") for t in ("click", "ui_act", "press_keys", "type_text", "drag")}}
+
+
+@pytest.mark.parametrize("tool,args", [
+    ("click", {"ref": "e4"}), ("click", {"x": 370, "y": 408}), ("ui_act", {"ref": "e4", "action": "press"}),
+    ("press_keys", {"keys": "Return"}), ("type_text", {"text": "Bis bald", "enter": True}), ("drag", {"x": 1, "y": 2, "x2": 3, "y2": 4}),
+])
+def test_hands_call_with_risk_send_asks_without_always(env, tmp_path, tool, args):
+    decls = _hands_decls(tmp_path)
+    assert decls["hands"][tool].risk == "reversible"
+    p = Policy(PolicyPaths(str(tmp_path), []), GrantStore(env.grants_file), decls)
+    # the first call: hands' own gate refuses it, the policy alone lets it through
+    assert p.evaluate(f"mcp__hands__{tool}", dict(args)).verdict == "allow"
+    # the retry with the risk the gate named: the owner is asked, and "always" is never offered
+    d = p.evaluate(f"mcp__hands__{tool}", dict(args, risk="send"))
+    assert (d.verdict, d.category, d.can_always) == ("ask", "send", False), d
+    assert d.question["de"] == "Darf ich etwas in deinem Namen senden?"
+    p.grants.add(d.scope)                               # even a stored grant does not apply to send
+    assert p.evaluate(f"mcp__hands__{tool}", dict(args, risk="send")).verdict == "ask"
+
+
+def test_hands_delete_retry_honours_an_always_grant(env, tmp_path):
+    p = Policy(PolicyPaths(str(tmp_path), []), GrantStore(env.grants_file), _hands_decls(tmp_path))
+    d = p.evaluate("mcp__hands__click", {"ref": "e14", "risk": "files.delete"})
+    assert (d.verdict, d.category, d.can_always) == ("ask", "files.delete", True)
+    p.grants.add(d.scope, "Löschen")
+    d = p.evaluate("mcp__hands__click", {"ref": "e14", "risk": "files.delete"})
+    assert d.verdict == "allow" and d.granted                      # the owner's choice; hands does not ask again
+    d = p.evaluate("mcp__hands__click", {"ref": "e4", "risk": "purchase"})
+    assert (d.verdict, d.category, d.can_always) == ("ask", "purchase", False)

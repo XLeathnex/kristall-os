@@ -223,6 +223,7 @@ def test_behaviour():
                                              "sync_work_p50": pct(work, 0.5), "sync_work_p95": pct(work, 0.95), "sync_work_max": work[-1] if work else None,
                                              "output_hz": 60, "renderer": "Qt Quick software (headless llvmpipe session)"}
         info("keystroke → frame (ms): " + json.dumps(results["search_key_to_frame_ms"]))
+        info("synchronous work per keystroke (ms): " + " ".join(f"{x['q'][-3:]}:{x.get('work', 0)}" for x in mine))
         check("every keystroke produced a frame with its results", len(lat) == len(word), f"{len(lat)}/{len(word)}")
         # typing never stalls a frame: the synchronous work of a keystroke (matching + list update)
         # fits one 120-Hz frame (8.3 ms); key → presented frame then includes rendering and waiting
@@ -342,6 +343,7 @@ def test_behaviour():
         results["search_engine_us"] = e
         b = json.loads(s.ipc("searchtest", "bench", "beispiel studio 42", 200))
         results["search_sync_us_per_keystroke"] = round(b["usPerKeystroke"], 1)
+        info("where a keystroke's time goes, µs: " + s.ipc("searchtest", "benchParts", "beispiel studio 42", 100))
         check("apps + settings + actions + calculator per keystroke < 8 ms (well inside a frame)", b["usPerKeystroke"] < 8000, json.dumps(b))
         check("app matching stays synchronous and under 2 ms per keystroke (300+ apps)", e["apps"] < 2000, json.dumps(e))
         # ---- escape: clears, then closes

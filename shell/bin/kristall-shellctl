@@ -29,7 +29,7 @@ fi
 (( ${#args[@]} >= 2 && ${#args[@]} <= 3 )) || usage
 [[ ${args[0]} =~ ^[a-z][a-z0-9-]*$ && ${args[1]} =~ ^[a-z][a-z0-9-]*$ ]] || usage
 # The argument and output go percent-encoded (UTF-8 bytes; only letters and digits stay as they
-# are) to the shell's requestEncoded(), which decodes them: quickshell's command-line parser would
+# are, a leading "v" marks the value) to the shell's requestEncoded(), which decodes them: quickshell's command-line parser would
 # otherwise read some arguments itself ("-x" as an option, "[1, 2]" as a list). "--" ends its options.
 enc() {
     local LC_ALL=C s="$1" out="" c i
@@ -42,7 +42,9 @@ enc() {
     done
     printf '%s' "$out"
 }
-reply="$(quickshell ipc -p "$shell_dir" call -- shell requestEncoded "${args[0]}" "${args[1]}" "$(enc "${args[2]:-}")" "$(enc "$output")" 2>/dev/null)"
+# each value is prefixed with "v" so that an empty one is never an empty argument (Quickshell's
+# parser mishandles empty positional arguments next to non-empty ones)
+reply="$(quickshell ipc -p "$shell_dir" call -- shell requestEncoded "${args[0]}" "${args[1]}" "v$(enc "${args[2]:-}")" "v$(enc "$output")" 2>/dev/null)"
 status=$?
 # quickshell exits 0 even when it rejects the call (e.g. an argument it read as an option):
 # only the shell's own "ok" means delivered

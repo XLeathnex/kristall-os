@@ -16,6 +16,7 @@ from . import log
 from .a11y import A11y, PRESS_ACTIONS
 from .bridge import BridgeError
 from .core import Hands
+from .riskgate import Gate
 from .safety import AUTH_MSG, PROTECTED_MSG, check_window, is_auth_window, is_protected_app, mask_secrets
 from .tooling import INTENT_PROPERTY, RISK_PROPERTY, Context, HandsError, Registry, Result, untrusted
 
@@ -100,6 +101,7 @@ class Screen:
         self.shots: dict[str, dict] = {}
         self.last_shot: str | None = None
         self._n = 0
+        self.gate: Gate | None = None
 
     # ------------------------------------------------------------------ capture
     def capture(self, target, max_w: int = 0, max_h: int = 0) -> tuple[bytes, dict]:
@@ -236,8 +238,13 @@ class Screen:
             raise HandsError(f"The click could not be delivered ({e.code}: {e.message[:80]}).")
 
 
+def _with_note(content: str, note: str | None) -> str:
+    return content + ("\n" + note if note else "")
+
+
 def register(reg: Registry, h: Hands, a: A11y) -> Screen:
     sc = Screen(h, a)
+    gate = sc.gate = Gate(h, a)
 
     # ======================================================================== tier 2
     @reg.tool("ui_tree",
@@ -297,6 +304,10 @@ def register(reg: Registry, h: Hands, a: A11y) -> Screen:
             raise HandsError(PROTECTED_MSG)
         if action in ("set_text", "append_text") and role == "password text":
             raise HandsError(AUTH_MSG)
+        note = None
+        if action in ("press", "open", "toggle", "select"):
+            # hands.md §10: a risky-looking element runs only with a matching declared risk
+            note = gate.check_element("ui_act", acc, win, risk, intent)
         before = None
         try:
             before = h.windows() if h.bridge.connected() else None
@@ -449,7 +460,7 @@ def register(reg: Registry, h: Hands, a: A11y) -> Screen:
                     and (before is None or ch.startswith("no visible window change") or ch.startswith("focus:")):
                 hint = (" Nothing visible changed. If the app ignored it (some custom controls do), use click with "
                         f"ref=\"{ref}\" for a real click.")
-        return Result.text(f"Done ({done}).{hint}", state + "\n" + ch)
+        return Result.text(f"Done ({done}).{hint}", _with_note(state + "\n" + ch, note))
 
     # ======================================================================== tier 3
     def max_dims() -> tuple[int, int]:
@@ -551,6 +562,14 @@ def register(reg: Registry, h: Hands, a: A11y) -> Screen:
         h.need_bridge("agentInput")
         gx, gy, what, meant = resolve_point(x, y, image, ref)
         wins, target = precheck(gx, gy)
+        note = None
+        if button == "left":
+            # hands.md §10: what would this click activate?
+            if ref:
+                n = a.node(ref)
+                note = gate.check_element("click", n.acc, h.window_by_id(n.win_id) if n.win_id else target, risk, intent)
+            else:
+                note = gate.check_point("click", gx, gy, risk, intent)
         h.begin_session(intent or "Kristall")
         verb_de = {1: "Klicke", 2: "Doppelklick", 3: "Dreifachklick"}[count] if button == "left" else "Rechtsklick"
         h.cursor.move_to(ctx, gx, gy, sc.label(intent, f"{verb_de}{' auf „' + what[:40] + '“' if what else ''}",
@@ -568,7 +587,7 @@ def register(reg: Registry, h: Hands, a: A11y) -> Screen:
         if r.get("dismissedPopups"):
             return Result.text("That click only closed an open menu or popup; it did not reach what was under it. "
                                "Click again if needed.", ch)
-        return Result.text(f"Clicked ({button}{' x' + str(count) if count > 1 else ''}) in {where}.", ch)
+        return Result.text(f"Clicked ({button}{' x' + str(count) if count > 1 else ''}) in {where}.", _with_note(ch, note))
 
     @reg.tool("drag",
               "Drag with the assistant's pointer from (x,y) to (x2,y2), pixels of the last screenshot (or "
@@ -584,6 +603,8 @@ def register(reg: Registry, h: Hands, a: A11y) -> Screen:
         gx2, gy2, _ = sc.to_global(x2, y2, sid)
         wins, target = precheck(gx, gy)
         precheck(gx2, gy2)
+        # hands.md §10: pressing on, or releasing over, a risky element
+        notes = [gate.check_point("drag", gx, gy, risk, intent), gate.check_point("drag", gx2, gy2, risk, intent)]
         h.begin_session(intent or "Kristall")
         h.cursor.move_to(ctx, gx, gy, sc.label(intent, "Ziehe", "Dragging"))
         h.cursor.pulse("drag_start")
@@ -599,7 +620,8 @@ def register(reg: Registry, h: Hands, a: A11y) -> Screen:
         h.cursor.pos = (round(gx2, 1), round(gy2, 1))
         h.cursor.pulse("drag_end")
         h.touch()
-        return Result.text("Dragged.", sc.changes(ctx, wins, (target or {}).get("id")))
+        note = "from " + notes[0].replace("target: ", "", 1) + "; to " + notes[1].replace("target: ", "", 1)
+        return Result.text("Dragged.", _with_note(sc.changes(ctx, wins, (target or {}).get("id")), "target: " + note))
 
     @reg.tool("scroll",
               "Scroll at a point of the last screenshot (or a ref) with the assistant's pointer: direction "
@@ -675,6 +697,11 @@ def register(reg: Registry, h: Hands, a: A11y) -> Screen:
                                 "trigger shortcuts. Focus is on: " + untrusted(line) + "\nOpen or click into the "
                                 "text field first (or ui_act set_text on it); use force=true only for apps without "
                                 "readable controls.")
+        note = None
+        multi = focus is not None and "multi-line" in a.states(focus)
+        if enter or ("\n" in text and not multi):
+            # hands.md §10: Return can press a default "Senden" button
+            note = gate.check_keys("type_text", win, "return", risk, intent)
         h.begin_session(intent or "Kristall")
         px, py = caret_point(win)
         h.cursor.move_to(ctx, px, py, sc.label(intent, "Tippe", "Typing"), output=preview(text))
@@ -699,7 +726,7 @@ def register(reg: Registry, h: Hands, a: A11y) -> Screen:
                 msg += " Verified in the text field."
         elif focus is None and a.mode() != "off":
             msg += " (Could not verify: the window does not report its text fields.)"
-        return Result.text(msg, ch)
+        return Result.text(msg, _with_note(ch, note))
 
     @reg.tool("press_keys",
               "Press a key or shortcut in a window (default: the active one): e.g. ctrl+s, ctrl+shift+t, alt+f4, "
@@ -715,6 +742,8 @@ def register(reg: Registry, h: Hands, a: A11y) -> Screen:
         h.need_bridge("agentInput")
         chord = normalize_keys(keys)
         win = keyboard_target(window)
+        # hands.md §10: Return, Ctrl+Return, Ctrl+S and Space activate the focused or default button
+        note = gate.check_keys("press_keys", win, chord, risk, intent)
         h.begin_session(intent or "Kristall")
         px, py = caret_point(win)
         h.cursor.move_to(ctx, px, py, sc.label(intent, f"Drücke {chord}", f"Pressing {chord}"))
@@ -736,7 +765,7 @@ def register(reg: Registry, h: Hands, a: A11y) -> Screen:
                 ctx.sleep(0.05)
         h.touch()
         return Result.text(f"Pressed {chord}{f' {repeat} times' if repeat > 1 else ''}.",
-                           sc.changes(ctx, before, win["id"], settle=0.3))
+                           _with_note(sc.changes(ctx, before, win["id"], settle=0.3), note))
 
     @reg.tool("save_screenshot",
               "Save a screenshot for the owner as a PNG in their Pictures folder (Bilder/Bildschirmfotos): the "

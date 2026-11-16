@@ -162,9 +162,10 @@ kristall-shellctl status                                      # JSON: safeMode, 
 The argument is passed verbatim: empty, starting with `-` (`-1`, `-Hallo`), with spaces,
 brackets (`[1, 2]`, JSON) or any UTF-8 — no quoting workarounds. `kristall-shellctl` calls the
 Quickshell IPC target `shell` as `quickshell ipc -p /usr/share/kristall/shell call -- shell
-requestEncoded <target> <action> <arg> <output>` with `arg` and `output` percent-encoded (UTF-8;
-letters and digits stay): Quickshell 0.2.1's command-line parser would otherwise read some
-arguments itself ("-x" as an option, "[1, 2]" as a list) and still exit 0. It treats any reply
+requestEncoded <target> <action> v<arg> v<output>` with `arg` and `output` percent-encoded
+(UTF-8; letters and digits stay) behind a `v` marker: Quickshell 0.2.1's command-line parser would
+otherwise read some arguments itself ("-x" as an option, "[1, 2]" as a list), mishandle an empty
+one next to non-empty ones, and still exit 0. It treats any reply
 other than `ok` as not delivered (exit 1, with a message). In-process senders call
 `ShellBus.request(target, action, arg, output)`; the raw IPC function `request(target, action,
 arg, output)` stays for tools that pass plain words. Both end in `ShellBus.requested(target,

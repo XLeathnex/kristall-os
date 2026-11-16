@@ -15,7 +15,7 @@ dnf5 install -y --setopt=install_weak_deps=False \
     quickshell qt6-qtsvg rsms-inter-fonts python3-gobject-base glib2 xdg-utils libnotify
 
 # The QML tree (modules/ stays: later components install their own modules/<name>/ next to it)
-install -d "$share" "$lib" "$libexec"
+install -d "$share" "$lib" "$libexec" "$PREFIX/bin"
 for d in core services bar gallery strings icons; do
     rm -rf "${share:?}/$d"
     cp -a "$here/$d" "$share/$d"

@@ -19,7 +19,9 @@ echo "             the real kristall-settings; German fuzzy app names; timers; s
 echo "   pointing  coordinate mapping at scale 1.0 and 1.6 with synthetic images, typing, keys, owner"
 echo "             busy, Escape, lock screen, auth prompts, no bridge, agent-cursor choreography"
 echo "   protocol  initialize, tools/list, tools/call, errors, ping during a call, cancellation"
-(cd "$here" && python3 -m unittest test_tier1 test_pointing test_protocol 2>&1 | grep -v "ResourceWarning\|tracemalloc")
+echo "   riskgate  risky-target vocabulary (de/en, every class, negatives, dialog text), policy order,"
+echo "             refusal text, unknown targets"
+(cd "$here" && python3 -m unittest test_tier1 test_pointing test_protocol test_riskgate 2>&1 | grep -v "ResourceWarning\|tracemalloc")
 if [ "${PIPESTATUS[0]}" = 0 ]; then pass "unit tests"; else fail "unit tests"; fi
 
 in_devenv=0
@@ -41,9 +43,11 @@ if command -v gcc >/dev/null && command -v python3-config >/dev/null; then
      && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["mcpServers"]["hands"]["command"].endswith("/usr/bin/kristall-hands")' \
         "$pfx/usr/share/kristall/assistant/mcp.d/50-hands.json" \
      && [ -f "$pfx/usr/lib/systemd/user/kristall-hands-session.service" ] \
+     && python3 -c 'import json,sys; assert len(json.load(open(sys.argv[1]))["classes"]) == 5' \
+        "$pfx/usr/lib/kristall/hands/data/risky-targets.json" \
      && [ -f "$pfx/usr/share/kristall/defaults/settings.d/50-assistant-hands.json" ] \
      && [ -x "$pfx/usr/lib/systemd/user-environment-generators/60-kristall-accessibility" ]; then
-    pass "install.sh (launcher, package, drop-in, unit, defaults)"
+    pass "install.sh (launcher, package, vocabulary, drop-in, unit, defaults)"
   else
     fail "install.sh"
   fi
@@ -60,6 +64,10 @@ if [ "$in_devenv" = 1 ] && [ -f "$repo/kwin/bridge/tests/build.sh" ] && [ -w /us
     for sc in 1.0 1.6; do
       (cd "$here" && KRISTALL_TEST_SCALE=$sc dbus-run-session -- python3 -m unittest test_real_bridge 2>&1 | grep -v "fd limit\|dbus-daemon\|SpiRegistry\|ResourceWarning\|tracemalloc\|kristall-hands INFO\|hands log")
       if [ "${PIPESTATUS[0]}" = 0 ]; then pass "real bridge at scale $sc"; else fail "real bridge at scale $sc"; fi
+      # the risky-target gate: GTK 3 and Qt 6 windows and a Firefox page through AT-SPI, with the daemon's policy
+      (cd "$here" && KRISTALL_TEST_SCALE=$sc dbus-run-session -- python3 -m unittest test_riskgate_e2e 2>&1 \
+        | grep -v "fd limit\|dbus-daemon\|SpiRegistry\|ResourceWarning\|tracemalloc\|portal\|Gtk-WARNING\|fuse\|^$")
+      if [ "${PIPESTATUS[0]}" = 0 ]; then pass "risky-target gate end to end at scale $sc"; else fail "risky-target gate end to end at scale $sc"; fi
     done
   else
     fail "building the bridge or installing hands"

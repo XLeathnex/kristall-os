@@ -1,10 +1,17 @@
 {
  "last_run": {
   "sections": [
-   "cc"
+   "static",
+   "cc",
+   "wifi",
+   "notifications",
+   "hud",
+   "absent",
+   "looks",
+   "idle"
   ],
   "failures": [],
-  "time": "2026-11-16T20:21:48"
+  "time": "2026-11-16T23:10:50"
  },
  "notifications_groups": 6,
  "idle_panels_closed": {

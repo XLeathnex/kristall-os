@@ -20,16 +20,48 @@ KCM.SimpleKCM {
                                    ["red", "#FF3B30", "Rot", "Red"], ["orange", "#FF9500", "Orange", "Orange"], ["yellow", "#FFCC00", "Gelb", "Yellow"],
                                    ["green", "#28CD41", "Grün", "Green"], ["graphite", "#8E8E93", "Graphit", "Graphite"]]
     property var output: displays.result && displays.result.outputs && displays.result.outputs.length > 0 ? displays.result.outputs[0] : null
-    property var walls: wallpapers.result && wallpapers.result.wallpapers ? wallpapers.result.wallpapers : []
+    // wallpapers and accents come from the theme component (docs/contracts/theme.md §7,
+    // `kristall-appearance`); without it, from our helper / the design tokens
+    readonly property string appearanceTool: System.env("KRISTALL_APPEARANCE_CMD", "kristall-appearance")
+    property var themeWalls: []
+    property var walls: themeWalls.length > 0 ? themeWalls
+                        : (wallpapers.result && wallpapers.result.wallpapers ? wallpapers.result.wallpapers : [])
+    property var themeAccents: []
+    readonly property var accentList: themeAccents.length > 0
+                                      ? themeAccents.map(a => [a.id, a.light, a.name && a.name.de ? a.name.de : a.id, a.name && a.name.en ? a.name.en : a.id])
+                                      : accents
+    function setWallpaper(w) {
+        if (w.id !== undefined)
+            System.launch([page.appearanceTool, "wallpaper", "set", w.id]);
+        else
+            System.launch(["plasma-apply-wallpaperimage", w.path]);
+    }
 
     JsonProcess { id: displays; program: page.helper; arguments: ["displays"]; Component.onCompleted: start() }
     JsonProcess { id: setScale; program: page.helper; onFinished: displays.start() }
-    JsonProcess { id: wallpapers; program: page.helper; arguments: ["wallpapers"]; Component.onCompleted: start() }
+    JsonProcess { id: wallpapers; program: page.helper; arguments: ["wallpapers"] }
+    JsonProcess {
+        program: page.appearanceTool
+        arguments: ["wallpapers", "--json"]
+        Component.onCompleted: start()
+        onFinished: (code, r) => {
+            if (code === 0 && Array.isArray(r) && r.length > 0)
+                page.themeWalls = r;
+            else
+                wallpapers.start();
+        }
+    }
+    JsonProcess {
+        program: page.appearanceTool
+        arguments: ["accents", "--json"]
+        Component.onCompleted: start()
+        onFinished: (code, r) => { if (code === 0 && Array.isArray(r) && r.length > 0) page.themeAccents = r; }
+    }
     FileDialog {
         id: pickWallpaper
         title: Lang.t("Eigenes Bild wählen", "Choose a Picture")
         nameFilters: [Lang.t("Bilder (*.jpg *.jpeg *.png *.webp)", "Pictures (*.jpg *.jpeg *.png *.webp)")]
-        onAccepted: System.launch(["plasma-apply-wallpaperimage", selectedFile.toString().replace("file://", "")])
+        onAccepted: page.setWallpaper({ id: decodeURIComponent(selectedFile.toString().replace("file://", "")) })
     }
 
     Kirigami.FormLayout {
@@ -53,7 +85,7 @@ KCM.SimpleKCM {
             Kirigami.FormData.label: Lang.t("Akzentfarbe:", "Accent colour:")
             spacing: Kirigami.Units.smallSpacing * 2
             Repeater {
-                model: page.accents
+                model: page.accentList
                 QQC2.AbstractButton {
                     required property var modelData
                     objectName: "appearance.accent." + modelData[0]
@@ -125,10 +157,11 @@ KCM.SimpleKCM {
                     required property var modelData
                     implicitWidth: Kirigami.Units.gridUnit * 6
                     implicitHeight: Kirigami.Units.gridUnit * 3.75
-                    Accessible.name: modelData.name
-                    QQC2.ToolTip.text: modelData.name
+                    readonly property string label: typeof modelData.name === "string" ? modelData.name : Lang.pick(modelData.name)
+                    Accessible.name: label
+                    QQC2.ToolTip.text: label
                     QQC2.ToolTip.visible: hovered
-                    onClicked: System.launch(["plasma-apply-wallpaperimage", modelData.path])
+                    onClicked: page.setWallpaper(modelData)
                     contentItem: Image { source: "file://" + modelData.preview; fillMode: Image.PreserveAspectCrop; sourceSize.width: 240; asynchronous: true }
                     background: Rectangle { color: Kirigami.Theme.alternateBackgroundColor; radius: 6 }
                 }

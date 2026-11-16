@@ -178,13 +178,16 @@ ShellRoot {
             ShellBus.request(target, action, arg, output);
             return "ok";
         }
-        // what kristall-shellctl uses: arg and output percent-encoded (UTF-8), because quickshell's
-        // command line parser reads some arguments itself ("[1, 2]" as a list, "-x" as an option)
+        // what kristall-shellctl uses: arg and output as "v" + percent-encoded UTF-8, because
+        // quickshell's command line parser reads some arguments itself ("[1, 2]" as a list, "-x" as
+        // an option) and mishandles empty ones
         function requestEncoded(target: string, action: string, arg: string, output: string): string {
             let a, o;
+            if (!arg.startsWith("v") || !output.startsWith("v"))
+                return "bad encoding";
             try {
-                a = decodeURIComponent(arg);
-                o = decodeURIComponent(output);
+                a = decodeURIComponent(arg.substring(1));
+                o = decodeURIComponent(output.substring(1));
             } catch (e) {
                 return "bad encoding";
             }

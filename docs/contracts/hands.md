@@ -92,7 +92,8 @@ focused element.
 
 Before any tier 2/3 call: the screen must not be locked (`org.freedesktop.ScreenSaver.GetActive`);
 the owner must not have pressed Escape during this turn; the target window must not be a protected
-app (§6). Without the bridge, tier 2 resolves windows through AT-SPI alone.
+app (§6). Without the bridge, tier 2 resolves windows through AT-SPI alone. Before any call that
+activates an element, the risky-target gate (§10) checks what the element is.
 
 ## 4. Content from the screen
 
@@ -219,3 +220,97 @@ Escape to stop you …“ until the next `turn_started`.
 - **Settings key**: hands' defaults live under `assistant.hands` in their own drop-in; ownership of
   shared top-level keys is declared at the second level (settings.md §4), so `kristall-settings
   check-defaults` accepts it.
+
+## 10. Risky targets
+
+*(Added 2026-11-16.)* Every hands click, key and act tool is declared `reversible`, so the policy
+(assistant-ipc §7.1) lets it run without asking; only a `risk` the model declares makes the daemon
+ask the owner. So that "ask before destructive or outward actions" (ARCHITECTURE §5 rule 5) does
+not rest on the model remembering that, hands itself refuses to activate an element that looks
+risky unless the call already declares a matching `risk`. The refusal is a normal tool error; the
+model retries with `risk`, the daemon's policy asks the owner (policy evaluation runs before hands
+does), and only then does the action run. Code: `kristall_hands/riskgate.py`; vocabulary:
+`data/risky-targets.json` (installed as `/usr/lib/kristall/hands/data/risky-targets.json`).
+
+**Gated actions.** `ui_act` press/open/toggle/select · `click` with the left button, by `ref` or by
+coordinates · `drag` (its start and end point) · `press_keys` Return, KP_Enter, Ctrl+Return,
+Ctrl+KP_Enter, Ctrl+S, Space · `type_text` with `enter: true`, or with a line break into a
+single-line field. Right/middle clicks, scrolling, typing, `set_text`/`set_value`, focus and
+expand/collapse are not gated.
+
+**Which element.** By ref (`ui_act`, `click ref=`): the element itself. By coordinates: the window
+on top at the point (bridge `window.list`, popups included, `kristall-assistant*` surfaces skipped),
+its AT-SPI top-level (pid, title, size), then `Component.GetAccessibleAtPoint` (WINDOW coordinates
+relative to the window's `content`) level by level; where a level does not answer (Firefox's browser
+frame) or answers with an element whose bounds do not contain the point (Firefox's page hit test is
+off by the output scale at 1.6), its showing children's bounds are compared instead; a hit outside
+its own bounds is never used. Then up to 4 parents to the nearest
+button/link/menu item (a button's label, a link's text). Keys: the focused element if it is a
+button, link or menu item; else, for Return/Enter (not in a multi-line text), Ctrl+Return, Ctrl+S,
+the window's default button (state `is-default`); Space only counts on a focused button. Context
+read with it: the name and description, the app id, the window title, and — when the element is
+in a dialog or alert (or a modal window) — the dialog's title and its labels (≤ 80 elements,
+≤ 600 characters). All lookups of one check share a budget of **150 ms** (libatspi's method timeout
+is lowered to what is left); measured 4–25 ms per check in the dev container (GTK 3, Qt 6, Firefox).
+
+**Classes** (matched case-insensitively on whole words of the name, else the description, after
+normalisation: NFKC, casefold so ß = ss, mnemonics and punctuation removed; only for the roles
+push button, toggle button, menu button, menu item, check/radio menu item, link, check box, switch):
+
+| class | category (policy) | examples (full list in the data file) |
+|---|---|---|
+| `send` | `send` | Senden, Absenden, Abschicken, Verschicken, Antworten an alle, Posten, Veröffentlichen, Teilen, Hochladen; Send, Submit, Post, Publish, Share, Upload, Reply all, Tweet |
+| `purchase` | `purchase` | Kaufen, Jetzt kaufen, Bestellen, Zahlungspflichtig bestellen, Bezahlen, Zur Kasse, Abonnieren, Überweisen; Buy, Buy now, Order, Place order, Pay, Checkout, Subscribe, Transfer |
+| `delete` | `files.delete` | Endgültig löschen, Löschen, Papierkorb leeren, Formatieren (disk tools, file managers), Entfernen (file managers); Delete permanently, Delete, Empty trash, Erase, Wipe, Remove (file managers) |
+| `install` | `apps.install` | Installieren, Deinstallieren, Entfernen/Aktualisieren (software stores: Bazaar, Discover, GNOME Software); Install, Uninstall, Remove/Update (stores) |
+| `account` | `credentials` | Abmelden von Konto, Konto löschen, Passwort ändern; Sign out of account, Delete account, Change password |
+
+When several classes match, the strictest category in the policy order wins („Konto löschen“ is
+`credentials`). A *weak* term (Löschen, Delete, Send, Teilen, Order, Transfer, Post …) does not count
+when one of its class's `unless` phrases occurs (In den Papierkorb, Move to Trash, Text löschen,
+Auswahl löschen, Send to Back, Sort order, Ansicht teilen …), nor on a menu item of a text-editing
+menu (its siblings include two of Select all/Paste/Undo and none of Rename/Properties/Open with/
+Move to Trash/message/folder) or while the window's focus is in an editable text field. Terms can be
+limited to app groups (`apps`) or exclude them (`not_apps`: Teilen and Löschen in calculators, Teilen
+in file managers = split view). Never gated by their own name: Abbrechen, Schließen, Nein, Zurück,
+Hilfe, Cancel, Close, No, Back …, and names starting with a negation (Nicht senden, Don't send).
+A generic confirmation (OK, Ja, Bestätigen, Fortfahren, Weiter, Übernehmen, Yes, Confirm, Continue,
+Apply …, or an unnamed default button) in a dialog whose title or labels match a class is gated as
+that class: „Möchtest du 3 Dateien endgültig löschen?“ [OK] is `files.delete`.
+
+**Declared risk.** A call whose `risk` is the class's category or stricter in the policy order
+(`… files.delete < shell.run < tool.use < send < purchase < elevated < credentials`, the daemon's
+`ORDER`) runs: the daemon has already asked the owner, or the owner granted "always" for that
+category, which is their choice; hands never asks twice. A weaker `risk` is refused like none.
+
+**Refusal** (tool result `isError: true`), one paragraph, names from the screen clipped to 60
+characters with quotes replaced:
+
+```
+This looks like a "send" action (button "Senden" in "Neue Nachricht – Thunderbird"). If the owner
+asked for this, call click again with the same arguments plus risk:"send"; the owner will be asked
+to confirm. If they did not ask for it, don't do it.
+```
+
+Variants: `(button "OK" in the dialog "Aufräumen · Möchtest du 3 Dateien endgültig löschen?")`,
+`(Return would press the default button "Senden" in "…")`, `The declared risk:"files.modify" is
+not enough for this.` Alongside, hands publishes a `tool_activity` line for the owner
+(assistant-ipc §4), e.g. „Senden“ sendet etwas in deinem Namen – braucht deine Zustimmung /
+“Senden” sends something on your behalf – needs your OK.
+
+**Unknown targets.** When the element cannot be identified — no window or a shell surface at the
+point, no accessible element there (games, canvas apps, Electron/web content without
+accessibility), only an unnamed container or canvas, accessibility off, or not within 150 ms — the
+action is **not** blocked: the existing rule (the model says what it is about to do, the owner sees
+it) applies, and the result records `target: unknown (<reason>)`. The one cheap, OCR-free check left
+is the model's own `intent` text: if it matches a class („Klicke auf „Jetzt kaufen““) and no matching
+`risk` is declared, the call is refused as above („your intent "…"; the element there can't be
+read“). Web pages in Firefox are normally readable (accessibility is on from login, §5), so they are
+judged by the element. Every gated action's result ends with a `target:` line (`target: button
+"Abbrechen"`, or `(send; risk send declared)`).
+
+Tests: `tests/test_riskgate.py` (vocabulary in both languages, negatives, dialog text, policy order,
+refusal text, unknown targets with the mock bridge); `tests/test_riskgate_e2e.py` (the installed
+server against the real bridge in headless KWin at scale 1.0 and 1.6, a GTK 3 and a Qt 6 window and a
+Firefox page, each call first decided by the daemon's real policy with the installed drop-in);
+`assistant/core/tests/test_policy.py` (the retry with `risk:"send"` asks, never with "always").

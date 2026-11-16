@@ -392,6 +392,17 @@ and folders, moving to the trash, downloading). Everything else asks:
 | `elevated` | administrator rights (sudo, pkexec, system services, writes outside the home folder) | no |
 | `credentials` | passwords, keys, keyrings, browser logins | no |
 
+Screen actions: hands refuses to activate a risky-looking element unless the call declares the matching `risk` (hands.md §10).
+
+How paths and links are judged:
+* A path is judged both as written and with symbolic links resolved; the stricter category wins. A
+  link in the workspace that points at `~/.bashrc` makes a write to it `system.config`, not
+  `reversible`.
+* Replacing an existing file is `files.modify` whatever the tool: `ln -sf` onto an existing file,
+  `curl -o` / `wget -O` onto an existing file. A new link or download is `reversible`.
+* A `WebFetch` whose URL carries data (query plus fragment over 200 characters, or a path segment
+  over 120) is `send`: such a URL can carry the owner's data out to any site.
+
 Never allowed (no prompt, the model is told no): the owner's Claude Code credentials and
 configuration (`~/.claude*`), the assistant's own permission store and tool-server directory.
 "Always" grants are stored in `~/.config/kristall/assistant/permissions.json`

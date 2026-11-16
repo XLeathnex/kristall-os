@@ -811,6 +811,13 @@ def test_ctl():
                  ("Grüße aus Köln: äöüß ÄÖÜ", ["gallery", "noop", "Grüße aus Köln: äöüß ÄÖÜ"]),
                  ('{"x":1,"y":2}', ["gallery", "noop", '{"x":1,"y":2}']), ("[1, 2]", ["gallery", "noop", "[1, 2]"]),
                  ("--output", ["gallery", "noop", "--", "--output"]), ("-h", ["gallery", "noop", "--", "-h"])]
+        # without --output (the common case: the output is empty)
+        for want in ("rechner", "", "-1"):
+            r = subprocess.run([ctl, "gallery", "noop", want], env=env, capture_output=True, text=True, timeout=15)
+            last = json.loads(sess.ipc("test", "lastRequests") or "[]")
+            got = last[-1] if last else None
+            check(f"shellctl without --output delivers {want!r}", r.returncode == 0 and got is not None and got["arg"] == want and got["output"] == "",
+                  f"rc={r.returncode} {r.stderr.strip()} got={got}")
         for want, argv in cases:
             r = subprocess.run([ctl] + argv + ["--output", "Virtual-0"] if "--" not in argv else [ctl, "--output", "Virtual-0"] + argv,
                                env=env, capture_output=True, text=True, timeout=15)

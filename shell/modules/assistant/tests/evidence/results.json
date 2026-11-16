@@ -11,15 +11,15 @@
    "frames_per_s": 0.6666666666666666,
    "light_updates_per_s": 0.0,
    "shell_cpu_ms_per_s": 0.0,
-   "kwin_cpu_ms_per_s": 3.3333333333333335
+   "kwin_cpu_ms_per_s": 0.0
   },
   "active": {
-   "frames_per_s": 60.6,
-   "light_updates_per_s": 59.0,
-   "shell_cpu_ms_per_s": 682.0,
-   "kwin_cpu_ms_per_s": 526.0,
-   "per_light_update_kwin_ms": 8.915,
-   "per_light_update_shell_ms": 11.559
+   "frames_per_s": 61.2,
+   "light_updates_per_s": 60.4,
+   "shell_cpu_ms_per_s": 726.0,
+   "kwin_cpu_ms_per_s": 518.0,
+   "per_light_update_kwin_ms": 8.576,
+   "per_light_update_shell_ms": 12.02
   },
   "idle_after": {
    "frames_per_s": 0.0,
@@ -34,16 +34,16 @@
   "idle_before": {
    "frames_per_s": 0.0,
    "light_updates_per_s": 0.0,
-   "shell_cpu_ms_per_s": 0.0,
+   "shell_cpu_ms_per_s": 3.3333333333333335,
    "kwin_cpu_ms_per_s": 0.0
   },
   "active": {
    "frames_per_s": 0.0,
    "light_updates_per_s": 62.8,
-   "shell_cpu_ms_per_s": 14.0,
+   "shell_cpu_ms_per_s": 12.0,
    "kwin_cpu_ms_per_s": 0.0,
    "per_light_update_kwin_ms": 0.0,
-   "per_light_update_shell_ms": 0.223
+   "per_light_update_shell_ms": 0.191
   },
   "idle_after": {
    "frames_per_s": 0.0,
@@ -58,22 +58,22 @@
   "idle_before": {
    "frames_per_s": 0.6666666666666666,
    "light_updates_per_s": 0.0,
-   "shell_cpu_ms_per_s": 13.333333333333334,
-   "kwin_cpu_ms_per_s": 13.333333333333334
+   "shell_cpu_ms_per_s": 0.0,
+   "kwin_cpu_ms_per_s": 6.666666666666667
   },
   "active": {
-   "frames_per_s": 56.0,
-   "light_updates_per_s": 47.2,
-   "shell_cpu_ms_per_s": 1274.0,
-   "kwin_cpu_ms_per_s": 974.0,
-   "per_light_update_kwin_ms": 20.636,
-   "per_light_update_shell_ms": 26.992
+   "frames_per_s": 59.6,
+   "light_updates_per_s": 50.8,
+   "shell_cpu_ms_per_s": 1408.0,
+   "kwin_cpu_ms_per_s": 1080.0,
+   "per_light_update_kwin_ms": 21.26,
+   "per_light_update_shell_ms": 27.717
   },
   "idle_after": {
    "frames_per_s": 0.0,
    "light_updates_per_s": 0.0,
    "shell_cpu_ms_per_s": 0.0,
-   "kwin_cpu_ms_per_s": 0.0
+   "kwin_cpu_ms_per_s": 3.3333333333333335
   },
   "light_area_device_px": 806543,
   "screen_device_px": 5184000
@@ -87,11 +87,11 @@
   },
   "active": {
    "frames_per_s": 0.0,
-   "light_updates_per_s": 62.2,
-   "shell_cpu_ms_per_s": 14.0,
+   "light_updates_per_s": 62.8,
+   "shell_cpu_ms_per_s": 10.0,
    "kwin_cpu_ms_per_s": 0.0,
    "per_light_update_kwin_ms": 0.0,
-   "per_light_update_shell_ms": 0.225
+   "per_light_update_shell_ms": 0.159
   },
   "idle_after": {
    "frames_per_s": 0.0,
@@ -105,17 +105,17 @@
  "cursor_timing_synthetic": {
   "glides": 8,
   "arrival_minus_ts_plus_d_ms": {
-   "mean": 9.1,
-   "max": 17,
-   "min": 1
+   "mean": 9.0,
+   "max": 15,
+   "min": 0
   },
   "frame_gap_at_arrival_ms": {
-   "max": 21,
-   "mean": 16.4
+   "max": 17,
+   "mean": 16.0
   },
   "action_after_arrival_ms": {
-   "min": 54.0,
-   "mean": 84.0
+   "min": 55.8,
+   "mean": 77.1
   }
  },
  "cursor_timing_real_bridge": {
@@ -123,28 +123,28 @@
   "cursor_events": 9,
   "pairs": [
    {
-    "click_minus_arrival_ms": 33.3,
-    "arrival_minus_target_ms": 8,
-    "ripple_minus_click_ms": -0.3,
-    "click_minus_pulse_ms": 0.3
+    "click_minus_arrival_ms": 40.0,
+    "arrival_minus_target_ms": 3,
+    "ripple_minus_click_ms": -1.0,
+    "click_minus_pulse_ms": 1.4
    },
    {
-    "click_minus_arrival_ms": 32.2,
+    "click_minus_arrival_ms": 31.8,
     "arrival_minus_target_ms": 10,
-    "ripple_minus_click_ms": -1.2,
-    "click_minus_pulse_ms": 1.0
-   },
-   {
-    "click_minus_arrival_ms": 41.8,
-    "arrival_minus_target_ms": 0,
     "ripple_minus_click_ms": 0.2,
     "click_minus_pulse_ms": 0.1
    },
    {
-    "click_minus_arrival_ms": 37.6,
+    "click_minus_arrival_ms": 41.7,
+    "arrival_minus_target_ms": 0,
+    "ripple_minus_click_ms": 0.3,
+    "click_minus_pulse_ms": 0.1
+   },
+   {
+    "click_minus_arrival_ms": 37.9,
     "arrival_minus_target_ms": 4,
-    "ripple_minus_click_ms": 0.4,
-    "click_minus_pulse_ms": 0.2
+    "ripple_minus_click_ms": 0.1,
+    "click_minus_pulse_ms": -0.1
    }
   ],
   "durations": [
@@ -173,13 +173,11 @@
    "fallback",
    "realbridge"
   ],
-  "failures": [
-   "install.sh into a scratch prefix (module, shader, shortcut, defaults; no tests), idempotent"
-  ],
-  "time": "2026-11-16T20:49:26"
+  "failures": [],
+  "time": "2026-11-16T23:05:01"
  },
  "edge_light_entry_exit_ms": {
-  "in": 726,
+  "in": 690,
   "out": 277
  }
 }

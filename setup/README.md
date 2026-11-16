@@ -8,7 +8,7 @@ keyboard/        KWin plugin kristall_keyboard: the key beside the space bar act
 settings/        System Settings modules kcm_kristall_* (QML pages) + QML backend org.kristall.settings
 bin/             kristall-setup-helper (Wi-Fi, displays, touchpads, wallpapers, about), kristall-setup-start (unit)
 systemd/         kristall-setup.service (first login), preset
-data/            settings defaults (keyboard, setup), /etc/xdg fragments (kwinrc, kdeglobals, kcm-about-distrorc), our mark
+data/            settings defaults 50-setup.json (keys keyboard, setup), /etc/xdg fragments (kwinrc, kdeglobals, kcm-about-distrorc), our mark
 image/           install.sh (builds against the image's KWin/Qt; also installs shell/modules/setup), merge-ini
 tests/           run.sh, test_static.py, test_keyboard.py, test_setup.py, test_settings.py, clients/, support/, evidence/
 ../shell/modules/setup/   the Setup Assistant (Quickshell module): Module.qml (state machine), SetupWindow.qml, Step*.qml
@@ -62,4 +62,7 @@ Evidence: `tests/evidence/` (screenshots, `keyboard-table.txt`, `keyboard-altgr.
 * The microphone check needs the owner to be signed in (the daemon refuses voice turns otherwise) and
   costs one cancelled Claude request; a "transcribe only" request in assistant-ipc would avoid both.
 * Voice choice: one voice per language ships, so the step offers language and when to speak, not a voice.
+* Display sizes follow `docs/contracts/theme.md` §7 (2880×1800: 2.0, 1.75, 1.6, 1.5); the rule that
+  produces them for other panels is in `docs/contracts/setup.md` §5. Wallpapers and accents on the
+  Appearance page come from the theme's `kristall-appearance` (our helper is the fallback).
 * Cmd+Q relies on the app's Ctrl+Q; Cmd+, on the app's settings shortcut (Ctrl+Shift+, in KDE apps).

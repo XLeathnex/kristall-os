@@ -70,6 +70,7 @@ Singleton {
     }
 
     function rebuild() {
+        _iconCache = {};
         const entries = DesktopEntries.applications.values;
         const map = {};
         const visible = [];
@@ -129,9 +130,16 @@ Singleton {
             return Quickshell.iconPath(n);
         return Quickshell.iconPath("application-x-executable", true) || "";
     }
+    // icon URLs looked up once per app (theme lookups are file-system work; Search asks per keystroke)
+    property var _iconCache: ({})
     function iconFor(key) {
+        const c = _iconCache[key];
+        if (c !== undefined)
+            return c;
         const r = byKey[key];
-        return iconUrl(r ? r.iconName : "");
+        const u = iconUrl(r ? r.iconName : "");
+        _iconCache[key] = u;
+        return u;
     }
 
     // ---- windows <-> apps ----------------------------------------------------------------------

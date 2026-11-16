@@ -11,7 +11,7 @@ dest="$PREFIX/share/kristall/shell/modules/assistant"
 
 rm -rf "$dest"
 install -d "$dest" "$dest/shaders" "$dest/assets"
-install -m 0644 "$here"/*.qml "$here/Markdown.js" "$here/qmldir" "$here/strings.json" "$dest/"
+install -m 0644 "$here"/*.qml "$here/qmldir" "$here/strings.json" "$dest/"
 install -m 0644 "$here/shaders/edgelight.frag.qsb" "$dest/shaders/"
 install -m 0644 "$here/assets/cursor.svg" "$dest/assets/"
 

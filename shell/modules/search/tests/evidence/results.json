@@ -1,33 +1,28 @@
 {
  "last_run": {
   "sections": [
-   "static",
-   "behaviour",
-   "looks"
+   "behaviour"
   ],
-  "failures": [
-   "typing never stalls a frame: synchronous work per keystroke p95 \u2264 8.3 ms (one 120 Hz frame)",
-   "app matching stays synchronous and under 2 ms per keystroke (300+ apps)"
-  ],
-  "time": "2026-11-16T22:38:44"
+  "failures": [],
+  "time": "2026-11-16T23:25:21"
  },
  "search_files_latency_s": 0.049,
- "search_sync_us_per_keystroke": 4840,
+ "search_sync_us_per_keystroke": 1610,
  "search_engine_us": {
-  "apps": 4140,
-  "settings": 305,
-  "actions": 130
+  "apps": 895,
+  "settings": 165,
+  "actions": 65
  },
  "search_key_to_frame_ms": {
   "n": 29,
-  "p50": 7.3037109375,
-  "p95": 15.09228515625,
-  "max": 15.552490234375,
-  "shell_text_to_frame_p50": 5,
-  "shell_text_to_frame_p95": 14,
-  "sync_work_p50": 4,
-  "sync_work_p95": 9,
-  "sync_work_max": 13,
+  "p50": 5.1845703125,
+  "p95": 11.529541015625,
+  "max": 13.0703125,
+  "shell_text_to_frame_p50": 4,
+  "shell_text_to_frame_p95": 10,
+  "sync_work_p50": 2,
+  "sync_work_p95": 5,
+  "sync_work_max": 6,
   "output_hz": 60,
   "renderer": "Qt Quick software (headless llvmpipe session)"
  }

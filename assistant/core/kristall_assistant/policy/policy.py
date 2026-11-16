@@ -126,7 +126,22 @@ def norm_path(p: str, cwd: str) -> str:
 
 
 def path_category(path: str, write: bool, pp: PolicyPaths) -> str:
-    """Category of reading/writing one path."""
+    """Category of reading/writing one path.
+
+    Symbolic links are followed as well: a link in the workspace that points at ~/.bashrc must not
+    turn a write to ~/.bashrc into a "reversible" one. The stricter of the two answers wins.
+    """
+    literal = _path_category_literal(path, write, pp)
+    try:
+        real = os.path.realpath(path)
+    except (OSError, ValueError):
+        return literal
+    if real == path:
+        return literal
+    return worst(literal, _path_category_literal(real, write, pp))
+
+
+def _path_category_literal(path: str, write: bool, pp: PolicyPaths) -> str:
     home = _home()
     if _match(path, CLAUDE_SECRET_GLOBS):
         return "deny"
@@ -339,6 +354,11 @@ class Policy:
             return self._mk(cat, cat, describe(cat, targets=[p]), f"{tool}: {p}")
         if tool == "Bash":
             return self._bash(str(inp.get("command") or ""))
+        if tool == "WebFetch" and _url_carries_data(str(inp.get("url") or "")):
+            # A long query or path can smuggle the owner's data out to any site: ask first.
+            url = str(inp.get("url") or "")
+            return self._mk("send", "send", describe("send"), f"WebFetch: {url[:300]}",
+                            "url carries data")
         if tool in ("WebSearch", "WebFetch", "TodoWrite", "ToolSearch"):
             tech = inp.get("query") or inp.get("url") or tool
             return self._mk("read", "read", describe("read"), f"{tool}: {tech}")
@@ -401,6 +421,18 @@ class Policy:
             return self._mk("deny", "deny", describe("deny"), tech)
         return self._mk("tool.use", f"mcp:{server}:{name}",
                         describe("tool.use", tool_label=label), tech)
+
+
+def _url_carries_data(url: str) -> bool:
+    """True when a URL is long enough in its query, fragment or a path segment to carry data."""
+    from urllib.parse import urlsplit
+    try:
+        u = urlsplit(url)
+    except ValueError:
+        return True
+    if len(u.query) + len(u.fragment) > 200:
+        return True
+    return any(len(seg) > 120 for seg in u.path.split("/"))
 
 
 def _paths_in(inp: dict[str, Any]) -> list[str]:

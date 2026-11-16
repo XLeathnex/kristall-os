@@ -5,6 +5,7 @@
 # Runs as root at image build time with the repository at /ctx (read-only) and network.
 # Installs:
 #   $PREFIX/lib/kristall/hands/kristall_hands/        the Python package (standard library + python3-gobject)
+#   $PREFIX/lib/kristall/hands/data/risky-targets.json  vocabulary of the risky-target gate
 #   $PREFIX/bin/kristall-hands                        a small compiled launcher embedding the system Python,
 #                                                     so the bridge sees /usr/bin/kristall-hands as the peer
 #   $PREFIX/share/kristall/assistant/mcp.d/50-hands.json   drop-in for the assistant daemon
@@ -60,6 +61,8 @@ PYTHON="$(command -v python3)"
 rm -rf "$LIB"
 mkdir -p "$LIB"
 cp -r "$SRC/kristall_hands" "$LIB/kristall_hands"
+# the risky-target vocabulary (hands.md §10), found by the package at ../data/
+install -D -m 0644 "$SRC/data/risky-targets.json" "$LIB/data/risky-targets.json"
 find "$LIB" -name '__pycache__' -prune -exec rm -rf {} +
 "$PYTHON" -m compileall -q "$LIB/kristall_hands" >/dev/null
 find "$LIB" -type d -exec chmod 0755 {} +

@@ -66,7 +66,7 @@ READ_ONLY = {
 # show a notification, create something new).
 REVERSIBLE = {
     "xdg-open", "gio", "gtk-launch", "kioclient", "kioclient5", "kstart", "kstart6",
-    "notify-send", "playerctl", "mkdir", "touch", "ln", "kristall-settings",
+    "notify-send", "playerctl", "mkdir", "touch", "kristall-settings",
     "wl-copy", "wl-paste", "spectacle", "pw-play", "paplay", "canberra-gtk-play",
 }
 UNPACK_OR_CREATE = {"tar", "unzip", "7z", "zip", "gzip", "gunzip", "xz", "convert", "magick", "ffmpeg"}
@@ -248,6 +248,14 @@ def _classify_program(prog: str, args: list[str], ops: list[str], cwd: str) -> F
         if out and _exists(out[0], cwd):
             return Finding("files.modify", prog, out)
         return Finding("reversible", prog, out, "creates files")
+    if prog == "ln":
+        # A new link is harmless; replacing an existing file with a link (ln -sf) destroys it.
+        if len(ops) >= 2:
+            if _any_overwrite(ops, cwd):
+                return Finding("files.modify", prog, ops[-1:])
+        elif ops and _exists(os.path.basename(ops[0].rstrip("/")), cwd):
+            return Finding("files.modify", prog, [os.path.basename(ops[0].rstrip("/"))])
+        return Finding("reversible", prog, ops, "link")
     if prog in ("cp", "mv", "rsync", "install"):
         if prog == "rsync" and any(":" in o and not o.startswith("/") for o in ops):
             return Finding("send", prog, ops)
@@ -291,6 +299,9 @@ def _classify_program(prog: str, args: list[str], ops: list[str], cwd: str) -> F
             if x.startswith(("-X", "--request=", "--method=")) and len(x) > 2 \
                     and x.split("=", 1)[-1].lstrip("-X").upper() not in ("GET", "HEAD", ""):
                 return Finding("send", prog, ops)
+        out = os.path.expandvars(_download_target(prog, args))
+        if out and out not in ("-", "/dev/null") and _exists(out, cwd):
+            return Finding("files.modify", prog, [out])
         if prog == "wget" or a & {"-o", "-O", "--output", "--remote-name"}:
             return Finding("reversible", prog, ops, "download")
         return Finding("read", prog, ops)
@@ -368,6 +379,20 @@ def _classify_program(prog: str, args: list[str], ops: list[str], cwd: str) -> F
     if prog in REVERSIBLE:
         return Finding("reversible", prog, ops)
     return Finding("shell.run", prog, ops, "unknown program")
+
+
+def _download_target(prog: str, args: list[str]) -> str:
+    """The file a curl/wget download writes to, if it is named explicitly."""
+    names = ("-o", "--output") if prog == "curl" else ("-O", "--output-document")
+    for j, x in enumerate(args):
+        if x in names and j + 1 < len(args):
+            return args[j + 1]
+        for n in names:
+            if n.startswith("--") and x.startswith(n + "="):
+                return x.split("=", 1)[1]
+            if not n.startswith("--") and x.startswith(n) and len(x) > len(n):
+                return x[len(n):]
+    return ""
 
 
 def _any_overwrite(ops: list[str], cwd: str) -> bool:

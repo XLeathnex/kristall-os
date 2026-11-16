@@ -18,10 +18,11 @@ compositor bridge with the assistant's own cursor. The interface: [`docs/contrac
 | `kristall_hands/a11y.py` | AT-SPI: compact snapshots, actions, focus; `screen.py` tier 2 + tier 3 tools |
 | `kristall_hands/cursor.py` | agent-cursor choreography; `link.py` assistant.sock client; `bridge.py` bridge client |
 | `kristall_hands/safety.py` | lock screen, auth prompts, protected apps, secret masking; `dbus.py` GDBus wrapper; `config.py` settings |
+| `kristall_hands/riskgate.py` | risky-target gate (contract §10): refuses to activate Send/Buy/Delete/Install/account elements without a matching `risk`; vocabulary in `data/risky-targets.json` |
 | `launcher/kristall-hands.c` | the compiled launcher (embedded, isolated Python; see the file for why) |
 | `image/install.sh` | image build: packages, package, launcher, mcp.d drop-in, defaults, user unit + preset |
-| `data/` | settings defaults, user unit, preset, the accessibility environment generator (`kristall-accessibility-env`) |
-| `tests/` | `run.sh`; unit tests with a fake D-Bus, a mock bridge written from the contract and a mock daemon; real-app accessibility tests (Kate, Dolphin; Firefox started before hands: `test_session_a11y.py`); real-bridge test; `measure_a11y_cost.py`, `measure_session_a11y.py` |
+| `data/` | settings defaults, user unit, preset, the accessibility environment generator (`kristall-accessibility-env`), the risky-target vocabulary (`risky-targets.json`) |
+| `tests/` | `run.sh`; unit tests with a fake D-Bus, a mock bridge written from the contract and a mock daemon; real-app accessibility tests (Kate, Dolphin; Firefox started before hands: `test_session_a11y.py`); real-bridge test; risky-target gate: `test_riskgate.py` (matcher) and `test_riskgate_e2e.py` (GTK 3 `support/riskwin.py`, Qt 6 `support/riskwin_qt.cpp`, a Firefox page, with the daemon's policy); `measure_a11y_cost.py`, `measure_session_a11y.py` |
 | `tools/e2e_session.py` | keeps a headless KWin + real bridge running for end-to-end runs with the real model |
 
 ## Build and test

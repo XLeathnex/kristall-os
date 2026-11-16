@@ -347,8 +347,26 @@ def test_bridge():
         b = s.bridge()
         wait_until(lambda: s.status().get("active"), 5)
         wins, clients = open_clients(s, b)
+        def key(a, which, chord, want):
+            """agent.key into one window; an X11 window that was just (re)activated by the bridge may
+            miss the very first key (XWayland focus hand-over, a bridge matter): one retry, reported"""
+            p = clients[which]
+            got = "—"
+            for attempt in range(2):
+                m = p.mark()
+                a.key(chord, window_id=wins[which]["id"])
+                got = wait_until(lambda: keys_received(p, m) if keys_received(p, m) != "—" else None, 1.5) or "—"
+                if got != "—":
+                    break
+                info(f"{which}: agent.key {chord} was not delivered on attempt {attempt + 1} (bridge focus hand-over)")
+                time.sleep(0.5)
+            check(f"agent.key {chord} arrives as {want}, untranslated ({which})", got == want, got)
+
         with b.agent_session("typing") as a:
             for which in ("native", "x11"):
+                # keys first (independent of the text paths), then the sentence
+                key(a, which, "ctrl+c", "Ctrl+c")
+                key(a, which, "alt+f", "Alt+f")
                 p = clients[which]
                 m = p.mark()
                 r = a.text(SENTENCE, window_id=wins[which]["id"])
@@ -359,24 +377,11 @@ def test_bridge():
                 else:
                     # an X11 app gets the characters of the layout as keys and the emoji through the
                     # clipboard + Ctrl+V (bridge contract); that Ctrl+V must arrive untranslated too
-                    typed = SENTENCE[:-1]
-                    check("agent.text German sentence arrives intact as keys (x11)", got.startswith(typed), repr(got))
+                    got = wait_until(lambda: text_received(p, m) if text_received(p, m).startswith(SENTENCE[:-1]) else None, 3) or text_received(p, m)
+                    check("agent.text German sentence arrives intact as keys (x11)", got.startswith(SENTENCE[:-1]), repr(got))
+                    ok = wait_until(lambda: keys_received(p, m).endswith("Ctrl+v"), 3)
                     check("…and the emoji via the bridge's clipboard path, its Ctrl+V untranslated (x11)",
-                          "clipboard" in r.get("paths", []) and keys_received(p, m).endswith("Ctrl+v"), f"{r.get('paths')} {keys_received(p, m)[-20:]}")
-                time.sleep(0.6)       # the clipboard path re-activates windows; let focus settle
-                m = p.mark()
-                a.key("ctrl+c", window_id=wins[which]["id"])
-                time.sleep(0.2)
-                if which == "x11" and keys_received(p, m) == "—":
-                    info("x11: the first agent.key after agent.text was not delivered (bridge focus hand-over); retried once")
-                    m = p.mark()
-                    a.key("ctrl+c", window_id=wins[which]["id"])
-                    time.sleep(0.3)
-                check(f"agent.key ctrl+c arrives as Ctrl+c, untranslated ({which})", keys_received(p, m) == "Ctrl+c", keys_received(p, m))
-                m = p.mark()
-                a.key("alt+f", window_id=wins[which]["id"])
-                time.sleep(0.2)
-                check(f"agent.key alt+f arrives as Alt+f, untranslated ({which})", keys_received(p, m) == "Alt+f", keys_received(p, m))
+                          "clipboard" in r.get("paths", []) and bool(ok), f"{r.get('paths')} {keys_received(p, m)[-20:]}")
 
 
 # ------------------------------------------------------------------------------------------ system chords

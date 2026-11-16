@@ -150,6 +150,9 @@ function scoreField(f, q, qw, cq, need, budget) {
         return 1000;
     if (f.n.startsWith(q))
         return 900 - Math.min(80, f.n.length - q.length);
+    // typed without the spaces ("visualstudio", "beispielstudio"): a prefix of the run-together text
+    if (cq.length >= 3 && f.c.startsWith(cq))
+        return 860 - Math.min(80, f.c.length - cq.length);
     need = need || 0;
     if (need >= 820)
         return 0;

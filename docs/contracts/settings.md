@@ -58,7 +58,7 @@ and `assistant.ui` belong to their components, `assistant.*` (every other second
 | `assistant.hands` | `assistant-hands` | `cursor.enabled`, `cursor.speed`, `cursor.linger_seconds`, `accessibility`, `screenshot.max_width`, `screenshot.max_height`, `snapshot.max_items`, `snapshot.max_depth`, `protected_apps` (`hands.md` §7) | setup |
 | `assistant.ui` | `assistant-ui` | `light.enabled`, `light.intensity`, `light.maxFps`, `light.cornerRadius`, `holdMs` | setup |
 | `power` | `power` | `automatic`, `batteryBase` quiet\|balanced, `batteryRefreshRate`, `dimOnBattery`, `chargeLimit`, `lowBatteryQuiet`, `heavyApps` (`power.md` §8) | setup, Control Center |
-| `keyboard` | `setup` | `macShortcuts`, `commandKey`, `passthroughApps`, `terminalApps` (`setup/data/settings.json`) | — |
+| `keyboard` | `setup` | `macShortcuts`, `commandKey`, `passthroughApps`, `terminalApps` (`setup/data/50-setup.json`) | — |
 | `setup` | `setup` | `done`, `running`, `step`, `skipped`, `version` | the shell's setup module |
 
 Components and their drop-ins: `shell` = shell-core `50-shell.json`; `dock` = `shell/modules/dock`

@@ -1,24 +1,30 @@
 {
  "last_run": {
   "sections": [
+   "static",
+   "kwinconfig",
+   "behaviour",
+   "perf",
+   "looks",
+   "contrast",
    "settingsapp",
-   "contrast"
+   "autohide"
   ],
   "failures": [],
-  "time": "2026-11-16T20:23:56"
+  "time": "2026-11-16T23:27:35"
  },
- "dolphin_launch_s": 0.7,
- "dock_layout_us_per_pass": 13.5,
+ "dolphin_launch_s": 0.57,
+ "dock_layout_us_per_pass": 16.5,
  "dock_magnify_sweep": {
   "sweep_s": 2.07,
   "pointer_events": 241,
   "frames": 122,
   "fps": 59.0,
   "interval_ms_p50": 17,
-  "interval_ms_p95": 20,
-  "interval_ms_max": 24,
-  "shell_cpu_ms": 690.0,
-  "cpu_ms_per_frame": 5.66
+  "interval_ms_p95": 18,
+  "interval_ms_max": 20,
+  "shell_cpu_ms": 580.0,
+  "cpu_ms_per_frame": 4.75
  },
  "dock_idle_after_leave": {
   "dock_frames": 0,

@@ -19,7 +19,7 @@
    "realbridge"
   ],
   "failures": [],
-  "time": "2026-11-16T20:20:51"
+  "time": "2026-11-16T23:13:28"
  },
  "idle_bar": {
   "seconds": 5.0,
@@ -37,6 +37,6 @@
  },
  "restart_seconds": 1.6,
  "scale16_bar_device_px": 38,
- "reconnect_helper_s": 3.84,
- "reconnect_backoff_s": 3.79
+ "reconnect_helper_s": 3.79,
+ "reconnect_backoff_s": 3.81
 }
