@@ -1,15 +1,10 @@
 {
  "last_run": {
   "sections": [
-   "looks"
+   "cc"
   ],
-  "failures": [
-   "light: zero warnings while drawing everything",
-   "dark: zero warnings while drawing everything",
-   "1.6\u00d7: zero warnings",
-   "no glass effect: everything still draws (fallback), zero warnings"
-  ],
-  "time": "2026-11-16T19:57:44"
+  "failures": [],
+  "time": "2026-11-16T20:21:48"
  },
  "notifications_groups": 6,
  "idle_panels_closed": {
@@ -23,14 +18,14 @@
   "seconds": 5.0,
   "frames": 0,
   "cpu_ms": 0.0,
-  "wakeups": 3,
+  "wakeups": 1,
   "processes": 4
  },
  "idle_cc_open": {
   "seconds": 4.0,
   "frames": 0,
   "cpu_ms": 0.0,
-  "wakeups": -3,
+  "wakeups": 0,
   "processes": 4
  }
 }

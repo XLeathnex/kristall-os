@@ -352,7 +352,7 @@ def shot(sess, name, crop=None, quality=None):
         im.convert("RGB").save(path, quality=min(quality or 84, 72 if im.size[0] * im.size[1] > 1000000 else 84), optimize=True)
     else:
         im.save(path, optimize=True)
-        if os.path.getsize(path) > 120000:       # keep the evidence small: large crops as JPEG
+        if os.path.getsize(path) > 50000:        # keep the evidence small (folder < 4 MB): large crops as JPEG
             os.unlink(path)
             im.convert("RGB").save(path[:-4] + ".jpg", quality=88, optimize=True)
     return img

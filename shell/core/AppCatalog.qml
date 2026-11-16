@@ -151,7 +151,9 @@ Singleton {
             return c;
         let k = "";
         const lower = appId.toLowerCase();
-        if (byKey[appId])
+        if (appAliases[lower] && byKey[appAliases[lower]])
+            k = appAliases[lower];          // another name of a listed app (checked first)
+        else if (byKey[appId])
             k = byKey[appId].key;
         else if (byKey[lower])
             k = byKey[lower].key;
@@ -165,8 +167,6 @@ Singleton {
                 }
             }
         }
-        if (k === "" && appAliases[lower] && byKey[appAliases[lower]])
-            k = appAliases[lower];
         if (k === "") {
             const d = DesktopEntries.heuristicLookup(appId);
             if (d && d.id) {

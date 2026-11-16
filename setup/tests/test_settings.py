@@ -78,9 +78,22 @@ class SettingsSession(S.SetupSession):
         a = self.q(name)
         if not a:
             raise RuntimeError(f"no control {name} on the page")
+        win = next((w for w in self.windows() if w["normal"] and "systemsettings" in w["appId"]), None)
+        bottom = win["content"]["y"] + win["content"]["h"] - 20 if win else 10000
+        for _ in range(12):           # below the visible part of the page: scroll it into view with the wheel
+            if a["gy"] + a["h"] < bottom:
+                break
+            self.move(win["content"]["x"] + win["content"]["w"] * 0.65, win["content"]["y"] + win["content"]["h"] / 2)
+            self.owner_proc._cmd("axis 0 60")
+            for _ in range(10):       # the page scrolls smoothly: wait until it stops
+                time.sleep(0.25)
+                b = self.q(name) or a
+                if b["gy"] == a["gy"]:
+                    break
+                a = b
         self.click(a["gx"] + a["w"] / 2, a["gy"] + a["h"] / 2)
         time.sleep(0.5)
-        return a
+        return self.q(name) or a
 
     def kset(self, path, value):
         env = self.env()

@@ -22,8 +22,14 @@ Overview is KWin's Overview effect; its touchpad gesture is KWin's built-in four
 (not changeable to three fingers in 6.8 as far as we know — unverified, no touchpad here).
 
 Tests: `shell/modules/switcher/tests/run.sh` (real key sequences through fake input).
-Limits: the switcher panel uses the design system's opaque fallback material, not Liquid Glass
-(KWin-internal QML windows cannot declare glass shapes); icons are the apps' own, without the
+Limits: the switcher panel uses the design system's opaque fallback material, not Liquid Glass.
+Tried in the shell fix round: a KWin TabBox layout can request blur only through
+`PlasmaCore.Dialog` (KWindowEffects → `kwin_blur`); with `NoBackground` it requests none, with a
+background the glass effect does get a shape — but under the Plasma theme's own opaque dialog
+frame and with that frame's small corner radius (not 22). A plain QML `Window` cannot set the
+`kwin_blur` region (its value must be a KWin `RegionF`). Needed from the glass effect: read a
+QML-settable property on internal windows (e.g. `kristallGlass: {x, y, w, h, radius}` declared
+on the `Window`, read with `QObject::property` and its notify signal) and draw that shape; icons are the apps' own, without the
 Dock's plates; KWin activates the app's most recent window only (macOS raises all its windows).
 Overview could not be run here: the dev container lacks `org.kde.milou`, which KWin's Overview
 needs — so the Dock/bar during Overview is unverified.

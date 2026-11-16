@@ -1,26 +1,24 @@
 {
  "last_run": {
   "sections": [
-   "settingsapp"
+   "settingsapp",
+   "contrast"
   ],
-  "failures": [
-   "one System Settings tile while one System Settings window is open",
-   "\u2026and it is the kept tile, shown as running"
-  ],
-  "time": "2026-11-16T19:40:35"
+  "failures": [],
+  "time": "2026-11-16T20:23:56"
  },
  "dolphin_launch_s": 0.7,
- "dock_layout_us_per_pass": 20,
+ "dock_layout_us_per_pass": 13.5,
  "dock_magnify_sweep": {
-  "sweep_s": 2.06,
+  "sweep_s": 2.07,
   "pointer_events": 241,
-  "frames": 123,
-  "fps": 59.8,
+  "frames": 122,
+  "fps": 59.0,
   "interval_ms_p50": 17,
-  "interval_ms_p95": 18,
-  "interval_ms_max": 20,
-  "shell_cpu_ms": 410.0,
-  "cpu_ms_per_frame": 3.33
+  "interval_ms_p95": 20,
+  "interval_ms_max": 24,
+  "shell_cpu_ms": 690.0,
+  "cpu_ms_per_frame": 5.66
  },
  "dock_idle_after_leave": {
   "dock_frames": 0,

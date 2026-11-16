@@ -8,10 +8,12 @@ assistant's **own cursor** (`docs/contracts/hands.md` §8), invocation and push-
 ```
 Module.qml           controller: invocation (ShellBus target "assistant"), panel session, notices, push-to-talk
 AssistantClient.qml  assistant.sock client: model rebuilt from every snapshot, reconnect (helper inotify / backoff)
-EdgeLight.qml        the light of one output: state palettes, fade, frame clock (≤ 60 updates/s, 30 on battery)
+EdgeLight.qml        the light of one output: crystal palette (cyan → violet → magenta, amber accents), per-mode
+                     look, voice-level spring, entry bloom (450 ms sweep from the bottom corners) and exit
+                     fade (300 ms), frame clock (≤ 60 updates/s, 30 on battery)
 LightStrip.qml       one edge surface (top/bottom carry the corners) + shaders/edgelight.frag; plain glow fallback
 Panel.qml            panel surface (Top layer; Overlay over full screen) + click catcher; glass morph
-PanelBody.qml        compact capsule / conversation / footer field; Orb, ReplyText (+Markdown.js), ActivityLine,
+PanelBody.qml        compact capsule / conversation / footer field; Orb, ReplyText (+ core/Markdown.js), ActivityLine,
                      PermissionCard, NoticeCard, MicBadge
 AgentCursor.qml      the cursor surface (moved by layer-shell margins), clock-anchored glides, ripples, label pill
 AssistantTestHooks   IPC target "assistant-test" (KRISTALL_SHELL_TEST=1 only)
@@ -23,7 +25,17 @@ tests/               run.sh, test_assistant.py, support.py, evidence/
 
 Requests: `kristall-shellctl assistant invoke bar|shortcut|search` (shortcut while listening = done
 talking; the bar button toggles), `assistant ask "<text>"` (Search's hand-off: a typed question,
-panel open), `assistant dismiss|show|toggle`. Settings (`assistant.ui`): `light.enabled`,
+panel open), `assistant dismiss|show|toggle`, `assistant release [held ms]` (push-to-talk).
+
+The light: a bright 3.5-px rim that hugs the display's rounded corners and a soft glow reaching
+≈ 5 % of the short side, alpha falling to zero with zero slope. Dark content: light added to it
+(the content stays visible through the glow); light content (the menu bar's or the panel's glass
+legibility signal says "light", else the theme): deeper, saturated colours composited over it,
+slightly darker than the page. Listening/speaking follow the voice level (spring: ≈ 40 ms attack,
+≈ 250 ms release, small overshoot); thinking is thinner with faster hues and glints; acting a
+quieter steady flow; errors a warm flash. Reduce Motion: no flow, no sweep — fades only.
+Evidence: `tests/evidence/edge-*` (every mode over a dark wallpaper, a white page and a busy
+photo; the entry bloom frame by frame; before/after). Settings (`assistant.ui`): `light.enabled`,
 `light.intensity` (0–1), `light.maxFps`, `light.cornerRadius`, `holdMs`.
 
 ## Surfaces (all click-through except the panel; all excluded by the bridge's `excludeShell`)
@@ -52,8 +64,11 @@ runs the real bridge plugin with the real `kristall-hands` clicking. Numbers: `t
 ## Known limits
 
 Not verifiable here: real microphone/speech-driven motion, GPU cost at 120 Hz on Iris Xe, the
-KRunner Alt+Space hand-over in `/etc/xdg/kglobalshortcutsrc` on a real Plasma session. Push-to-talk:
-kglobalaccel runs desktop-file shortcuts on press only and signals no release on D-Bus (verified with
-KWin 6.8.3 in the dev container); holding works once something that sees the release sends
-`kristall-shellctl assistant release` (a request for shell-core's helper). The light's shader runs only with a
+KRunner Alt+Space hand-over in `/etc/xdg/kglobalshortcutsrc` on a real Plasma session (the test
+writes the same override into the session's own kglobalshortcutsrc). Push-to-talk: the key is
+shell-core's helper's kglobalaccel D-Bus action (component `kristall-shell`, action
+`assistant-talk`), which sees press and release; the desktop file here keeps its action without
+default keys (shell.md §6). Tested: hold 1.2 s → listens, ends on release; tap → tap-to-talk. The
+Copilot key (Meta+Shift+F23 / TouchpadOn) is registered but its fake-input chord did not reach
+kglobalacceld in the headless session — unverified. The light's shader runs only with a
 GPU scene graph; Qt Quick's software renderer gets a still gradient glow.

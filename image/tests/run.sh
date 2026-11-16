@@ -82,7 +82,9 @@ fi
 if command -v systemd-analyze >/dev/null; then
   # --man=no: the units only reference our own docs.
   out=$(cd "$REPO/image/rootfs/usr/lib/systemd/system" && systemd-analyze verify --man=no ./*.service ./*.timer 2>&1 |
-    grep -v -e 'not found' -e 'Command .* is not executable' -e 'kristall-.*: Unit .* not found' || true)
+    grep -v -e 'not found' -e 'Command .* is not executable' -e 'kristall-.*: Unit .* not found' |
+    # the host's own units (e.g. xfs_scrub on GitHub runners) may warn too; only ours count
+    grep -E '^\./|kristall' || true)
   [[ -z $out ]] || {
     echo "$out"
     rc=1

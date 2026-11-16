@@ -324,6 +324,14 @@ class Helper:
                 if tool:
                     subprocess.run([tool, "--file", "kwinrc", "--group", "NightColor", "--key", "Active", "--type", "bool", "--notify", "true"],
                                    check=False)
+
+                    # KWin's configuration watcher can miss a change made right after it started
+                    # (seen under load): if Night Light is not on a second later, ask KWin to reload
+                    def nudge():
+                        if not self.night.get("enabled"):
+                            self.call(self.session, "org.kde.KWin", "/KWin", "org.kde.KWin", "reconfigure", None)
+                        return False
+                    GLib.timeout_add(1000, nudge)
                 else:
                     log("kwriteconfig6 missing: cannot switch Night Light on")
             self.reply(rid)

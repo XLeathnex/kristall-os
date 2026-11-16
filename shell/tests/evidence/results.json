@@ -1,10 +1,25 @@
 {
  "last_run": {
   "sections": [
-   "reveal"
+   "static",
+   "shortcuts",
+   "ctl",
+   "reconnect",
+   "controls",
+   "menus",
+   "reveal",
+   "core",
+   "appmenu",
+   "scale",
+   "fallback",
+   "modules",
+   "restart",
+   "plasma",
+   "gallery",
+   "realbridge"
   ],
   "failures": [],
-  "time": "2026-11-16T19:49:48"
+  "time": "2026-11-16T20:20:51"
  },
  "idle_bar": {
   "seconds": 5.0,
@@ -20,8 +35,8 @@
   "wakeups": 0,
   "processes": 5
  },
- "restart_seconds": 1.5,
+ "restart_seconds": 1.6,
  "scale16_bar_device_px": 38,
- "reconnect_helper_s": 3.91,
- "reconnect_backoff_s": 3.69
+ "reconnect_helper_s": 3.84,
+ "reconnect_backoff_s": 3.79
 }

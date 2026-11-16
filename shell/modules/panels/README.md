@@ -12,7 +12,7 @@ Hud.qml                 volume / brightness / keyboard-backlight HUD (and Plasma
 Notifs.qml              the notification server, history, banners policy, Do Not Disturb, muting
 Hw.qml Media.qml PanelsUtil.qml   Wi-Fi list, Bluetooth devices, outputs, mic use, backlights, MPRIS, power modes
 PanelsHelper.qml + helper/kristall-panels-helper   D-Bus where Quickshell has no service (below)
-PanelMetrics.qml        layout numbers design.md does not have yet (candidates for Theme)
+(PanelMetrics, RoundedImage and the binding-safe controls are shell-core's now: qs.core, design.md §4, §11)
 qmldir                  the module's types (see "Quickshell note")
 plasma/osd/…            no-op replacement of Plasma's OSD QML module; plasma/systemd/ the plasmashell drop-in
 kglobalaccel/           shortcuts: Meta+Alt+C Control Center, Meta+Alt+N Notification Centre
