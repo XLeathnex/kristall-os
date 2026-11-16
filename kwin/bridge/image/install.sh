@@ -15,7 +15,9 @@ note() { printf '==> kwin/bridge: %s\n' "$*"; }
 # ------------------------------------------------------------------ build dependencies
 BUILD_DEPS=(gcc-c++ cmake ninja-build extra-cmake-modules kwin-devel qt6-qtbase-devel qt6-qtbase-private-devel
     qt6-qtdeclarative-devel kdecoration-devel kf6-kconfig-devel kf6-kcoreaddons-devel wayland-devel
-    wayland-protocols-devel plasma-wayland-protocols-devel libxkbcommon-devel systemd-devel)
+    wayland-protocols-devel plasma-wayland-protocols-devel libxkbcommon-devel systemd-devel
+    # KWinConfig.cmake's own find_dependency() list (kwin-devel does not pull these in)
+    libepoxy-devel libdrm-devel vulkan-headers vulkan-loader-devel kf6-kwindowsystem-devel)
 ADDED=()
 for p in "${BUILD_DEPS[@]}"; do
   rpm -q "$p" >/dev/null 2>&1 || ADDED+=("$p")

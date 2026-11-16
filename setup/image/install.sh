@@ -15,7 +15,9 @@ trap 'rm -rf "$build"' EXIT
 # build dependencies: only those not already in the image are installed, and removed again
 deps=(cmake ninja-build gcc-c++ extra-cmake-modules kwin-devel qt6-qtbase-devel qt6-qtbase-private-devel
       qt6-qtdeclarative-devel kf6-kcmutils-devel kf6-kconfig-devel kf6-kcoreaddons-devel libxkbcommon-devel
-      wayland-devel)
+      wayland-devel
+      # KWinConfig.cmake's own find_dependency() list (kwin-devel does not pull these in)
+      libepoxy-devel libdrm-devel vulkan-headers vulkan-loader-devel kf6-kwindowsystem-devel)
 added=()
 for p in "${deps[@]}"; do
     rpm -q "$p" >/dev/null 2>&1 || added+=("$p")

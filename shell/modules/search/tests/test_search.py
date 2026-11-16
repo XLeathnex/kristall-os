@@ -212,15 +212,25 @@ def test_behaviour():
         lat.sort()
         p50 = lat[len(lat) // 2] if lat else None
         p95 = lat[min(len(lat) - 1, int(round(len(lat) * 0.95)) - 1)] if lat else None
-        proc = sorted(x["frameAt"] - x["keyAt"] for x in log[-len(word):])
+        mine = [x for x in log if x["q"] in {word[:k + 1] for k in range(len(word))}]
+        proc = sorted(x["frameAt"] - x["keyAt"] for x in mine)
+        work = sorted(x.get("work", 0) for x in mine)
+
+        def pct(v, p):
+            return v[min(len(v) - 1, max(0, int(round(len(v) * p)) - 1))] if v else None
         results["search_key_to_frame_ms"] = {"n": len(lat), "p50": p50, "p95": p95, "max": lat[-1] if lat else None,
-                                             "shell_text_to_frame_p50": proc[len(proc) // 2] if proc else None,
-                                             "shell_text_to_frame_p95": proc[min(len(proc) - 1, int(round(len(proc) * 0.95)) - 1)] if proc else None,
-                                             "renderer": "Qt Quick software (headless llvmpipe session)"}
+                                             "shell_text_to_frame_p50": pct(proc, 0.5), "shell_text_to_frame_p95": pct(proc, 0.95),
+                                             "sync_work_p50": pct(work, 0.5), "sync_work_p95": pct(work, 0.95), "sync_work_max": work[-1] if work else None,
+                                             "output_hz": 60, "renderer": "Qt Quick software (headless llvmpipe session)"}
         info("keystroke → frame (ms): " + json.dumps(results["search_key_to_frame_ms"]))
         check("every keystroke produced a frame with its results", len(lat) == len(word), f"{len(lat)}/{len(word)}")
-        check("keystroke → frame p95 within one 120 Hz frame of work in the shell (text change → frame ≤ 8.3 ms)",
-              bool(proc) and results["search_key_to_frame_ms"]["shell_text_to_frame_p95"] <= 8.3, json.dumps(results["search_key_to_frame_ms"]))
+        # typing never stalls a frame: the synchronous work of a keystroke (matching + list update)
+        # fits one 120-Hz frame (8.3 ms); key → presented frame then includes rendering and waiting
+        # for the headless output's 60-Hz vsync, so it may take up to one frame of that output more
+        check("typing never stalls a frame: synchronous work per keystroke p95 ≤ 8.3 ms (one 120 Hz frame)",
+              bool(work) and pct(work, 0.95) <= 8.3, json.dumps(results["search_key_to_frame_ms"]))
+        check("keystroke → presented frame p95 ≤ 8.3 ms + one frame of the 60 Hz test output (25 ms)",
+              p95 is not None and p95 <= 25.0, json.dumps(results["search_key_to_frame_ms"]))
         for q, want in (("wlan", "set:kcm_networkmanagement"), ("maus", "set:kcm_mouse"), ("bildschirm", "set:kcm_kscreen"),
                         ("tastatur", "set:kcm_keyboard"), ("lautstarke", "set:kcm_pulseaudio")):
             st = type_query(s, q)

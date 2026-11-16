@@ -205,11 +205,13 @@ PanelWindow {
         _userMoved = false;
         _keyAt = Date.now();
         compute(query);
+        _workMs = Date.now() - _keyAt;
         _awaitFrame = true;
     }
     // key → frame measurement (test hooks read it): when the text changed, and when the frame that
     // shows the new results was presented
     property real _keyAt: 0
+    property real _workMs: 0                    // synchronous work of the last keystroke (matching + list update)
     property bool _awaitFrame: false
     property var frameLog: []                   // [{q, keyAt, frameAt}] (wall-clock ms), last 64
     Connections {
@@ -218,7 +220,7 @@ PanelWindow {
             if (!searchWindow._awaitFrame)
                 return;
             searchWindow._awaitFrame = false;
-            searchWindow.frameLog = searchWindow.frameLog.concat([{ q: searchWindow.query, keyAt: searchWindow._keyAt, frameAt: Date.now() }]).slice(-64);
+            searchWindow.frameLog = searchWindow.frameLog.concat([{ q: searchWindow.query, keyAt: searchWindow._keyAt, work: searchWindow._workMs, frameAt: Date.now() }]).slice(-64);
         }
     }
 

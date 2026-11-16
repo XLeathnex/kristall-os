@@ -37,6 +37,19 @@ function charBit(c) {
     return c === 43 || c === 35 ? 1 << 27 : 0;
 }
 
+// the letter bits of the current compact query, computed once per query (not per entry)
+let _bitsQuery = "";
+let _bits = [];
+function queryBits(cq) {
+    if (cq !== _bitsQuery) {
+        _bits = new Array(cq.length);
+        for (let k = 0; k < cq.length; ++k)
+            _bits[k] = charBit(cq.charCodeAt(k));
+        _bitsQuery = cq;
+    }
+    return _bits;
+}
+
 // one field: {n: normalised text, w: words, i: initials, c: compact (no spaces), m: char mask}
 function prepareField(text) {
     const n = norm(text);
@@ -130,51 +143,95 @@ function subsequence(q, s) {
     return j === q.length ? gaps : -1;
 }
 
-// score of one prepared field for a normalised query (0 = no match)
-function scoreField(f, q, qw, cq) {
+// score of one prepared field for a normalised query (0 = no match). `need`: only a score above it
+// is useful to the caller (tiers that cannot reach it are skipped).
+function scoreField(f, q, qw, cq, need, budget) {
     if (f.n === q)
         return 1000;
     if (f.n.startsWith(q))
         return 900 - Math.min(80, f.n.length - q.length);
+    need = need || 0;
+    if (need >= 820)
+        return 0;
+    // this field cannot match at all: the query's first letter is not in it, or more of its
+    // letters are missing than edits are allowed (same rule as score() over the whole entry)
+    const fm = f.m;
+    const bits = queryBits(cq);
+    if ((fm & bits[0]) === 0)
+        return 0;
+    let missing = 0;
+    for (let k = 1; k < bits.length; ++k)
+        if ((fm & bits[k]) === 0)
+            ++missing;
+    if (budget !== undefined && missing > budget)
+        return 0;
     // every query word starts a word of the field (in order or not)
     if (qw.length > 1) {
         let all = true;
-        for (const x of qw) {
+        for (let a = 0; a < qw.length && all; ++a) {
+            const x = qw[a];
             let hit = false;
-            for (const w of f.w)
-                if (w.startsWith(x)) {
+            for (let j = 0; j < f.w.length; ++j)
+                if (f.w[j].startsWith(x)) {
                     hit = true;
                     break;
                 }
-            if (!hit) {
-                all = false;
-                break;
-            }
+            all = hit;
         }
         if (all)
             return 820;
     }
+    if (need >= 800)
+        return 0;
     for (let k = 1; k < f.w.length; ++k)
         if (f.w[k].startsWith(q))
             return 800 - k;
+    if (need >= 720)
+        return 0;
     if (cq.length >= 2 && f.i.length >= 2 && f.i.startsWith(cq))
         return 720;
+    if (need >= 600)
+        return 0;
     const at = f.c.indexOf(cq);
     if (cq.length >= 3 && at > 0)
         return 600 - Math.min(50, at);
-    // query letters this field does not contain at all: each needs at least one edit, and a
-    // subsequence needs none — most fields stop here without any distance computation
-    let missing = 0;
-    for (let k = 0; k < cq.length; ++k)
-        if ((f.m & charBit(cq.charCodeAt(k))) === 0)
-            ++missing;
     // typos against word prefixes of about the query's length (people rarely mistype the first
     // letter: only words that start with it are compared, which keeps this cheap)
+    if (need >= 480)
+        return 0;
+    if (qw.length > 1) {
+        // several words: each query word matches a word of the field by prefix or with its own
+        // few typos (comparing the run-together query with one word would match almost anything
+        // that shares the first word, and cost a distance computation per field)
+        let total = 0;
+        for (let k = 0; k < qw.length && total >= 0; ++k) {
+            const x = qw[k];
+            const t = allowedTypos(x.length);
+            let bw = t + 1;
+            const c0 = x.charCodeAt(0);
+            for (let j = 0; j < f.w.length; ++j) {
+                const w = f.w[j];
+                if (w.startsWith(x)) {
+                    bw = 0;
+                    break;
+                }
+                if (t === 0 || w.charCodeAt(0) !== c0 || w.length < x.length - t)
+                    continue;
+                const d = prefixDistance(x, w, t);
+                if (d < bw)
+                    bw = d;
+            }
+            total = bw > t ? -1 : total + bw;
+        }
+        if (total > 0)
+            return Math.max(300, 480 - 90 * total);
+    }
     const typos = allowedTypos(cq.length);
-    if (typos > 0 && missing <= typos) {
+    if (qw.length <= 1 && typos > 0 && missing <= typos) {
         let best = typos + 1;
         const c0 = cq.charCodeAt(0);
-        for (const w of f.w) {
+        for (let j = 0; j < f.w.length; ++j) {
+            const w = f.w[j];
             if (w.charCodeAt(0) !== c0 || w.length < cq.length - typos)
                 continue;
             const d = prefixDistance(cq, w, typos);
@@ -186,6 +243,8 @@ function scoreField(f, q, qw, cq) {
         if (best <= typos)
             return 480 - 90 * best;
     }
+    if (need >= 300)
+        return 0;
     if (cq.length >= 3 && f.weight >= 0.9 && missing === 0) {
         const gaps = subsequence(cq, f.c);
         if (gaps >= 0 && gaps <= 2)
@@ -198,11 +257,36 @@ function scoreField(f, q, qw, cq) {
 function score(entry, q, qw, cqIn) {
     let best = 0;
     const cq = cqIn !== undefined ? cqIn : (q.indexOf(" ") >= 0 ? q.replace(/ /g, "") : q);
+    if (cq.length === 0)
+        return 0;
+    // quick reject over all fields at once: every kind of match needs the query's first letter in
+    // the entry, and at most allowedTypos(|q|) of its letters missing (each missing one is an edit)
+    let em = entry._m;
+    if (em === undefined) {
+        em = 0;
+        for (let i = 0; i < entry.length; ++i)
+            em |= entry[i].m;
+        entry._m = em;
+    }
+    const bits = queryBits(cq);
+    if ((em & bits[0]) === 0)
+        return 0;
+    let typos = allowedTypos(cq.length);
+    if (qw.length > 1) {
+        let sum = 0;
+        for (let k = 0; k < qw.length; ++k)
+            sum += allowedTypos(qw[k].length);
+        typos = Math.max(typos, sum);
+    }
+    let missing = 0;
+    for (let k = 1; k < bits.length; ++k)
+        if ((em & bits[k]) === 0 && ++missing > typos)
+            return 0;
     for (let i = 0; i < entry.length; ++i) {
         const f = entry[i];
         if (f.weight * 1000 <= best)
             continue;                   // cannot beat what we have
-        const s = scoreField(f, q, qw, cq) * f.weight;
+        const s = scoreField(f, q, qw, cq, best / f.weight, typos) * f.weight;
         if (s > best)
             best = s;
     }
