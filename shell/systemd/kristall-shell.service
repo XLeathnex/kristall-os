@@ -1,0 +1,23 @@
+[Unit]
+Description=Kristall Shell (menu bar, Dock, Control Center)
+Documentation=file:///usr/share/doc/kristall/contracts/shell.md
+PartOf=graphical-session.target
+After=graphical-session.target plasma-plasmashell.service
+Requisite=graphical-session.target
+# crash ladder: Restart= below; the launcher switches to safe mode after 3 starts in 60 s;
+# 6 failed starts in 3 minutes stop the restarts and start the Plasma-panel fallback
+StartLimitIntervalSec=180
+StartLimitBurst=6
+OnFailure=kristall-shell-fallback.service
+
+[Service]
+Type=exec
+ExecStart=/usr/libexec/kristall/kristall-shell
+Restart=always
+RestartSec=1
+TimeoutStopSec=5
+Slice=session.slice
+SyslogIdentifier=kristall-shell
+
+[Install]
+WantedBy=graphical-session.target

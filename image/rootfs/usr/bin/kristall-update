@@ -1,0 +1,669 @@
+#!/usr/bin/python3 -IS
+# SPDX-License-Identifier: GPL-3.0-or-later
+# kristall-update: OS image + Flatpak updates for Kristall OS, for people and for settings screens.
+# Specification: docs/contracts/update.md. Standard library only.
+import errno
+import fcntl
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import time
+
+SCHEMA = 1
+
+# Every path can be redirected for tests (see image/tests/test_update.py).
+STATE_DIR = os.environ.get("KRISTALL_UPDATE_STATE_DIR", "/var/lib/kristall/update")
+RUN_DIR = os.environ.get("KRISTALL_UPDATE_RUN_DIR", "/run/kristall-update")
+CONFIG_FILE = os.environ.get("KRISTALL_UPDATE_CONFIG", "/etc/kristall/update.json")
+POWER_DIR = os.environ.get("KRISTALL_POWER_SUPPLY_DIR", "/sys/class/power_supply")
+STATE_FILE = os.path.join(STATE_DIR, "state.json")
+SNAPSHOT_FILE = os.path.join(STATE_DIR, "bootc-status.json")
+LOCK_FILE = os.path.join(RUN_DIR, "lock")
+
+DEFAULT_CONFIG = {"automatic": True, "min_battery_percent": 30, "allow_metered": False,
+                  "update_flatpaks": True}
+
+UNITS = {
+    "check": "kristall-update-check.service",
+    "apply": "kristall-update-apply.service",
+    "rollback": "kristall-update-rollback.service",
+    "rollback-cancel": "kristall-update-rollback-cancel.service",
+}
+
+MESSAGES = {
+    "offline": ("No internet connection.", "Keine Internetverbindung."),
+    "metered": ("Waiting for a connection that is not metered (e.g. not a mobile hotspot).",
+                "Wartet auf eine Verbindung ohne Datenlimit (z. B. kein mobiler Hotspot)."),
+    "battery-low": ("Waiting until the battery is charged or the power adapter is connected.",
+                    "Wartet, bis der Akku geladen oder das Netzteil angeschlossen ist."),
+    "auto-disabled": ("Automatic updates are turned off.", "Automatische Updates sind ausgeschaltet."),
+    "busy": ("Another update task is running.", "Ein anderer Update-Vorgang läuft gerade."),
+    "not-bootc": ("This system cannot be updated this way (not an image-based installation).",
+                  "Dieses System kann so nicht aktualisiert werden (keine Image-Installation)."),
+    "download-failed": ("The system update could not be downloaded. It will be retried automatically.",
+                        "Das Systemupdate konnte nicht geladen werden. Es wird automatisch erneut versucht."),
+    "flatpak-failed": ("Some apps could not be updated. It will be retried automatically.",
+                       "Einige Apps konnten nicht aktualisiert werden. Es wird automatisch erneut versucht."),
+    "no-rollback": ("There is no previous version to go back to.",
+                    "Es gibt keine vorherige Version, zu der zurückgekehrt werden kann."),
+    "rollback-failed": ("Going back to the previous version failed.",
+                        "Die Rückkehr zur vorherigen Version ist fehlgeschlagen."),
+    "permission-denied": ("Not allowed.", "Nicht erlaubt."),
+    "failed": ("The update task failed.", "Der Update-Vorgang ist fehlgeschlagen."),
+}
+
+NOTIFY_TEXT = {
+    "update": (("Update ready", "Restart your computer to finish installing the update. "
+                "Your open work is not affected until you restart."),
+               ("Update bereit", "Starte den Computer neu, um das Update abzuschließen. "
+                "Deine offene Arbeit bleibt bis zum Neustart unberührt.")),
+    "rollback": (("Previous version selected", "Restart to go back to the previous version."),
+                 ("Vorherige Version ausgewählt", "Starte neu, um zur vorherigen Version zurückzukehren.")),
+    "restart": ("Restart now", "Jetzt neu starten"),
+    "later": ("Later", "Später"),
+}
+
+
+def is_german():
+    for var in ("LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"):
+        v = os.environ.get(var)
+        if v:
+            return v.lower().startswith("de")
+    return False
+
+
+def message(code, detail=None):
+    en, de = MESSAGES.get(code, MESSAGES["failed"])
+    m = {"code": code, "en": en, "de": de}
+    if detail:
+        m["detail"] = detail[-2000:]
+    return m
+
+
+def now_iso():
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def log(msg):
+    sys.stderr.write("kristall-update: %s\n" % msg)
+    sys.stderr.flush()
+
+
+def is_root():
+    if os.environ.get("KRISTALL_UPDATE_FORCE_ROOT") == "1":
+        return True
+    if os.environ.get("KRISTALL_UPDATE_FORCE_ROOT") == "0":
+        return False
+    return os.geteuid() == 0
+
+
+# ---------------------------------------------------------------- files
+
+def read_json(path, default=None):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return default
+
+
+def write_json_atomic(path, doc, mode=0o644):
+    d = os.path.dirname(path)
+    os.makedirs(d, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".tmp-", suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(doc, f, ensure_ascii=False, indent=2, sort_keys=True)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def load_config():
+    cfg = dict(DEFAULT_CONFIG)
+    user = read_json(CONFIG_FILE, {})
+    if isinstance(user, dict):
+        cfg.update({k: v for k, v in user.items() if k in DEFAULT_CONFIG})
+    return cfg
+
+
+def load_state():
+    st = read_json(STATE_FILE, {})
+    return st if isinstance(st, dict) else {}
+
+
+def update_state(**changes):
+    st = load_state()
+    st.update(changes)
+    st["schema"] = SCHEMA
+    write_json_atomic(STATE_FILE, st)
+    return st
+
+
+# ---------------------------------------------------------------- locking
+
+class Lock:
+    """Exclusive lock held by whichever root process is working; status probes it."""
+
+    def __init__(self, blocking=True):
+        self.blocking = blocking
+        self.fd = None
+
+    def __enter__(self):
+        os.makedirs(RUN_DIR, exist_ok=True)
+        self.fd = os.open(LOCK_FILE, os.O_RDWR | os.O_CREAT, 0o644)
+        flags = fcntl.LOCK_EX if self.blocking else fcntl.LOCK_EX | fcntl.LOCK_NB
+        fcntl.flock(self.fd, flags)
+        return self
+
+    def __exit__(self, *exc):
+        fcntl.flock(self.fd, fcntl.LOCK_UN)
+        os.close(self.fd)
+
+
+def lock_held():
+    try:
+        fd = os.open(LOCK_FILE, os.O_RDONLY)
+    except OSError:
+        return False
+    try:
+        fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return False
+    except OSError as e:
+        return e.errno in (errno.EWOULDBLOCK, errno.EAGAIN)
+    finally:
+        os.close(fd)
+
+
+# ---------------------------------------------------------------- subprocess
+
+def run(cmd, timeout=None):
+    """Run a command; return (rc, combined output). Missing binaries give rc 127."""
+    try:
+        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           timeout=timeout, check=False)
+        return p.returncode, p.stdout.decode("utf-8", "replace")
+    except FileNotFoundError:
+        return 127, "%s: not found" % cmd[0]
+    except subprocess.TimeoutExpired:
+        return 124, "%s: timed out" % cmd[0]
+
+
+def bootc_status_live():
+    rc, out = run(["bootc", "status", "--format=json"], timeout=120)
+    if rc != 0:
+        return None
+    try:
+        return json.loads(out)
+    except ValueError:
+        return None
+
+
+def refresh_snapshot():
+    snap = bootc_status_live()
+    if snap is not None:
+        write_json_atomic(SNAPSHOT_FILE, snap)
+    return snap
+
+
+# ---------------------------------------------------------------- conditions
+
+def nm_property(name):
+    rc, out = run(["busctl", "get-property", "org.freedesktop.NetworkManager",
+                   "/org/freedesktop/NetworkManager", "org.freedesktop.NetworkManager", name],
+                  timeout=10)
+    if rc != 0:
+        return None
+    parts = out.split()
+    if len(parts) >= 2 and parts[1].isdigit():
+        return int(parts[1])
+    return None
+
+
+def power_state():
+    """Return (on_ac, lowest_battery_percent_or_None)."""
+    on_ac, lowest = False, None
+    try:
+        names = os.listdir(POWER_DIR)
+    except OSError:
+        return True, None
+
+    def rd(dev, attr):
+        try:
+            with open(os.path.join(POWER_DIR, dev, attr)) as f:
+                return f.read().strip()
+        except OSError:
+            return None
+
+    for dev in names:
+        kind = rd(dev, "type")
+        if kind in ("Mains", "USB", "USB_C", "USB_PD"):
+            if rd(dev, "online") == "1":
+                on_ac = True
+        elif kind == "Battery":
+            if rd(dev, "scope") == "Device":  # mouse/keyboard batteries do not count
+                continue
+            cap = rd(dev, "capacity")
+            if cap and cap.isdigit():
+                lowest = int(cap) if lowest is None else min(lowest, int(cap))
+    if lowest is None:
+        on_ac = True  # desktop / VM: no battery
+    return on_ac, lowest
+
+
+def blocking_condition(cfg, for_auto):
+    """Return a reason code if updates should wait now, else None."""
+    if for_auto and not cfg.get("automatic", True):
+        return "auto-disabled"
+    connectivity = nm_property("Connectivity")  # 1 none, 2 portal, 3 limited, 4 full
+    if connectivity is not None and connectivity in (1, 2, 3):
+        return "offline"
+    if for_auto and not cfg.get("allow_metered", False):
+        metered = nm_property("Metered")  # 1 yes, 3 guess-yes
+        if metered in (1, 3):
+            return "metered"
+    on_ac, pct = power_state()
+    if not on_ac and pct is not None:
+        threshold = cfg.get("min_battery_percent", 30) if for_auto else 10
+        if pct < threshold:
+            return "battery-low"
+    return None
+
+
+# ---------------------------------------------------------------- status
+
+def entry_info(entry):
+    if not isinstance(entry, dict):
+        return None
+    img = entry.get("image") or {}
+    ref = (img.get("image") or {})
+    return {
+        "version": img.get("version"),
+        "image": ref.get("image"),
+        "transport": ref.get("transport"),
+        "digest": img.get("imageDigest"),
+        "timestamp": img.get("timestamp"),
+        "pinned": bool(entry.get("pinned", False)),
+        "download_only": bool(entry.get("downloadOnly", False)),
+    }
+
+
+def compute_status(snap, st, running):
+    out = {
+        "schema": SCHEMA,
+        "state": "unknown",
+        "bootc": snap is not None,
+        "booted": None,
+        "staged": None,
+        "rollback": None,
+        "available": None,
+        "can_rollback": False,
+        "rollback_queued": False,
+        "running": running,
+        "operation": st.get("operation") if running else None,
+        "last_check": st.get("last_check"),
+        "last_update": st.get("last_update"),
+        "last_result": st.get("last_result"),
+        "last_error": st.get("last_error"),
+        "waiting_reason": st.get("waiting_reason"),
+        "flatpak": st.get("flatpak") or {"updates_pending": None, "last_updated": None},
+        "automatic": load_config().get("automatic", True),
+    }
+    if snap is not None:
+        status = snap.get("status") or {}
+        booted = entry_info(status.get("booted"))
+        staged = entry_info(status.get("staged"))
+        rollback = entry_info(status.get("rollback"))
+        out["booted"], out["staged"], out["rollback"] = booted, staged, rollback
+        out["rollback_queued"] = bool(status.get("rollbackQueued", False))
+        out["can_rollback"] = rollback is not None and not out["rollback_queued"]
+        cached = (status.get("booted") or {}).get("cachedUpdate")
+        if isinstance(cached, dict) and booted:
+            digest = cached.get("imageDigest")
+            known = {booted.get("digest"), staged.get("digest") if staged else None}
+            if digest and digest not in known:
+                out["available"] = {"version": cached.get("version"), "digest": digest,
+                                    "timestamp": cached.get("timestamp")}
+    if running:
+        out["state"] = {"rollback": "rolling-back", "rollback-cancel": "rolling-back",
+                        "check": "checking"}.get(st.get("operation"), "downloading")
+    elif out["rollback_queued"]:
+        out["state"] = "rollback-queued"
+    elif out["staged"] and not out["staged"]["download_only"]:
+        out["state"] = "restart-required"
+    elif out["available"]:
+        out["state"] = "update-available"
+    elif st.get("last_result") == "error":
+        out["state"] = "error"
+    elif out["booted"]:
+        out["state"] = "up-to-date"
+    return out
+
+
+def get_status():
+    st = load_state()
+    if is_root():
+        snap = bootc_status_live()
+        if snap is not None:
+            try:
+                write_json_atomic(SNAPSHOT_FILE, snap)
+            except OSError:
+                pass
+    else:
+        snap = read_json(SNAPSHOT_FILE)
+    return compute_status(snap, st, lock_held())
+
+
+HUMAN = {
+    "up-to-date": ("Kristall OS is up to date.", "Kristall OS ist auf dem neuesten Stand."),
+    "update-available": ("An update is available.", "Ein Update ist verfügbar."),
+    "checking": ("Checking for updates…", "Suche nach Updates …"),
+    "downloading": ("Downloading the update…", "Update wird geladen …"),
+    "rolling-back": ("Preparing the previous version…", "Vorherige Version wird vorbereitet …"),
+    "restart-required": ("Update ready. Restart to finish.", "Update bereit. Zum Abschließen neu starten."),
+    "rollback-queued": ("The previous version starts after the next restart.",
+                        "Nach dem nächsten Neustart startet die vorherige Version."),
+    "error": ("The last update attempt failed.", "Der letzte Update-Versuch ist fehlgeschlagen."),
+    "unknown": ("Update status unknown.", "Update-Status unbekannt."),
+}
+
+
+def print_status(st, as_json):
+    if as_json:
+        print(json.dumps(st, ensure_ascii=False, sort_keys=True))
+        return
+    de = is_german()
+    en_text, de_text = HUMAN.get(st["state"], HUMAN["unknown"])
+    print(de_text if de else en_text)
+    if st.get("booted"):
+        print(("Version: %s" if not de else "Version: %s") % (st["booted"].get("version") or "?"))
+    if st.get("staged"):
+        print(("Next start: %s" if not de else "Nächster Start: %s") % (st["staged"].get("version") or "?"))
+    if st.get("last_check"):
+        print(("Last check: %s" if not de else "Zuletzt geprüft: %s") % st["last_check"])
+    err = st.get("last_error")
+    if st["state"] == "error" and err:
+        print(err.get("de") if de else err.get("en"))
+
+
+# ---------------------------------------------------------------- root operations
+
+def op_check():
+    with Lock():
+        update_state(operation="check", operation_started=now_iso())
+        try:
+            rc, out = run(["bootc", "upgrade", "--check"], timeout=600)
+            snap = refresh_snapshot()
+            changes = {"last_check": now_iso()}
+            if snap is None:
+                changes.update(last_result="error", last_error=message("not-bootc"))
+            elif rc != 0:
+                changes.update(last_result="error", last_error=message("download-failed", out))
+            else:
+                changes.update(last_result="ok", last_error=None, waiting_reason=None)
+            pending = flatpak_pending()
+            fp = load_state().get("flatpak") or {}
+            fp["updates_pending"] = pending
+            changes["flatpak"] = fp
+            update_state(**changes)
+            return 0 if changes["last_result"] == "ok" else 1
+        finally:
+            update_state(operation=None, operation_started=None)
+
+
+def flatpak_pending():
+    rc, out = run(["flatpak", "remote-ls", "--updates", "--system", "--columns=application"],
+                  timeout=300)
+    if rc != 0:
+        return None
+    return len([line for line in out.splitlines() if line.strip()])
+
+
+def do_updates(cfg, operation):
+    """Download+stage the OS image and update Flatpaks. Caller holds the lock."""
+    update_state(operation=operation, operation_started=now_iso())
+    try:
+        result, error = "ok", None
+        before = (refresh_snapshot() or {}).get("status", {})
+        if not before:
+            result, error = "error", message("not-bootc")
+        else:
+            rc, out = run(["bootc", "upgrade", "--quiet"], timeout=6 * 3600)
+            if rc != 0:
+                log("bootc upgrade failed:\n" + out)
+                result, error = "error", message("download-failed", out)
+        snap = refresh_snapshot()
+        fp = load_state().get("flatpak") or {}
+        if cfg.get("update_flatpaks", True):
+            rc1, out1 = run(["flatpak", "update", "--system", "-y", "--noninteractive"], timeout=6 * 3600)
+            run(["flatpak", "uninstall", "--system", "--unused", "-y", "--noninteractive"], timeout=1800)
+            if rc1 not in (0, 127):
+                log("flatpak update failed:\n" + out1)
+                if result == "ok":
+                    result, error = "error", message("flatpak-failed", out1)
+            elif rc1 == 0:
+                fp["last_updated"] = now_iso()
+                fp["updates_pending"] = 0
+        changes = {"last_update": now_iso(), "last_check": now_iso(), "last_result": result,
+                   "last_error": error, "waiting_reason": None, "flatpak": fp}
+        update_state(**changes)
+        staged = entry_info(((snap or {}).get("status") or {}).get("staged"))
+        if staged:
+            log("update staged: %s (%s); it is applied on the next restart"
+                % (staged.get("version"), staged.get("digest")))
+        return 0 if result == "ok" else 1
+    finally:
+        update_state(operation=None, operation_started=None)
+
+
+def op_auto():
+    cfg = load_config()
+    reason = blocking_condition(cfg, for_auto=True)
+    if reason:
+        log("not updating now: " + reason)
+        update_state(waiting_reason=reason, last_skipped=now_iso())
+        return 0
+    try:
+        with Lock(blocking=False):
+            return do_updates(cfg, "auto")
+    except OSError as e:
+        if e.errno in (errno.EWOULDBLOCK, errno.EAGAIN):
+            log("another update task is running; skipping this run")
+            return 0
+        raise
+
+
+def op_apply():
+    cfg = load_config()
+    reason = blocking_condition(cfg, for_auto=False)
+    if reason:
+        update_state(last_result="error", last_error=message(reason), waiting_reason=reason)
+        return 1
+    with Lock():
+        return do_updates(cfg, "apply")
+
+
+def op_rollback(cancel):
+    with Lock():
+        update_state(operation="rollback-cancel" if cancel else "rollback", operation_started=now_iso())
+        try:
+            snap = refresh_snapshot()
+            status = (snap or {}).get("status") or {}
+            queued = bool(status.get("rollbackQueued"))
+            if snap is None:
+                update_state(last_result="error", last_error=message("not-bootc"))
+                return 1
+            if cancel and not queued:
+                return 0  # nothing to undo
+            if not cancel and queued:
+                return 0  # already queued
+            if not status.get("rollback"):
+                update_state(last_result="error", last_error=message("no-rollback"))
+                return 1
+            rc, out = run(["bootc", "rollback"], timeout=600)
+            refresh_snapshot()
+            if rc != 0:
+                update_state(last_result="error", last_error=message("rollback-failed", out))
+                return 1
+            update_state(last_result="ok", last_error=None)
+            return 0
+        finally:
+            update_state(operation=None, operation_started=None)
+
+
+def op_refresh():
+    with Lock():
+        refresh_snapshot()
+    return 0
+
+
+# ---------------------------------------------------------------- unprivileged front end
+
+def start_unit(name, wait):
+    cmd = ["systemctl", "start"]
+    if not wait:
+        cmd.append("--no-block")
+    cmd.append(UNITS[name])
+    rc, out = run(cmd)
+    if rc != 0:
+        log(out.strip())
+    return rc
+
+
+def graceful_reboot():
+    """Ask Plasma to log out and reboot (apps get to save work); fall back to systemd."""
+    if os.environ.get("DBUS_SESSION_BUS_ADDRESS") or os.environ.get("XDG_RUNTIME_DIR"):
+        rc, _ = run(["gdbus", "call", "--session", "--dest", "org.kde.Shutdown",
+                     "--object-path", "/Shutdown", "--method", "org.kde.Shutdown.logoutAndReboot"],
+                    timeout=15)
+        if rc == 0:
+            return 0
+    rc, out = run(["systemctl", "reboot"])
+    if rc != 0:
+        log(out.strip())
+    return rc
+
+
+def client(name, wait, as_json, restart=False):
+    if is_root():
+        if name == "check":
+            rc = op_check()
+        elif name == "apply":
+            rc = op_apply()
+        else:
+            rc = op_rollback(cancel=(name == "rollback-cancel"))
+    else:
+        rc = start_unit(name, wait)
+    st = get_status()
+    if as_json or wait:
+        print_status(st, as_json)
+    if rc == 0 and restart and st["state"] in ("restart-required", "rollback-queued"):
+        return graceful_reboot()
+    return 0 if rc == 0 else 1
+
+
+def op_notify():
+    """Run in the user's session (kristall-update-notify.service); one reminder per login."""
+    st = get_status()
+    if st["state"] == "restart-required":
+        kind, key = "update", "update:" + str((st.get("staged") or {}).get("digest"))
+    elif st["state"] == "rollback-queued":
+        kind, key = "rollback", "rollback:" + str((st.get("rollback") or {}).get("digest"))
+    else:
+        return 0
+    runtime = os.environ.get("XDG_RUNTIME_DIR") or os.path.join(
+        os.path.expanduser("~"), ".cache")
+    marker = os.path.join(runtime, "kristall", "update-notified")
+    try:
+        with open(marker) as f:
+            if f.read().strip() == key:
+                return 0
+    except OSError:
+        pass
+    os.makedirs(os.path.dirname(marker), exist_ok=True)
+    with open(marker, "w") as f:
+        f.write(key + "\n")
+    lang = 1 if is_german() else 0
+    title, body = NOTIFY_TEXT[kind][lang]
+    rc, out = run(["notify-send", "--app-name=Kristall OS", "--icon=system-software-update",
+                   "--urgency=normal",
+                   "--action=restart=" + NOTIFY_TEXT["restart"][lang],
+                   "--action=later=" + NOTIFY_TEXT["later"][lang],
+                   "--wait", title, body])
+    if rc == 127:
+        run(["gdbus", "call", "--session", "--dest", "org.freedesktop.Notifications",
+             "--object-path", "/org/freedesktop/Notifications",
+             "--method", "org.freedesktop.Notifications.Notify", "Kristall OS", "0",
+             "system-software-update", title, body, "[]", "{}", "-1"])
+        return 0
+    if out.strip().splitlines()[-1:] == ["restart"]:
+        return graceful_reboot()
+    return 0
+
+
+USAGE = """usage: kristall-update <command> [options]
+
+  status [--json]                 current state (machine-readable with --json)
+  check [--json] [--no-wait]      look for updates now (no download)
+  apply [--json] [--no-wait] [--restart]
+                                  download and prepare the update now; it is used after a restart
+  rollback [--cancel] [--json] [--restart]
+                                  start the previous version on the next restart (or undo that)
+  restart                         restart now, letting apps save their work first
+  auto                            (timer, root) update if conditions allow
+  refresh                         (boot, root) record the current deployments
+  notify                          (user session) show "restart to finish" once per login
+"""
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        sys.stdout.write(USAGE)
+        return 0 if argv else 2
+    cmd, opts = argv[0], argv[1:]
+    known = {"--json", "--no-wait", "--restart", "--cancel"}
+    bad = [o for o in opts if o not in known]
+    if bad:
+        log("unknown option(s): " + " ".join(bad))
+        return 2
+    as_json = "--json" in opts
+    wait = "--no-wait" not in opts
+    try:
+        if cmd == "status":
+            print_status(get_status(), as_json)
+            return 0
+        if cmd in ("check", "apply"):
+            return client(cmd, wait, as_json, restart="--restart" in opts)
+        if cmd == "rollback":
+            name = "rollback-cancel" if "--cancel" in opts else "rollback"
+            return client(name, wait, as_json, restart="--restart" in opts)
+        if cmd == "restart":
+            return graceful_reboot()
+        if cmd == "notify":
+            return op_notify()
+        if cmd in ("auto", "refresh"):
+            if not is_root():
+                log("%s must run as root (it is started by systemd)" % cmd)
+                return 2
+            return op_auto() if cmd == "auto" else op_refresh()
+    except PermissionError as e:
+        log("permission denied: %s" % e)
+        return 1
+    log("unknown command %r" % cmd)
+    sys.stderr.write(USAGE)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

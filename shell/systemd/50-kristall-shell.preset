@@ -1,0 +1,2 @@
+# Kristall shell: the desktop shell for every user
+enable kristall-shell.service

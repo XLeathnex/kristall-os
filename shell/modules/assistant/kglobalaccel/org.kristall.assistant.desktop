@@ -1,0 +1,22 @@
+[Desktop Entry]
+# No NoDisplay=true: kglobalacceld (KF 6.32 / Plasma 6.8) ignores desktop files in share/kglobalaccel/
+# that carry it. Files here are not listed by app launchers anyway (not in share/applications/).
+Type=Application
+Name=Kristall Assistant
+Name[de]=Kristall-Assistent
+Comment=Talk to the assistant
+Comment[de]=Mit dem Assistenten sprechen
+Icon=kristall-assistant
+Exec=kristall-shellctl assistant invoke shortcut
+X-KDE-GlobalAccel-CommandShortcut=false
+Actions=Invoke
+
+[Desktop Action Invoke]
+Name=Talk to the assistant (tap)
+Name[de]=Mit dem Assistenten sprechen (antippen)
+Exec=kristall-shellctl assistant invoke shortcut
+# No default keys here: Alt+Space and the Copilot key belong to the shell helper's kglobalaccel
+# action "Kristall Shell ▸ Talk to the assistant (hold to talk)", which also sees the key's release
+# (push-to-talk; docs/contracts/shell.md §6). A key the owner assigns here runs on press only, so
+# one key press always fires exactly one of the two.
+X-KDE-Shortcuts=

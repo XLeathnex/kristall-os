@@ -1,0 +1,26 @@
+#!/usr/bin/python3
+# Fake kscreen-doctor for tests: state in $KSCREEN_FAKE_STATE (kscreen -j JSON), mode sets logged
+# to $KSCREEN_FAKE_LOG.
+import json
+import os
+import sys
+
+state_file = os.environ["KSCREEN_FAKE_STATE"]
+with open(state_file) as f:
+    cfg = json.load(f)
+args = sys.argv[1:]
+if args == ["-j"]:
+    print(json.dumps(cfg))
+    sys.exit(0)
+for a in args:
+    parts = a.split(".")
+    if len(parts) == 4 and parts[0] == "output" and parts[2] == "mode":
+        for o in cfg["outputs"]:
+            if o["name"] == parts[1]:
+                o["currentModeId"] = parts[3]
+        with open(os.environ["KSCREEN_FAKE_LOG"], "a") as f:
+            f.write(a + "\n")
+    else:
+        sys.exit(1)
+with open(state_file, "w") as f:
+    json.dump(cfg, f)

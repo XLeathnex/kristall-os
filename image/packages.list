@@ -1,0 +1,38 @@
+# RPMs the `image` component adds to the base (ghcr.io/ublue-os/kinoite-main:45).
+# One package per line; text after '#' is a comment. Each entry is justified in image/README.md
+# and image/apps/README.md. Verified against the Fedora 45 + fedora-multimedia repositories.
+
+# --- Developer basics for AI-assisted coding (Claude Code is installed later by the Setup Assistant)
+git
+git-lfs
+gh
+nodejs26
+nodejs26-bin
+nodejs26-npm
+nodejs26-npm-bin
+python3
+uv
+ripgrep
+fd-find
+jq
+podman
+distrobox
+gcc
+gcc-c++
+make
+curl
+unzip
+# Claude Code's sandbox on Linux uses bubblewrap + socat.
+bubblewrap
+socat
+
+# --- Apps that are part of the system (see image/apps/apps.json)
+# Video player: uses the system's VA-API + full ffmpeg stack (hardware decoding on Intel graphics).
+haruna
+libva-utils
+
+# --- Light gaming: udev rules so game controllers work with Steam (Flatpak) without root.
+steam-devices
+
+# --- Desktop integration used by kristall-update / kristall-apps notifications
+libnotify

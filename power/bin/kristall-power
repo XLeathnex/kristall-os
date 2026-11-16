@@ -1,0 +1,12 @@
+#!/usr/bin/python3 -IB
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Kristall OS power management CLI. Contract: docs/contracts/power.md
+import os
+import sys
+
+LIB = os.environ.get("KRISTALL_POWER_LIB", "/usr/lib/kristall/power")
+sys.path.insert(0, LIB)
+
+from kristall_power.cli import main  # noqa: E402
+
+sys.exit(main())

@@ -1,0 +1,20 @@
+{
+ "last_run": {
+  "sections": [
+   "static",
+   "behaviour",
+   "looks"
+  ],
+  "failures": [
+   "\u238b clears the text, a second \u238b closes"
+  ],
+  "time": "2026-11-16T19:08:05"
+ },
+ "search_files_latency_s": 0.052,
+ "search_sync_us_per_keystroke": 4595,
+ "search_engine_us": {
+  "apps": 4545,
+  "settings": 385,
+  "actions": 195
+ }
+}

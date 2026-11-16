@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Kristall OS (power component). Contract: docs/contracts/power.md §5.
+
+# Power source changed: firmware/EC may have rewritten the package power limits. tuned-ppd
+# switches the tuned profile itself (via UPower); this re-checks our limits a moment later.
+SUBSYSTEM=="power_supply", ACTION=="change", ATTR{type}=="Mains|USB|USB_C|USB_PD|USB_PD_DRP", \
+  RUN+="/usr/bin/systemctl --no-block start kristall-power-reapply.service"
+
+# Runtime power management for Intel platform PCI devices once their driver is bound. Excluded:
+# Ethernet (class 0x0200, e1000e link detection), drivers with known runtime-PM trouble (mei_me,
+# xhci_hcd, as in TLP's default deny list) and drivers that manage it themselves (audio, GPU).
+ACTION=="bind", SUBSYSTEM=="pci", ATTR{vendor}=="0x8086", ATTR{class}!="0x0200*", \
+  DRIVER!="mei_me|xhci_hcd|e1000e|snd_hda_intel|snd_sof_pci_intel_tgl|snd_sof_pci_intel_mtl|i915|xe", \
+  TEST=="power/control", ATTR{power/control}="auto"
+
+# USB autosuspend only for devices built into the laptop (removable=fixed: camera, Bluetooth,
+# fingerprint reader) and never for input devices; mice and keyboards you plug in are untouched.
+ACTION=="bind", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{removable}=="fixed", \
+  RUN+="/usr/libexec/kristall/power/usb-autosuspend %S%p"

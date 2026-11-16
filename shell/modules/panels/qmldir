@@ -1,0 +1,46 @@
+# Types of the panels module for the implicit directory import: Quickshell 0.2.1 serves a
+# module directory that nothing imports by name without a generated qmldir, so same-directory
+# types would not resolve. Keep in sync with the *.qml files (tests/run.sh static checks it).
+Artwork 1.0 Artwork.qml
+Banners 1.0 Banners.qml
+BatteryWidget 1.0 BatteryWidget.qml
+CalendarWidget 1.0 CalendarWidget.qml
+CcBluetoothPage 1.0 CcBluetoothPage.qml
+CcConnRow 1.0 CcConnRow.qml
+CcDisplayPage 1.0 CcDisplayPage.qml
+CcEnergyPage 1.0 CcEnergyPage.qml
+CcFocusPage 1.0 CcFocusPage.qml
+CcFooter 1.0 CcFooter.qml
+CcHeader 1.0 CcHeader.qml
+CcItemRow 1.0 CcItemRow.qml
+CcMainPage 1.0 CcMainPage.qml
+CcMediaPage 1.0 CcMediaPage.qml
+CcNote 1.0 CcNote.qml
+CcNowPlaying 1.0 CcNowPlaying.qml
+CcPasswordPage 1.0 CcPasswordPage.qml
+CcRound 1.0 CcRound.qml
+CcSection 1.0 CcSection.qml
+CcSliderModule 1.0 CcSliderModule.qml
+CcSmallTile 1.0 CcSmallTile.qml
+CcSoundPage 1.0 CcSoundPage.qml
+CcTile 1.0 CcTile.qml
+CcWifiPage 1.0 CcWifiPage.qml
+ControlCenter 1.0 ControlCenter.qml
+singleton Fmt 1.0 Fmt.qml
+Hud 1.0 Hud.qml
+singleton Hw 1.0 Hw.qml
+singleton Media 1.0 Media.qml
+MediaWidget 1.0 MediaWidget.qml
+NcPill 1.0 NcPill.qml
+NcWidget 1.0 NcWidget.qml
+NotifCard 1.0 NotifCard.qml
+NotifEntry 1.0 NotifEntry.qml
+NotificationCenter 1.0 NotificationCenter.qml
+singleton Notifs 1.0 Notifs.qml
+singleton PanelMetrics 1.0 PanelMetrics.qml
+singleton PanelsHelper 1.0 PanelsHelper.qml
+singleton PanelsMenus 1.0 PanelsMenus.qml
+singleton PanelsRegistry 1.0 PanelsRegistry.qml
+PanelsTestHooks 1.0 PanelsTestHooks.qml
+singleton PanelsUtil 1.0 PanelsUtil.qml
+RoundedImage 1.0 RoundedImage.qml

@@ -1,0 +1,5 @@
+# Bazaar (the App Center) configuration for Kristall OS. Read by the Bazaar Flatpak via
+# /run/host/etc/bazaar/bazaar.yaml (kristall-apps grants it read access to the host's /etc).
+# Kristall OS updates apps by itself (kristall-update), so Bazaar's own auto-update switches
+# would only confuse.
+hide-auto-update-options: true

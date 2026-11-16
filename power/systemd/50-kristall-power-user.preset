@@ -1,0 +1,2 @@
+# Kristall OS (power component): per-user units, enabled for every user via `systemctl --global`.
+enable kristall-power-session.service

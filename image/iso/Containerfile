@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# The installer's live system: the finished Kristall OS image plus Anaconda, live-boot pieces,
+# the default Flatpaks and an offline copy of the OS image to install. Titanoboa turns this
+# container into the bootable ISO (.github/workflows/build-iso.yml). Never deployed itself.
+#
+#   sudo podman build --cap-add sys_admin --security-opt label=disable \
+#     --build-arg BASE_IMAGE=ghcr.io/<owner>/kristall-os:latest \
+#     --build-arg KRISTALL_IMAGE_REF=ghcr.io/<owner>/kristall-os \
+#     --build-arg KRISTALL_PAYLOAD_DIGEST=sha256:... \
+#     -f image/iso/Containerfile -t localhost/kristall-live:latest .
+ARG BASE_IMAGE=ghcr.io/kristall-os/kristall-os:latest
+FROM ${BASE_IMAGE}
+
+# Where installed systems get their updates from (no tag) and which tag they follow.
+ARG KRISTALL_IMAGE_REF=""
+ARG KRISTALL_IMAGE_TAG=latest
+# Exact image to put on the disk (defaults to whatever the tag points at when the ISO is built).
+ARG KRISTALL_PAYLOAD_DIGEST=""
+
+RUN --mount=type=bind,source=image/iso,target=/ctx-iso \
+    --mount=type=tmpfs,dst=/tmp \
+    KRISTALL_IMAGE_REF="${KRISTALL_IMAGE_REF}" \
+    KRISTALL_IMAGE_TAG="${KRISTALL_IMAGE_TAG}" \
+    KRISTALL_PAYLOAD_DIGEST="${KRISTALL_PAYLOAD_DIGEST}" \
+    bash /ctx-iso/build-live.sh

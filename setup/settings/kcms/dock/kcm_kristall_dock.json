@@ -1,0 +1,22 @@
+{
+    "KPlugin": {
+        "Name": "Dock & Menu Bar",
+        "Name[de]": "Dock und Menüleiste",
+        "Description": "Dock size, magnification, hiding; menu bar clock and items",
+        "Description[de]": "Dockgröße, Vergrößerung, Ausblenden; Uhr und Symbole der Menüleiste",
+        "Icon": "user-desktop",
+        "Authors": [
+            {
+                "Name": "Kristall OS contributors"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "FormFactors": [
+            "desktop"
+        ]
+    },
+    "X-KDE-System-Settings-Parent-Category": "kristall",
+    "X-KDE-Weight": 5,
+    "X-KDE-Keywords": "dock,menu bar,clock",
+    "X-KDE-Keywords[de]": "dock,menüleiste,uhr"
+}

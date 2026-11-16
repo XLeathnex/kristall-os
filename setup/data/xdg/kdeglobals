@@ -1,0 +1,24 @@
+# Merged into /etc/xdg/kdeglobals by setup/image/install.sh (other keys there are kept).
+# System Settings is the one place for settings. Pages for developers and pages that would break
+# the Kristall desktop (global theme, Plasma style, decorations, effects, scripts, the notification
+# server Kristall does not use) are not shown. KAuthorized::authorizeControlModule() honours this
+# in System Settings and KInfoCenter.
+[KDE Control Module Restrictions]
+kcm_lookandfeel=false
+kcm_desktoptheme=false
+kcm_splashscreen=false
+kcm_kwindecoration=false
+kcm_style=false
+kcm_kwin_effects=false
+kcm_kwin_scripts=false
+kcm_kwinrules=false
+kcm_kwinoptions=false
+kcm_kwinxwayland=false
+kcm_kded=false
+kcm_activities=false
+kcm_feedback=false
+kcm_plasmasearch=false
+kcm_notifications=false
+kcm_smserver=false
+kcm_qtquicksettings=false
+kcm_landingpage=false

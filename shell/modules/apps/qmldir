@@ -1,0 +1,3 @@
+# Types of the apps module for the implicit directory import (Quickshell 0.2.1). Keep in sync.
+AppsTestHooks 1.0 AppsTestHooks.qml
+AppsWindow 1.0 AppsWindow.qml

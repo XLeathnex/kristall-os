@@ -1,0 +1,12 @@
+# Kristall shell module registry (docs/contracts/shell.md §2).
+# One module name per line, loaded in this order from modules/<name>/Module.qml if that file exists.
+# A module that is not there yet is skipped silently; one that fails to load is logged and skipped.
+# Reserved names (owned by the agents that build them):
+panels
+dock
+search
+apps
+switcher
+assistant
+setup
+# New modules: add the directory and one line here.

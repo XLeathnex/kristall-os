@@ -1,0 +1,7 @@
+# Merged into /etc/xdg/kwinrc by image/install.sh (keys here win, every other key is kept).
+# Minimising flows into the Dock (the Mac's genie): KWin's Magic Lamp effect follows the icon
+# rectangle the Dock reports through the bridge (window.setIconGeometry); the default Squash
+# effect is turned off so the two do not run together.
+[Plugins]
+magiclampEnabled=true
+squashEnabled=false

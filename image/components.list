@@ -1,0 +1,27 @@
+# Order in which image/build.sh runs each component's <dir>/image/install.sh during the OS image
+# build. One repository-relative directory per line; '#' starts a comment.
+# A listed directory that does not exist yet (or has no image/install.sh) is skipped with a
+# warning; with KRISTALL_STRICT=1 (release builds in CI) the build fails instead.
+#
+# Ordering needs (checked by image/tests/test_build.sh):
+# - every shell/modules/<name> comes after shell (shell-core installs the shell tree they join);
+# - shell/modules/search and shell/modules/apps need modules/dock/common, installed by
+#   shell/modules/dock (the switcher uses the Dock's merge-ini from the source tree);
+# - theme extends shell-core's look-and-feel package org.kristall.desktop: after shell;
+# - setup last (its Setup Assistant uses everything above).
+# shell/modules/setup has no installer of its own (2026-11-16); add it here if it gets one.
+image
+power
+kwin/glass
+kwin/bridge
+shell
+shell/modules/panels
+shell/modules/dock
+shell/modules/search
+shell/modules/apps
+shell/modules/switcher
+shell/modules/assistant
+assistant/core
+assistant/hands
+theme
+setup

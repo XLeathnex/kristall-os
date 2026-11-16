@@ -1,0 +1,15 @@
+# Text Editor (KWrite) as a plain TextEdit-like editor: no line numbers, soft wrap, Inter.
+[KTextEditor Renderer]
+Auto Color Theme Selection=true
+Text Font=Inter,9.75,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+
+[KTextEditor View]
+Line Numbers=false
+Icon Bar=false
+Folding Bar=false
+Scroll Bar MiniMap=false
+Show Word Count=false
+Dynamic Word Wrap=true
+
+[MainWindow]
+MenuBar=Enabled

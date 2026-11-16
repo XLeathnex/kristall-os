@@ -1,0 +1,22 @@
+[Desktop Entry]
+# No NoDisplay=true: kglobalacceld (KF 6.32 / Plasma 6.8) ignores desktop files in share/kglobalaccel/
+# that carry it. Files here are not listed by app launchers anyway (not in share/applications/).
+Type=Application
+Name=Kristall Control Center and Notifications
+Name[de]=Kristall-Kontrollzentrum und Mitteilungen
+Icon=preferences-desktop-notification
+Exec=kristall-shellctl panels toggle-control-center
+X-KDE-GlobalAccel-CommandShortcut=false
+Actions=ControlCenter;NotificationCenter
+
+[Desktop Action ControlCenter]
+Name=Show Control Center
+Name[de]=Kontrollzentrum einblenden
+Exec=kristall-shellctl panels toggle-control-center
+X-KDE-Shortcuts=Meta+Alt+C
+
+[Desktop Action NotificationCenter]
+Name=Show Notification Centre
+Name[de]=Mitteilungszentrale einblenden
+Exec=kristall-shellctl panels toggle-notifications
+X-KDE-Shortcuts=Meta+Alt+N

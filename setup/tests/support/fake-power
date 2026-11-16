@@ -1,0 +1,56 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Test stand-in for kristall-power (docs/contracts/power.md §7): `status --json` (schema 1, a
+# laptop with a battery and a threshold charge limit), `doctor --json --out DIR` (writes
+# DIR/doctor.json and doctor.txt like the real one), `mode M`. Calls are logged.
+import json
+import os
+import sys
+
+d = os.environ.get("KRISTALL_FAKE_POWER_DIR", "/tmp")
+with open(os.path.join(d, "power-calls.log"), "a") as f:
+    f.write(" ".join(sys.argv[1:]) + "\n")
+args = sys.argv[1:]
+STATUS = {"schema": 1, "time": "2026-11-16T10:00:00Z", "mode": "balanced", "mode_name": {"de": "Ausgewogen", "en": "Balanced"},
+          "automatic": {"enabled": True, "manual": None, "reason": "auto", "hold": None, "game": False, "heavy_app": None},
+          "power_source": "battery",
+          "battery": {"name": "BAT0", "percent": 76, "status": "Discharging", "health_percent": 92.1, "cycle_count": 41,
+                      "energy_wh": 58.9, "energy_full_wh": 92.0, "energy_full_design_wh": 99.9, "power_w": 7.4,
+                      "time_to_empty_s": 28654, "time_to_full_s": None, "technology": "Li-poly",
+                      "charge_control_end_threshold": 100, "charge_control_start_threshold": 95, "charge_types": None},
+          "charge_limit": {"supported": os.environ.get("KRISTALL_FAKE_NO_LIMIT") != "1",
+                           "methods": [{"battery": "BAT0", "method": "threshold", "start_threshold": True}], "value": 100},
+          "draw": {"watts": 7.4, "source": "battery"}, "temperatures": {"cpu_package": 52.0, "nvme": 38.9}, "fans": {},
+          "display": {"refresh_hz": 60.0, "available_hz": [60.0, 120.0], "managed": True, "target": "low"},
+          "glass_quality_hint": "efficient", "platform_profile": "balanced", "limits": []}
+if args[:1] == ["status"]:
+    print(json.dumps(STATUS))
+    sys.exit(0)
+if args[:1] == ["doctor"]:
+    out = d
+    if "--out" in args:
+        out = args[args.index("--out") + 1]
+    os.makedirs(out, exist_ok=True)
+    report = {"kind": "kristall-power-doctor", "schema": 1, "time": "2026-11-16T10:00:00Z",
+              "summary": {"de": "Alles in Ordnung: 21 Einstellungen angewendet, 3 nicht unterstützt.",
+                          "en": "All good: 21 settings applied, 3 not supported."},
+              "levers": [{"lever": "epp", "status": "applied"}, {"lever": "charge-limit", "status": "applied"},
+                         {"lever": "pcie-aspm", "status": "warning", "detail": "2 devices without L1.2"},
+                         {"lever": "platform-profile", "status": "unsupported"}, {"lever": "zram", "status": "applied"},
+                         {"lever": "deep-idle", "status": "unknown"}],
+              "system": {"kernel": "7.3.3-300.fc45.x86_64", "cpu": "Intel Core i9-13900H"}, "battery": STATUS["battery"]}
+    with open(os.path.join(out, "doctor.json"), "w") as f:
+        json.dump(report, f, indent=1)
+    with open(os.path.join(out, "doctor.txt"), "w") as f:
+        f.write("Kristall power doctor\n" + report["summary"]["en"] + "\n")
+    if "--json" in args:
+        print(json.dumps(report))
+    else:
+        print(report["summary"]["de"])
+    sys.exit(0)
+if args[:1] == ["mode"]:
+    sys.exit(0)
+if args[:1] == ["charge-limit"]:
+    print(json.dumps({"supported": True, "methods": STATUS["charge_limit"]["methods"], "stored": 100}))
+    sys.exit(0)
+sys.exit(2)

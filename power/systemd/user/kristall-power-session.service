@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+[Unit]
+Description=Kristall OS power: automatic mode, display refresh, glass quality, battery log
+Documentation=file:///usr/share/doc/kristall/contracts/power.md
+PartOf=graphical-session.target
+After=graphical-session.target plasma-kwin_wayland.service
+ConditionKernelCommandLine=!rd.live.image
+ConditionPathExists=!/etc/kristall/live
+
+[Service]
+Type=dbus
+BusName=org.kristall.Power1
+ExecStart=/usr/bin/kristall-power session
+Restart=on-failure
+RestartSec=2
+SyslogIdentifier=kristall-power
+# Event-driven; keep it out of the way of the owner's apps.
+Nice=5
+
+[Install]
+WantedBy=graphical-session.target

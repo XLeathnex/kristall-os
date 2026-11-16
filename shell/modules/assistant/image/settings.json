@@ -1,0 +1,13 @@
+{
+  "assistant": {
+    "ui": {
+      "light": {
+        "enabled": true,
+        "intensity": 1.0,
+        "maxFps": 60,
+        "cornerRadius": 14
+      },
+      "holdMs": 350
+    }
+  }
+}

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Fake systemctl for tests: records the call.
+echo "$*" >>"${SYSTEMCTL_FAKE_LOG:-/dev/null}"
+exit 0

@@ -1,0 +1,25 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Last resort when kristall-shell.service keeps failing (OnFailure= after its start limit):
+# give the owner a plain Plasma panel (app launcher, task manager, clock, log out) so they are
+# never left without a way to open apps or log out. The shell removes it again the next time it
+# runs stably (helper: fallback.cleanup). Marker: ~/.local/state/kristall/shell/fallback-panel.
+set -u
+state="${XDG_STATE_HOME:-$HOME/.local/state}/kristall/shell"
+mkdir -p "$state"
+[[ -f $state/fallback-panel ]] && exit 0     # one fallback panel is enough
+script='loadTemplate("org.kde.plasma.desktop.defaultPanel")'
+if gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell \
+        --method org.kde.PlasmaShell.evaluateScript "$script" >/dev/null; then
+    date -u +%FT%TZ >"$state/fallback-panel"
+    echo "kristall-shell-fallback: shell failed repeatedly; added a Plasma panel" >&2
+else
+    echo "kristall-shell-fallback: could not reach plasmashell" >&2
+fi
+if command -v notify-send >/dev/null; then
+    case "${LANG:-}" in
+        de*) notify-send -a "Kristall" "Die Menüleiste ist ausgefallen" "Eine einfache Leiste ersetzt sie, bis du dich neu anmeldest." ;;
+        *) notify-send -a "Kristall" "The menu bar stopped working" "A simple panel replaces it until you log in again." ;;
+    esac
+fi
+exit 0

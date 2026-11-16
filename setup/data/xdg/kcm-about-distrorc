@@ -1,0 +1,5 @@
+# Merged into /etc/xdg/kcm-about-distrorc: KInfoCenter's own "About this System" (still reachable
+# from the menu bar until shell-core opens our page) shows Kristall's mark and name.
+[General]
+LogoPath=/usr/share/kristall/setup/kristall-mark.svg
+Variant=Kristall OS

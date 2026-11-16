@@ -1,0 +1,23 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Kristall OS: who may start the update units (see docs/contracts/update.md).
+// Checking and downloading updates is routine: the person sitting at the computer may do it
+// without a password. Going back to the previous version changes what boots next: it asks for
+// the administrator password (a normal graphical prompt), remembered for a few minutes.
+polkit.addRule(function (action, subject) {
+    if (action.id !== "org.freedesktop.systemd1.manage-units") {
+        return polkit.Result.NOT_HANDLED;
+    }
+    var unit = action.lookup("unit");
+    var verb = action.lookup("verb");
+    if (verb !== "start" || !subject.local || !subject.active) {
+        return polkit.Result.NOT_HANDLED;
+    }
+    if (unit === "kristall-update-check.service" || unit === "kristall-update-apply.service") {
+        return polkit.Result.YES;
+    }
+    if (unit === "kristall-update-rollback.service" ||
+        unit === "kristall-update-rollback-cancel.service") {
+        return polkit.Result.AUTH_ADMIN_KEEP;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

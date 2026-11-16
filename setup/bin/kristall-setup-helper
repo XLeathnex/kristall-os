@@ -1,0 +1,430 @@
+#!/usr/bin/python3 -I
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""kristall-setup-helper — the system calls behind the Setup Assistant and Kristall's settings
+pages, one command per call, JSON lines on stdout (the last line is the result):
+
+    displays                      outputs, their scale and the display-size choices
+    display-scale OUTPUT SCALE    set an output's scale (KWin output management via kscreen-doctor)
+    touchpads                     touchpads with natural scrolling / tap to click (KWin D-Bus)
+    touchpad-set [--natural on|off] [--tap on|off]    on every touchpad (KWin stores it)
+    wifi-connect SSID SECURITY    password as one line on stdin; events {"event":"wifi","state":…}
+    wallpapers                    wallpapers to choose from (ours first)
+    system-info                   the calm "About this computer" summary
+    live                          exit 0 in the installer's live session
+
+Never prints secrets. Runs as the owner.
+"""
+import glob
+import json
+import math
+import os
+import platform
+import pwd
+import re
+import shutil
+import subprocess
+import sys
+
+KWIN = "org.kde.KWin"
+NM = "org.freedesktop.NetworkManager"
+NM_PATH = "/org/freedesktop/NetworkManager"
+PROPS = "org.freedesktop.DBus.Properties"
+APPLE_DENSITY = 127.0   # logical px per inch of a Mac's default "looks like" size (≈ MacBook Air/Pro)
+
+
+def out(**ev):
+    sys.stdout.write(json.dumps(ev, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
+
+
+def result(ok, **kw):
+    out(event="result", ok=ok, **kw)
+    return 0 if ok else 1
+
+
+# ---------------------------------------------------------------------------------------- displays
+
+def kscreen():
+    tool = os.environ.get("KRISTALL_KSCREEN_DOCTOR", "kscreen-doctor")
+    r = subprocess.run([tool, "-j"], capture_output=True, text=True, timeout=20)
+    if r.returncode != 0:
+        raise RuntimeError(r.stderr.strip() or "kscreen-doctor failed")
+    return json.loads(r.stdout)
+
+
+def round_scale(s):
+    return round(round(s * 20) / 20, 2)     # KWin/kscreen accept 0.05 steps
+
+
+def display_choices(width_px, width_mm, current):
+    """five sizes from "Larger Text" to "More Space" around the size Apple would choose for a panel
+    of this density; without a physical size, around the current scale"""
+    if width_mm and width_mm > 0:
+        ppi = width_px / (width_mm / 25.4)
+        rec = max(1.0, min(3.0, round_scale(ppi / APPLE_DENSITY)))
+    else:
+        rec = max(1.0, round_scale(current or 1.0))
+    out_ = []
+    for f in (1.25, 1.12, 1.0, 0.9, 0.8):
+        s = round_scale(rec * f)
+        if s < 1.0 or s > 3.0 or width_px / s < 1024 and f > 1.0 and s != rec:
+            continue
+        if s not in [c["scale"] for c in out_]:
+            out_.append({"scale": s, "looksLike": [int(width_px / s), None]})
+    return rec, out_
+
+
+def cmd_displays():
+    try:
+        data = kscreen()
+    except Exception as e:  # noqa: BLE001
+        return result(False, error=str(e)[:300], outputs=[])
+    outs = []
+    for o in data.get("outputs", []):
+        if not o.get("enabled") or not o.get("connected", True):
+            continue
+        mode = None
+        for m in o.get("modes", []):
+            if str(m.get("id")) == str(o.get("currentModeId")):
+                mode = m
+        size = (mode or {}).get("size") or o.get("size") or {}
+        w, h = int(size.get("width", 0)), int(size.get("height", 0))
+        mm = o.get("sizeMM") or {}
+        name = o.get("name", "")
+        internal = o.get("type") in (7, "Panel", "eDP") or name.startswith(("eDP", "LVDS", "DSI"))
+        scale = float(o.get("scale", 1.0))
+        rec, choices = display_choices(w, int(mm.get("width", 0) or 0), scale)
+        for c in choices:
+            c["looksLike"][1] = int(h / c["scale"]) if h else None
+        outs.append({"name": name, "internal": internal, "widthPx": w, "heightPx": h, "widthMm": mm.get("width"),
+                     "scale": scale, "recommended": rec, "choices": choices, "priority": o.get("priority", 99)})
+    outs.sort(key=lambda o: (not o["internal"], o["priority"]))
+    return result(True, outputs=outs)
+
+
+def cmd_display_scale(name, scale):
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]+", name):
+        return result(False, error="bad output name")
+    s = float(scale)
+    if not (0.5 <= s <= 4.0):
+        return result(False, error="scale out of range")
+    tool = os.environ.get("KRISTALL_KSCREEN_DOCTOR", "kscreen-doctor")
+    r = subprocess.run([tool, f"output.{name}.scale.{round_scale(s)}"], capture_output=True, text=True, timeout=30)
+    return result(r.returncode == 0, scale=round_scale(s), error=(r.stderr.strip()[:300] or None) if r.returncode else None)
+
+
+# ---------------------------------------------------------------------------------------- D-Bus helpers
+
+def gio():
+    from gi.repository import Gio, GLib  # noqa: PLC0415
+    return Gio, GLib
+
+
+def session_bus():
+    Gio, _ = gio()
+    return Gio.bus_get_sync(Gio.BusType.SESSION, None)
+
+
+def system_bus():
+    Gio, _ = gio()
+    addr = os.environ.get("DBUS_SYSTEM_BUS_ADDRESS")
+    if addr:
+        return Gio.DBusConnection.new_for_address_sync(addr, Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT |
+                                                       Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION, None, None)
+    return Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+
+
+def call(bus, dest, path, iface, method, params=None, reply=None, timeout=10000):
+    Gio, GLib = gio()
+    v = bus.call_sync(dest, path, iface, method, params, GLib.VariantType(reply) if reply else None,
+                      Gio.DBusCallFlags.NONE, timeout, None)
+    return v.unpack() if v is not None else None
+
+
+def get_prop(bus, dest, path, iface, name):
+    _, GLib = gio()
+    return call(bus, dest, path, PROPS, "Get", GLib.Variant("(ss)", (iface, name)), "(v)")[0]
+
+
+# ---------------------------------------------------------------------------------------- touchpads
+
+DEV_IFACE = "org.kde.KWin.InputDevice"
+
+
+def touchpads(bus):
+    names = get_prop(bus, KWIN, "/org/kde/KWin/InputDevice", "org.kde.KWin.InputDeviceManager", "devicesSysNames")
+    pads = []
+    for n in names:
+        path = "/org/kde/KWin/InputDevice/" + n
+        try:
+            if not get_prop(bus, KWIN, path, DEV_IFACE, "touchpad"):
+                continue
+            pads.append({"sys": n, "name": get_prop(bus, KWIN, path, DEV_IFACE, "name"),
+                         "natural": bool(get_prop(bus, KWIN, path, DEV_IFACE, "naturalScroll")),
+                         "tap": bool(get_prop(bus, KWIN, path, DEV_IFACE, "tapToClick")),
+                         "supportsNatural": bool(get_prop(bus, KWIN, path, DEV_IFACE, "supportsNaturalScroll"))})
+        except Exception:  # noqa: BLE001
+            continue
+    return pads
+
+
+def cmd_touchpads():
+    try:
+        return result(True, touchpads=touchpads(session_bus()))
+    except Exception as e:  # noqa: BLE001
+        return result(True, touchpads=[], note=str(e)[:200])
+
+
+def cmd_touchpad_set(natural, tap):
+    _, GLib = gio()
+    try:
+        bus = session_bus()
+        pads = touchpads(bus)
+        for p in pads:
+            path = "/org/kde/KWin/InputDevice/" + p["sys"]
+            if natural is not None and p["supportsNatural"]:
+                call(bus, KWIN, path, PROPS, "Set", GLib.Variant("(ssv)", (DEV_IFACE, "naturalScroll", GLib.Variant("b", natural))))
+            if tap is not None:
+                call(bus, KWIN, path, PROPS, "Set", GLib.Variant("(ssv)", (DEV_IFACE, "tapToClick", GLib.Variant("b", tap))))
+        return result(True, touchpads=touchpads(bus))
+    except Exception as e:  # noqa: BLE001
+        return result(False, error=str(e)[:300])
+
+
+# ---------------------------------------------------------------------------------------- Wi-Fi
+
+def cmd_wifi_connect(ssid, security):
+    """a new protected network with the password from our own sheet (stdin), owned by the user;
+    a refused password deletes the profile again (same flow as the Control Center's sheet)"""
+    Gio, GLib = gio()
+    password = sys.stdin.readline().rstrip("\n") if security != "none" else ""
+    try:
+        bus = system_bus()
+        devices = call(bus, NM, NM_PATH, NM, "GetDevices", None, "(ao)")[0]
+        wifi = [d for d in devices if int(get_prop(bus, NM, d, NM + ".Device", "DeviceType")) == 2]
+        if not wifi:
+            return result(False, error="no-wifi")
+        try:
+            user = pwd.getpwuid(os.getuid()).pw_name
+        except KeyError:
+            user = os.environ.get("USER", "")
+        conn = {"id": GLib.Variant("s", ssid), "type": GLib.Variant("s", "802-11-wireless")}
+        if user:
+            conn["permissions"] = GLib.Variant("as", ["user:" + user])
+        settings = {"connection": conn,
+                    "802-11-wireless": {"ssid": GLib.Variant("ay", ssid.encode()), "mode": GLib.Variant("s", "infrastructure")}}
+        if security != "none":
+            settings["802-11-wireless-security"] = {"key-mgmt": GLib.Variant("s", "sae" if security == "sae" else "wpa-psk"),
+                                                    "psk": GLib.Variant("s", password)}
+        settings_path, active = call(bus, NM, NM_PATH, NM, "AddAndActivateConnection",
+                                     GLib.Variant("(a{sa{sv}}oo)", (settings, wifi[0], "/")), "(oo)", timeout=30000)
+    except Exception as e:  # noqa: BLE001
+        out(event="wifi", ssid=ssid, state="failed", reason="error")
+        return result(False, error=str(e)[:300])
+    out(event="wifi", ssid=ssid, state="connecting")
+    loop = GLib.MainLoop()
+    state = {"done": None, "reason": 0}
+
+    def finish(s, reason):
+        if state["done"] is None:
+            state["done"], state["reason"] = s, reason
+            loop.quit()
+
+    def on_state(conn, sender, path, iface, signal, params):
+        st, reason = params.unpack()
+        if st == 2:
+            finish("connected", 0)
+        elif st == 4:
+            finish("failed", int(reason))
+    sub = bus.signal_subscribe(NM, NM + ".Connection.Active", "StateChanged", active, None, Gio.DBusSignalFlags.NONE, on_state)
+    try:
+        st = int(get_prop(bus, NM, active, NM + ".Connection.Active", "State"))
+        if st == 2:
+            finish("connected", 0)
+        elif st == 4:
+            finish("failed", 0)
+    except Exception:  # noqa: BLE001
+        pass
+    if state["done"] is None:
+        GLib.timeout_add_seconds(45, lambda: (finish("failed", -1), False)[1])
+        loop.run()
+    bus.signal_unsubscribe(sub)
+    if state["done"] == "connected":
+        out(event="wifi", ssid=ssid, state="connected")
+        return result(True)
+    try:
+        call(bus, NM, settings_path, NM + ".Settings.Connection", "Delete")
+    except Exception:  # noqa: BLE001
+        pass
+    reason = "password" if state["reason"] == 9 else "other"
+    out(event="wifi", ssid=ssid, state="failed", reason=reason)
+    return result(False, error=reason)
+
+
+# ---------------------------------------------------------------------------------------- about
+
+def read(path, default=""):
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return f.read().strip()
+    except OSError:
+        return default
+
+
+def os_release():
+    d = {}
+    for line in read(os.environ.get("KRISTALL_OS_RELEASE", "/usr/lib/os-release")).splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            d[k] = v.strip().strip('"')
+    return d
+
+
+def gpu_names():
+    names = []
+    ids = {}
+    for dev in sorted(glob.glob("/sys/class/drm/card[0-9]")):
+        v, d = read(dev + "/device/vendor"), read(dev + "/device/device")
+        if v and d:
+            ids[(v[2:].lower(), d[2:].lower())] = True
+    if not ids:
+        return names
+    db = read("/usr/share/hwdata/pci.ids")
+    vendor = None
+    vendors = {"8086": "Intel", "1002": "AMD", "10de": "NVIDIA"}
+    for line in db.splitlines():
+        if not line or line.startswith("#"):
+            continue
+        if not line.startswith("\t"):
+            vendor = line[:4].lower()
+            continue
+        if line.startswith("\t\t"):
+            continue
+        dev, name = line[1:5].lower(), line[7:].strip()
+        if (vendor, dev) in ids:
+            m = re.search(r"\[([^\]]+)\]", name)
+            pretty = m.group(1) if m else name
+            vn = vendors.get(vendor, "")
+            names.append((vn + " " + pretty).strip() if vn and not pretty.startswith(vn) else pretty)
+    return names
+
+
+def cmd_system_info():
+    osr = os_release()
+    cpu = ""
+    for line in read("/proc/cpuinfo").splitlines():
+        if line.startswith("model name"):
+            cpu = line.split(":", 1)[1].strip()
+            break
+    cpu = re.sub(r"\((R|TM)\)", "", cpu)
+    cpu = re.sub(r"\s+", " ", cpu.replace(" CPU", "").replace("13th Gen ", "")).strip()
+    mem_kb = 0
+    for line in read("/proc/meminfo").splitlines():
+        if line.startswith("MemTotal:"):
+            mem_kb = int(line.split()[1])
+    # marketed size: 15.6 GiB usable → "16 GB"
+    mem_gb = 2 ** math.ceil(math.log2(max(1, mem_kb / 1024 / 1024))) if mem_kb else 0
+    home = os.path.expanduser("~")
+    du = shutil.disk_usage(home)
+    vendor = read("/sys/class/dmi/id/sys_vendor")
+    product = read("/sys/class/dmi/id/product_name")
+    version = read("/sys/class/dmi/id/product_version")
+    if version and version.lower() not in ("none", "default string", "to be filled by o.e.m.") and version not in product:
+        product = (product + " " + version).strip()
+    model = " ".join(x for x in (vendor, product) if x and x.lower() not in ("to be filled by o.e.m.", "default string", "system product name"))
+    return result(True, info={
+        "osName": osr.get("NAME", "Kristall OS"),
+        "osVersion": osr.get("IMAGE_VERSION") or osr.get("VERSION", ""),
+        "osPretty": osr.get("PRETTY_NAME", ""),
+        "processor": cpu or platform.processor() or platform.machine(),
+        "cores": os.cpu_count(),
+        "memoryGB": mem_gb,
+        "graphics": gpu_names(),
+        "storageTotal": du.total, "storageFree": du.free,
+        "model": model,
+        "kernel": platform.release(),
+    })
+
+
+def cmd_wallpapers():
+    """wallpaper packages (Plasma's format: <dir>/metadata.json + contents/images/WxH.ext) and loose
+    pictures in the wallpaper directories, ours first (the theme component installs them)"""
+    dirs = [os.path.join(os.path.expanduser("~"), ".local", "share", "wallpapers")]
+    for d in (os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":"):
+        dirs.append(os.path.join(d, "wallpapers"))
+    seen, walls = set(), []
+    for d in dirs:
+        if not os.path.isdir(d):
+            continue
+        for name in sorted(os.listdir(d)):
+            path = os.path.join(d, name)
+            if name in seen:
+                continue
+            seen.add(name)
+            if os.path.isdir(path):
+                imgs = glob.glob(os.path.join(path, "contents", "images", "*"))
+                if not imgs:
+                    continue
+                def area(f):
+                    m = re.match(r"(\d+)x(\d+)", os.path.basename(f))
+                    return int(m.group(1)) * int(m.group(2)) if m else 0
+                imgs.sort(key=area)
+                fit = [f for f in imgs if 0 < area(f) <= 1920 * 1200 and not f.endswith(".jxl")]
+                preview = fit[-1] if fit else imgs[-1]
+                if os.path.realpath(path) in seen:
+                    continue
+                seen.add(os.path.realpath(path))
+                title = name
+                try:
+                    with open(os.path.join(path, "metadata.json"), encoding="utf-8") as f:
+                        title = json.load(f).get("KPlugin", {}).get("Name", name)
+                except (OSError, ValueError):
+                    pass
+                walls.append({"name": title, "path": path, "preview": preview, "kristall": name.lower().startswith("kristall")})
+            elif name.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+                walls.append({"name": os.path.splitext(name)[0], "path": path, "preview": path, "kristall": name.lower().startswith("kristall")})
+    walls.sort(key=lambda w: not w["kristall"])
+    return result(True, wallpapers=walls)
+
+
+def cmd_live():
+    marker = os.environ.get("KRISTALL_SETUP_LIVE_MARKER", "/etc/kristall/live")
+    live = os.path.exists(marker) or "rd.live.image" in read(os.environ.get("KRISTALL_SETUP_CMDLINE", "/proc/cmdline")).split()
+    out(event="result", ok=live, live=live)
+    return 0 if live else 1
+
+
+def main(argv):
+    if not argv:
+        print(__doc__)
+        return 2
+    cmd, args = argv[0], argv[1:]
+    if cmd == "displays":
+        return cmd_displays()
+    if cmd == "display-scale" and len(args) == 2:
+        return cmd_display_scale(args[0], args[1])
+    if cmd == "touchpads":
+        return cmd_touchpads()
+    if cmd == "touchpad-set":
+        nat = tap = None
+        for i in range(0, len(args) - 1, 2):
+            v = args[i + 1] == "on"
+            if args[i] == "--natural":
+                nat = v
+            elif args[i] == "--tap":
+                tap = v
+        return cmd_touchpad_set(nat, tap)
+    if cmd == "wifi-connect" and len(args) == 2:
+        return cmd_wifi_connect(args[0], args[1])
+    if cmd == "system-info":
+        return cmd_system_info()
+    if cmd == "wallpapers":
+        return cmd_wallpapers()
+    if cmd == "live":
+        return cmd_live()
+    print(__doc__, file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

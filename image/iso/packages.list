@@ -1,0 +1,11 @@
+# Packages added only to the installer's live system (never to the installed OS).
+anaconda-live
+anaconda-webui
+slitherer
+libblockdev-btrfs
+libblockdev-lvm
+libblockdev-dm
+dracut-live
+livesys-scripts
+grub2-efi-x64-cdboot
+rsync

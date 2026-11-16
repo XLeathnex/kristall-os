@@ -1,0 +1,166 @@
+{
+ "idle_after_session": {
+  "seconds": 5,
+  "frames": 0,
+  "shell_cpu_ms": 0.0,
+  "kwin_cpu_ms": 0.0,
+  "shell_wakeups": 0
+ },
+ "light_cost_gl_1440x900@1.0": {
+  "idle_before": {
+   "frames_per_s": 0.6666666666666666,
+   "light_updates_per_s": 0.0,
+   "shell_cpu_ms_per_s": 3.3333333333333335,
+   "kwin_cpu_ms_per_s": 3.3333333333333335
+  },
+  "active": {
+   "frames_per_s": 60.6,
+   "light_updates_per_s": 62.8,
+   "shell_cpu_ms_per_s": 668.0,
+   "kwin_cpu_ms_per_s": 488.0,
+   "per_light_update_kwin_ms": 7.771,
+   "per_light_update_shell_ms": 10.637
+  },
+  "idle_after": {
+   "frames_per_s": 0.0,
+   "light_updates_per_s": 0.0,
+   "shell_cpu_ms_per_s": 3.3333333333333335,
+   "kwin_cpu_ms_per_s": 0.0
+  },
+  "light_area_device_px": 249536,
+  "screen_device_px": 1296000
+ },
+ "light_cost_software_1440x900@1.0": {
+  "idle_before": {
+   "frames_per_s": 0.0,
+   "light_updates_per_s": 0.0,
+   "shell_cpu_ms_per_s": 0.0,
+   "kwin_cpu_ms_per_s": 0.0
+  },
+  "active": {
+   "frames_per_s": 0.0,
+   "light_updates_per_s": 62.8,
+   "shell_cpu_ms_per_s": 6.0,
+   "kwin_cpu_ms_per_s": 2.0,
+   "per_light_update_kwin_ms": 0.032,
+   "per_light_update_shell_ms": 0.096
+  },
+  "idle_after": {
+   "frames_per_s": 0.0,
+   "light_updates_per_s": 0.0,
+   "shell_cpu_ms_per_s": 0.0,
+   "kwin_cpu_ms_per_s": 0.0
+  },
+  "light_area_device_px": 249536,
+  "screen_device_px": 1296000
+ },
+ "light_cost_gl_2880x1800@1.6": {
+  "idle_before": {
+   "frames_per_s": 0.6666666666666666,
+   "light_updates_per_s": 0.0,
+   "shell_cpu_ms_per_s": 0.0,
+   "kwin_cpu_ms_per_s": 6.666666666666667
+  },
+  "active": {
+   "frames_per_s": 57.4,
+   "light_updates_per_s": 49.2,
+   "shell_cpu_ms_per_s": 1132.0,
+   "kwin_cpu_ms_per_s": 798.0,
+   "per_light_update_kwin_ms": 16.22,
+   "per_light_update_shell_ms": 23.008
+  },
+  "idle_after": {
+   "frames_per_s": 0.0,
+   "light_updates_per_s": 0.0,
+   "shell_cpu_ms_per_s": 0.0,
+   "kwin_cpu_ms_per_s": 0.0
+  },
+  "light_area_device_px": 806543,
+  "screen_device_px": 5184000
+ },
+ "light_cost_software_2880x1800@1.6": {
+  "idle_before": {
+   "frames_per_s": 0.0,
+   "light_updates_per_s": 0.0,
+   "shell_cpu_ms_per_s": 0.0,
+   "kwin_cpu_ms_per_s": 0.0
+  },
+  "active": {
+   "frames_per_s": 0.0,
+   "light_updates_per_s": 61.4,
+   "shell_cpu_ms_per_s": 6.0,
+   "kwin_cpu_ms_per_s": 0.0,
+   "per_light_update_kwin_ms": 0.0,
+   "per_light_update_shell_ms": 0.098
+  },
+  "idle_after": {
+   "frames_per_s": 0.0,
+   "light_updates_per_s": 0.0,
+   "shell_cpu_ms_per_s": 0.0,
+   "kwin_cpu_ms_per_s": 0.0
+  },
+  "light_area_device_px": 806543,
+  "screen_device_px": 5184000
+ },
+ "cursor_timing_synthetic": {
+  "glides": 8,
+  "arrival_minus_ts_plus_d_ms": {
+   "mean": 6.4,
+   "max": 14,
+   "min": 0
+  },
+  "action_after_arrival_ms": {
+   "min": 37.6,
+   "mean": 77.9
+  }
+ },
+ "cursor_timing_real_bridge": {
+  "clicks": 4,
+  "cursor_events": 9,
+  "pairs": [
+   {
+    "click_minus_arrival_ms": -0.7,
+    "arrival_minus_target_ms": 0,
+    "ripple_minus_click_ms": 0.7,
+    "click_minus_pulse_ms": 1.1
+   },
+   {
+    "click_minus_arrival_ms": 31.3,
+    "arrival_minus_target_ms": 10,
+    "ripple_minus_click_ms": 0.7,
+    "click_minus_pulse_ms": -0.3
+   },
+   {
+    "click_minus_arrival_ms": 25.8,
+    "arrival_minus_target_ms": 15,
+    "ripple_minus_click_ms": 0.2,
+    "click_minus_pulse_ms": -0.4
+   },
+   {
+    "click_minus_arrival_ms": 37.5,
+    "arrival_minus_target_ms": 4,
+    "ripple_minus_click_ms": 0.5,
+    "click_minus_pulse_ms": 0.0
+   }
+  ],
+  "durations": [
+   260,
+   488,
+   434,
+   414
+  ]
+ },
+ "last_run": {
+  "sections": [
+   "shortcut"
+  ],
+  "failures": [
+   "Copilot key held: listens while held, ends on release"
+  ],
+  "time": "2026-11-16T19:37:59"
+ },
+ "edge_light_entry_exit_ms": {
+  "in": 754,
+  "out": 286
+ }
+}

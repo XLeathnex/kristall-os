@@ -1,0 +1,10 @@
+# Types of the dock module for the implicit directory import (Quickshell 0.2.1 serves a module
+# directory that nothing imports by name without a qmldir). Keep in sync with the *.qml files.
+ConfirmDialog 1.0 ConfirmDialog.qml
+Dock 1.0 Dock.qml
+DockItem 1.0 DockItem.qml
+singleton DockMenus 1.0 DockMenus.qml
+DockModel 1.0 DockModel.qml
+DockTestHooks 1.0 DockTestHooks.qml
+LauncherEntries 1.0 LauncherEntries.qml
+Places 1.0 Places.qml

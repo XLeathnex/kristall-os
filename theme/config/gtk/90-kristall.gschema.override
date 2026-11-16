@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Kristall OS defaults for GNOME's settings keys, which GTK reads on Wayland (and Flatpak GTK apps
+# through xdg-desktop-portal-gtk). kde-gtk-config and kristall-appearance keep the per-user values
+# in sync with Plasma; these are the defaults for a new user and the login screen.
+[org.gnome.desktop.interface]
+font-name='Inter 10'
+document-font-name='Inter 10'
+monospace-font-name='JetBrains Mono 10'
+icon-theme='breeze'
+cursor-theme='Kristall'
+cursor-size=24
+gtk-theme='adw-gtk3'
+color-scheme='default'
+accent-color='blue'
+font-antialiasing='grayscale'
+font-hinting='none'
+font-rgba-order='rgb'
+overlay-scrolling=true
+
+[org.gnome.desktop.wm.preferences]
+button-layout='close,minimize,maximize:'
+action-double-click-titlebar='toggle-maximize'
+
+[org.gnome.desktop.sound]
+theme-name='kristall'

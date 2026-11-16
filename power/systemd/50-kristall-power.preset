@@ -1,0 +1,6 @@
+# Kristall OS (power component)
+enable kristall-power.service
+enable kristall-power-doctor.timer
+# tuned + tuned-ppd provide the power-profiles D-Bus API the shell uses (base image packages).
+enable tuned.service
+enable tuned-ppd.service

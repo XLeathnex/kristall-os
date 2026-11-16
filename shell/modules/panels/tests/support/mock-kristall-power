@@ -1,0 +1,20 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Stand-in for the power component's CLI in the panels tests (docs/contracts/power.md §7):
+# `mode auto` writes the session daemon's state file as the daemon would (automatic, no manual
+# choice); `status --json` prints a schema-1 status. Every call is appended to $KRISTALL_POWER_LOG.
+import json, os, sys
+log = os.environ.get("KRISTALL_POWER_LOG")
+if log:
+    with open(log, "a") as f:
+        f.write(" ".join(sys.argv[1:]) + "\n")
+state = os.path.join(os.environ["XDG_RUNTIME_DIR"], "kristall", "power.json")
+if sys.argv[1:3] == ["mode", "auto"]:
+    tmp = state + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump({"schema": 1, "automatic": True, "manual": None, "reason": "auto", "hold": None, "mode": "balanced", "on_battery": True}, f)
+    os.replace(tmp, state)
+elif sys.argv[1:3] == ["status", "--json"]:
+    print(json.dumps({"schema": 1, "mode": "balanced", "automatic": {"enabled": True, "manual": None, "reason": "auto"},
+                      "power_source": "battery", "battery": {"percent": 76, "health_percent": 92.1, "time_to_empty_s": 22000},
+                      "draw": {"watts": 7.4, "source": "battery"}, "temperatures": {"cpu_package": 48.0}}))

@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Opens the Setup Assistant at login until it is finished (docs/contracts/setup.md).
+[Unit]
+Description=Kristall Setup Assistant
+PartOf=graphical-session.target
+After=graphical-session.target kristall-shell.service
+Wants=kristall-shell.service
+# never in the installer's live system, never for system users (Plasma Setup's own session)
+ConditionKernelCommandLine=!rd.live.image
+ConditionPathExists=!/etc/kristall/live
+ConditionUser=!@system
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/kristall/kristall-setup-start
+SyslogIdentifier=kristall-setup
+TimeoutStartSec=90
+
+[Install]
+WantedBy=graphical-session.target

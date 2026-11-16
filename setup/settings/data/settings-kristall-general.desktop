@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Service
+X-KDE-System-Settings-Category=kristall
+X-KDE-System-Settings-Parent-Category=
+X-KDE-Weight=2
+Icon=preferences-system
+Name=Kristall
+Name[de]=Kristall
+Comment=Everything Kristall adds: appearance, assistant, battery, keyboard, updates
+Comment[de]=Alles, was Kristall mitbringt: Aussehen, Assistent, Batterie, Tastatur, Updates

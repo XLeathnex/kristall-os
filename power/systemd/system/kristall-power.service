@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+[Unit]
+Description=Kristall OS power: remember firmware power limits, apply the charge limit
+Documentation=file:///usr/share/doc/kristall/contracts/power.md
+# Read the firmware's own limits before tuned applies a Kristall profile.
+Before=tuned.service tuned-ppd.service
+After=systemd-modules-load.service
+ConditionKernelCommandLine=!rd.live.image
+ConditionPathExists=!/etc/kristall/live
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/kristall-power boot
+# Stopping the service gives every package power limit back to the firmware's value.
+ExecStop=/usr/bin/kristall-power revert
+SyslogIdentifier=kristall-power
+TimeoutSec=60
+
+[Install]
+WantedBy=multi-user.target

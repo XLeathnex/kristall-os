@@ -1,0 +1,16 @@
+{
+  "power": {
+    "automatic": true,
+    "batteryBase": "quiet",
+    "batteryRefreshRate": "auto",
+    "dimOnBattery": true,
+    "chargeLimit": 100,
+    "lowBatteryQuiet": true,
+    "heavyApps": [
+      "org.blender.Blender", "blender",
+      "org.vinegarhq.Vinegar", "org.vinegarhq.Sober",
+      "com.valvesoftware.Steam", "steam",
+      "com.heroicgameslauncher.hgl", "net.lutris.Lutris", "org.prismlauncher.PrismLauncher"
+    ]
+  }
+}

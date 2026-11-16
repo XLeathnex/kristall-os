@@ -1,0 +1,16 @@
+# Read by Titanoboa (container-native ISO contract v0.1.0): ISO label and boot menu.
+# The label is referenced by root=live:CDLABEL=… and must stay in sync with build-live.sh.
+label: KRISTALL-OS
+grub2:
+  default: 0
+  timeout: 5
+  entries:
+    - name: "Kristall OS installieren (Deutsch)"
+      linux: "/images/pxeboot/vmlinuz quiet rhgb root=live:CDLABEL=KRISTALL-OS rd.live.image enforcing=0 locale.LANG=de_DE.UTF-8 vconsole.keymap=de"
+      initrd: "/images/pxeboot/initrd.img"
+    - name: "Install Kristall OS (English)"
+      linux: "/images/pxeboot/vmlinuz quiet rhgb root=live:CDLABEL=KRISTALL-OS rd.live.image enforcing=0 locale.LANG=en_US.UTF-8"
+      initrd: "/images/pxeboot/initrd.img"
+    - name: "Kristall OS installieren – einfache Grafik / basic graphics"
+      linux: "/images/pxeboot/vmlinuz quiet rhgb root=live:CDLABEL=KRISTALL-OS rd.live.image enforcing=0 nomodeset locale.LANG=de_DE.UTF-8 vconsole.keymap=de"
+      initrd: "/images/pxeboot/initrd.img"

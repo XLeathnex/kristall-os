@@ -1,0 +1,12 @@
+[Unit]
+Description=Record which Kristall OS versions are installed (for the update status)
+After=local-fs.target
+ConditionKernelCommandLine=!rd.live.image
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/kristall-update refresh
+SyslogIdentifier=kristall-update
+
+[Install]
+WantedBy=multi-user.target

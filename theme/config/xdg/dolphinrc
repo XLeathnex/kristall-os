@@ -1,0 +1,35 @@
+# Files (Dolphin) set up the way a Mac owner expects on first open.
+[General]
+RememberOpenedTabs=false
+ShowFullPath=false
+ShowZoomSlider=false
+ShowSpaceInfo=false
+OpenExternallyCalledFolderInNewTab=false
+ConfirmClosingMultipleTabs=true
+BrowseThroughArchives=false
+UseTabForSwitchingSplitView=false
+ShowStatusBar=false
+FilterBar=false
+AutoExpandFolders=false
+SplitView=false
+
+[DetailsMode]
+PreviewSize=16
+
+[IconsMode]
+PreviewSize=64
+TextWidthIndex=1
+
+[MainWindow]
+MenuBar=Enabled
+ToolBarsMovable=Disabled
+
+[PlacesPanel]
+IconSize=16
+
+[KFileDialog Settings]
+Places Icons Auto-resize=false
+Places Icons Static Size=16
+
+[VersionControl]
+enabledPlugins=Git

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="256" height="256">
+  <!-- The Kristall mark in colour (facets as shell/icons/kristall/mark.svg, gen-mark.py). GPL-3.0-or-later, Kristall OS. -->
+  <defs>
+    <linearGradient id="a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#9DC4FF"/></linearGradient>
+    <linearGradient id="b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E9DCFF"/><stop offset="1" stop-color="#8E7CF0"/></linearGradient>
+    <linearGradient id="c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#CFE3FF"/><stop offset="1" stop-color="#3E7BFA"/></linearGradient>
+    <linearGradient id="d" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#B9A6FF"/><stop offset="1" stop-color="#5B3FD9"/></linearGradient>
+  </defs>
+  <path fill="url(#a)" d="M11.05,1.41 L5.97,5.74 L11.05,8.58 Z"/>
+  <path fill="url(#b)" fill-opacity="0.95" d="M12.95,1.41 L12.95,8.58 L18.03,5.74 Z"/>
+  <path fill="url(#c)" fill-opacity="0.95" d="M5.20,7.49 L5.20,17.00 L11.05,22.51 L11.05,10.76 Z"/>
+  <path fill="url(#d)" fill-opacity="0.9" d="M12.95,10.76 L12.95,22.51 L18.80,17.00 L18.80,7.49 Z"/>
+</svg>

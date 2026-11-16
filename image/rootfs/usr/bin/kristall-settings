@@ -1,0 +1,662 @@
+#!/usr/bin/python3 -IS
+# SPDX-License-Identifier: GPL-3.0-or-later
+# kristall-settings: the one shared reader/writer of Kristall OS settings.
+# Specification: docs/contracts/settings.md. Standard library only; starts in ~20 ms.
+import ctypes
+import errno
+import fcntl
+import json
+import os
+import re
+import select
+import signal
+import struct
+import sys
+import tempfile
+import time
+
+VERSION = "1"
+KEY_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+EXIT_OK, EXIT_NOT_FOUND, EXIT_USAGE, EXIT_BAD_VALUE, EXIT_IO = 0, 1, 2, 3, 4
+
+USAGE = """usage: kristall-settings <command> [arguments]
+
+  get [PATH]                 print the effective value (defaults merged with the user file)
+      --defaults             only the merged defaults
+      --user                 only what the user file sets
+  set PATH JSON              store a JSON value in the user file (atomic)
+      --string PATH TEXT     store TEXT as a JSON string (no quoting needed)
+  unset PATH                 remove PATH from the user file (falls back to the default)
+  watch [PATH...]            print one JSON line per change, forever (no polling)
+      --full                 print the whole effective document on every change
+      --initial              print the current value(s) once before watching
+  check-defaults             validate all default drop-ins (JSON, key ownership); non-zero exit on error
+  owners                     print which component owns which key (JSON)
+  paths                      print the files that are read, in merge order (JSON)
+
+PATH is dot-separated, e.g. appearance.glass; a numeric segment indexes an array.
+"""
+
+
+class SettingsError(Exception):
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+
+
+# ---------------------------------------------------------------- locations
+
+def defaults_file():
+    return os.environ.get("KRISTALL_SETTINGS_DEFAULTS",
+                          "/usr/share/kristall/defaults/settings.json")
+
+
+def dropin_dirs():
+    env = os.environ.get("KRISTALL_SETTINGS_DROPIN_DIRS")
+    if env is not None:
+        return [d for d in env.split(":") if d]
+    return ["/usr/share/kristall/defaults/settings.d", "/etc/kristall/settings.d"]
+
+
+def user_file():
+    env = os.environ.get("KRISTALL_SETTINGS_FILE")
+    if env:
+        return env
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    return os.path.join(base, "kristall", "settings.json")
+
+
+def default_layers():
+    """Ordered list of default files: settings.json, then each drop-in dir sorted by name."""
+    files = [defaults_file()]
+    for d in dropin_dirs():
+        try:
+            names = sorted(n for n in os.listdir(d) if n.endswith(".json") and not n.startswith("."))
+        except FileNotFoundError:
+            continue
+        except OSError as e:
+            warn("cannot read %s: %s" % (d, e))
+            continue
+        files.extend(os.path.join(d, n) for n in names)
+    return files
+
+
+# ---------------------------------------------------------------- helpers
+
+def warn(msg):
+    sys.stderr.write("kristall-settings: %s\n" % msg)
+
+
+def read_json(path, missing_ok=True):
+    """Return (value, error). A missing file is {}; an unreadable/invalid one is reported."""
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+    except FileNotFoundError:
+        return ({} if missing_ok else None), None
+    except OSError as e:
+        return {}, "cannot read %s: %s" % (path, e.strerror)
+    if not data.strip():
+        return {}, None
+    try:
+        value = json.loads(data.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError) as e:
+        return {}, "invalid JSON in %s: %s" % (path, e)
+    if not isinstance(value, dict):
+        return {}, "%s must contain a JSON object" % path
+    return value, None
+
+
+def deep_merge(base, over):
+    """Objects merge key by key (recursively); everything else replaces."""
+    if not isinstance(base, dict) or not isinstance(over, dict):
+        return over
+    out = dict(base)
+    for k, v in over.items():
+        if k in out and isinstance(out[k], dict) and isinstance(v, dict):
+            out[k] = deep_merge(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+
+def load_defaults(report=True):
+    merged = {}
+    for path in default_layers():
+        value, err = read_json(path)
+        if err and report:
+            warn(err + " (ignored)")
+        merged = deep_merge(merged, value)
+    return merged
+
+
+def load_user(report=True):
+    value, err = read_json(user_file())
+    if err and report:
+        warn(err + " (ignored)")
+    return value
+
+
+def effective():
+    return deep_merge(load_defaults(), load_user())
+
+
+def parse_path(path):
+    if path in (None, "", "."):
+        return []
+    parts = path.split(".")
+    for p in parts:
+        if not KEY_RE.match(p):
+            raise SettingsError(EXIT_USAGE, "invalid path segment %r in %r" % (p, path))
+    return parts
+
+
+def lookup(doc, parts):
+    cur = doc
+    for p in parts:
+        if isinstance(cur, dict) and p in cur:
+            cur = cur[p]
+        elif isinstance(cur, list) and p.isdigit() and int(p) < len(cur):
+            cur = cur[int(p)]
+        else:
+            raise KeyError(p)
+    return cur
+
+
+def dumps(value):
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=False)
+
+
+def emit(line):
+    try:
+        sys.stdout.write(line + "\n")
+        sys.stdout.flush()
+    except BrokenPipeError:
+        # Reader went away (e.g. the QML process was destroyed): leave quietly.
+        try:
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        except OSError:
+            pass
+        sys.exit(0)
+
+
+# ---------------------------------------------------------------- writing
+
+def atomic_write_json(path, doc):
+    d = os.path.dirname(path)
+    os.makedirs(d, mode=0o700, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".settings.", suffix=".tmp", dir=d)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(doc, f, ensure_ascii=False, indent=2, sort_keys=True)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    try:
+        dfd = os.open(d, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(dfd)
+        finally:
+            os.close(dfd)
+    except OSError:
+        pass
+
+
+class UserFileLock:
+    """Serialises read-modify-write between concurrent writers (readers never lock)."""
+
+    def __init__(self):
+        self.path = os.path.join(os.path.dirname(user_file()), ".settings.lock")
+        self.fd = None
+
+    def __enter__(self):
+        os.makedirs(os.path.dirname(self.path), mode=0o700, exist_ok=True)
+        self.fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o600)
+        fcntl.flock(self.fd, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *exc):
+        fcntl.flock(self.fd, fcntl.LOCK_UN)
+        os.close(self.fd)
+
+
+def load_user_for_write():
+    path = user_file()
+    value, err = read_json(path)
+    if err and os.path.exists(path):
+        backup = "%s.broken-%d" % (path, int(time.time()))
+        try:
+            os.replace(path, backup)
+            warn("%s; moved it to %s and started a fresh file" % (err, backup))
+        except OSError as e:
+            raise SettingsError(EXIT_IO, "%s and could not move it aside: %s" % (err, e))
+        return {}
+    return value
+
+
+def set_in(doc, parts, value):
+    if not parts:
+        if not isinstance(value, dict):
+            raise SettingsError(EXIT_BAD_VALUE, "the whole document must be a JSON object")
+        return value
+    cur = doc
+    for p in parts[:-1]:
+        nxt = cur.get(p) if isinstance(cur, dict) else None
+        if not isinstance(nxt, dict):
+            nxt = {}
+            cur[p] = nxt
+        cur = nxt
+    cur[parts[-1]] = value
+    return doc
+
+
+def unset_in(doc, parts):
+    if not parts:
+        return {}, True
+    chain = [doc]
+    cur = doc
+    for p in parts[:-1]:
+        if not isinstance(cur, dict) or not isinstance(cur.get(p), dict):
+            return doc, False
+        cur = cur[p]
+        chain.append(cur)
+    if parts[-1] not in cur:
+        return doc, False
+    del cur[parts[-1]]
+    # Drop objects that became empty so the file stays tidy.
+    for i in range(len(parts) - 1, 0, -1):
+        if chain[i] == {}:
+            del chain[i - 1][parts[i - 1]]
+        else:
+            break
+    return doc, True
+
+
+# ---------------------------------------------------------------- commands
+
+def cmd_get(args):
+    mode = "effective"
+    rest = []
+    for a in args:
+        if a == "--defaults":
+            mode = "defaults"
+        elif a == "--user":
+            mode = "user"
+        elif a.startswith("--"):
+            raise SettingsError(EXIT_USAGE, "unknown option " + a)
+        else:
+            rest.append(a)
+    if len(rest) > 1:
+        raise SettingsError(EXIT_USAGE, "get takes at most one PATH")
+    parts = parse_path(rest[0] if rest else None)
+    doc = {"effective": effective, "defaults": load_defaults, "user": load_user}[mode]()
+    try:
+        emit(dumps(lookup(doc, parts)))
+    except KeyError:
+        warn("no such setting: %s" % (rest[0] if rest else ""))
+        return EXIT_NOT_FOUND
+    return EXIT_OK
+
+
+def cmd_set(args):
+    as_string = False
+    if args and args[0] == "--string":
+        as_string = True
+        args = args[1:]
+    if len(args) != 2:
+        raise SettingsError(EXIT_USAGE, "set needs PATH and VALUE")
+    parts = parse_path(args[0])
+    if as_string:
+        value = args[1]
+    else:
+        try:
+            value = json.loads(args[1])
+        except ValueError as e:
+            raise SettingsError(EXIT_BAD_VALUE,
+                                "VALUE must be JSON (%s); for text use: set --string %s %s"
+                                % (e, args[0], args[1]))
+    with UserFileLock():
+        doc = load_user_for_write()
+        try:
+            if lookup(doc, parts) == value and parts:
+                return EXIT_OK  # unchanged: do not touch the file, watchers stay quiet
+        except KeyError:
+            pass
+        doc = set_in(doc, parts, value)
+        atomic_write_json(user_file(), doc)
+    return EXIT_OK
+
+
+def cmd_unset(args):
+    if len(args) != 1:
+        raise SettingsError(EXIT_USAGE, "unset needs PATH")
+    parts = parse_path(args[0])
+    with UserFileLock():
+        doc = load_user_for_write()
+        doc, changed = unset_in(doc, parts)
+        if changed:
+            atomic_write_json(user_file(), doc)
+    return EXIT_OK
+
+
+def cmd_paths(args):
+    emit(dumps({"defaults": default_layers(), "user": user_file()}))
+    return EXIT_OK
+
+
+# Who owns which key (docs/contracts/settings.md, "Ownership"; ARCHITECTURE §3). A component is
+# named by its drop-in file, /usr/share/kristall/defaults/settings.d/NN-<component>.json.
+# A string owns the whole top-level key; an object declares ownership at the second level
+# (a top-level key shared by several components): "*" owns every second-level key not listed.
+OWNERS = {
+    "appearance": "shell",
+    "accessibility": "shell",
+    "bar": "shell",
+    "dock": "dock",
+    "panels": "panels",
+    "assistant": {"*": "assistant-core", "hands": "assistant-hands", "ui": "assistant-ui"},
+    "power": "power",
+    "keyboard": "setup",
+    "setup": "setup",
+}
+DROPIN_RE = re.compile(r"^[0-9]{2}-([a-z0-9][a-z0-9-]*)\.json$")
+
+
+def owners_table():
+    env = os.environ.get("KRISTALL_SETTINGS_OWNERS")  # test hook: a JSON file replacing OWNERS
+    if env:
+        value, err = read_json(env)
+        if not err:
+            return value
+        warn(err + " (using the built-in table)")
+    return OWNERS
+
+
+def owner_of(table, top, second=None):
+    """Owner of a top-level key (second=None) or of top.second; None = undeclared."""
+    o = table.get(top)
+    if isinstance(o, dict):
+        if second is None:
+            return None
+        return o.get(second, o.get("*"))
+    return o
+
+
+def is_admin_layer(path):
+    """/etc/kristall/settings.d (the machine administrator's layer) may set anything."""
+    return "etc" in os.path.dirname(os.path.abspath(path)).split(os.sep)
+
+
+def cmd_owners(args):
+    emit(dumps(owners_table()))
+    return EXIT_OK
+
+
+def cmd_check_defaults(args):
+    ok = True
+    table = owners_table()
+    seen = {}  # owned unit ("power", "assistant.hands") -> first component drop-in setting it
+    for path in default_layers():
+        value, err = read_json(path, missing_ok=True)
+        if err:
+            print("ERROR %s" % err)
+            ok = False
+            continue
+        if path != defaults_file() and not is_admin_layer(path):
+            m = DROPIN_RE.match(os.path.basename(path))
+            comp = m.group(1) if m else None
+            if not comp:
+                print("WARN  %s: name is not NN-<component>.json; ownership not checked" % path)
+            problems = []
+            for top, sub in value.items():
+                units = []
+                if isinstance(table.get(top), dict):
+                    if not isinstance(sub, dict):
+                        problems.append(("ERROR", "%r is shared by several components and must be an object" % top))
+                        continue
+                    units = [("%s.%s" % (top, k), owner_of(table, top, k)) for k in sub]
+                else:
+                    units = [(top, owner_of(table, top))]
+                for unit, owner in units:
+                    if owner is None:
+                        problems.append(("WARN ", "%r has no declared owner (add it to docs/contracts/settings.md)" % unit))
+                    elif comp and owner != comp:
+                        problems.append(("ERROR", "%r is owned by %r, not by %r" % (unit, owner, comp)))
+                    if unit in seen:
+                        problems.append(("WARN ", "%r also set by %s (later wins)" % (unit, seen[unit])))
+                    else:
+                        seen[unit] = path
+            for level, msg in problems:
+                print("%s %s: %s" % (level, path, msg))
+                if level == "ERROR":
+                    ok = False
+            if any(level == "ERROR" for level, _ in problems):
+                continue
+        print("OK    %s" % path)
+    return EXIT_OK if ok else EXIT_BAD_VALUE
+
+
+# ---------------------------------------------------------------- watch
+
+IN_MODIFY = 0x002
+IN_CLOSE_WRITE = 0x008
+IN_MOVED_FROM = 0x040
+IN_MOVED_TO = 0x080
+IN_CREATE = 0x100
+IN_DELETE = 0x200
+IN_DELETE_SELF = 0x400
+IN_MOVE_SELF = 0x800
+IN_IGNORED = 0x8000
+IN_ONLYDIR = 0x01000000
+IN_NONBLOCK = 0o4000
+IN_CLOEXEC = 0o2000000
+WATCH_MASK = (IN_CLOSE_WRITE | IN_MOVED_FROM | IN_MOVED_TO | IN_CREATE | IN_DELETE
+              | IN_DELETE_SELF | IN_MOVE_SELF | IN_ONLYDIR)
+
+
+class Inotify:
+    def __init__(self):
+        libc = ctypes.CDLL(None, use_errno=True)
+        self._add = libc.inotify_add_watch
+        self._add.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32]
+        self._rm = libc.inotify_rm_watch
+        self.fd = libc.inotify_init1(IN_CLOEXEC)
+        if self.fd < 0:
+            raise OSError(ctypes.get_errno(), "inotify_init1 failed")
+        self.watches = {}  # wd -> dir
+
+    def add(self, path):
+        wd = self._add(self.fd, os.fsencode(path), WATCH_MASK)
+        if wd < 0:
+            return None
+        self.watches[wd] = path
+        return wd
+
+    def read(self):
+        """Block until events arrive; return list of (dir, name, mask)."""
+        try:
+            data = os.read(self.fd, 65536)
+        except InterruptedError:
+            return []
+        events, i = [], 0
+        while i + 16 <= len(data):
+            wd, mask, _cookie, length = struct.unpack_from("iIII", data, i)
+            name = data[i + 16:i + 16 + length].split(b"\0", 1)[0].decode("utf-8", "replace")
+            i += 16 + length
+            if mask & IN_IGNORED:
+                self.watches.pop(wd, None)
+                events.append((None, "", mask))
+                continue
+            events.append((self.watches.get(wd), name, mask))
+        return events
+
+
+def flatten(doc, prefix, out):
+    """Leaves are scalars, arrays and empty objects."""
+    if isinstance(doc, dict) and doc:
+        for k, v in doc.items():
+            flatten(v, prefix + [k], out)
+    else:
+        out[".".join(prefix)] = doc
+    return out
+
+
+def under(path, filters):
+    if not filters:
+        return True
+    for f in filters:
+        if f == "" or path == f or path.startswith(f + "."):
+            return True
+        if f.startswith(path + ".") or path == "":
+            return True  # a filtered key appeared/disappeared as part of a bigger object
+    return False
+
+
+def cmd_watch(args):
+    full = initial = False
+    filters = []
+    for a in args:
+        if a == "--full":
+            full = True
+        elif a == "--initial":
+            initial = True
+        elif a.startswith("--"):
+            raise SettingsError(EXIT_USAGE, "unknown option " + a)
+        else:
+            parse_path(a)
+            filters.append(a)
+
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    signal.signal(signal.SIGINT, lambda *_: sys.exit(0))
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+
+    user_dir = os.path.dirname(user_file())
+    try:
+        os.makedirs(user_dir, mode=0o700, exist_ok=True)
+    except OSError as e:
+        warn("cannot create %s: %s" % (user_dir, e))
+
+    ino = Inotify()
+    relevant_dirs = [user_dir, os.path.dirname(defaults_file())] + dropin_dirs()
+
+    def arm():
+        watched = set(ino.watches.values())
+        for d in relevant_dirs:
+            if d in watched:
+                continue
+            if ino.add(d) is None:
+                # Directory missing: watch the nearest existing parent so we notice it appear.
+                parent = os.path.dirname(d)
+                while parent and parent != "/" and not os.path.isdir(parent):
+                    parent = os.path.dirname(parent)
+                if parent and parent not in set(ino.watches.values()):
+                    ino.add(parent)
+
+    def relevant(dirpath, name):
+        if dirpath is None:
+            return True
+        full_path = os.path.join(dirpath, name) if name else dirpath
+        if full_path == user_file() or full_path == defaults_file():
+            return True
+        if name.endswith(".json") and dirpath in dropin_dirs():
+            return True
+        # A watched directory (or one of its ancestors) was created/removed.
+        return any(d == full_path or d.startswith(full_path + "/") for d in relevant_dirs)
+
+    arm()
+    current = effective()
+    leaves = flatten(current, [], {})
+
+    def output_full(doc):
+        if filters:
+            sub = {}
+            for f in filters:
+                try:
+                    sub[f] = lookup(doc, parse_path(f))
+                except KeyError:
+                    sub[f] = None
+            emit(dumps({"settings": sub}))
+        else:
+            emit(dumps({"settings": doc}))
+
+    if initial:
+        if full:
+            output_full(current)
+        else:
+            for path, value in leaves.items():
+                if under(path, filters):
+                    emit(dumps({"path": path, "value": value}))
+
+    while True:
+        events = ino.read()
+        if not any(relevant(d, n) for d, n, _ in events):
+            continue
+        arm()
+        # Coalesce bursts (editors write + rename in quick succession).
+        while select.select([ino.fd], [], [], 0.05)[0]:
+            ino.read()
+            arm()
+        new = effective()
+        if new == current:
+            continue
+        if full:
+            current = new
+            output_full(new)
+            continue
+        new_leaves = flatten(new, [], {})
+        for path in sorted(set(leaves) | set(new_leaves)):
+            if path in new_leaves and path in leaves and new_leaves[path] == leaves[path]:
+                continue
+            if not under(path, filters):
+                continue
+            if path in new_leaves:
+                emit(dumps({"path": path, "value": new_leaves[path]}))
+            else:
+                emit(dumps({"path": path, "value": None, "removed": True}))
+        current, leaves = new, new_leaves
+
+
+COMMANDS = {
+    "get": cmd_get,
+    "set": cmd_set,
+    "unset": cmd_unset,
+    "watch": cmd_watch,
+    "paths": cmd_paths,
+    "check-defaults": cmd_check_defaults,
+    "owners": cmd_owners,
+}
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        sys.stdout.write(USAGE)
+        return EXIT_OK if argv else EXIT_USAGE
+    if argv[0] == "--version":
+        print(VERSION)
+        return EXIT_OK
+    cmd = COMMANDS.get(argv[0])
+    if cmd is None:
+        warn("unknown command %r" % argv[0])
+        sys.stderr.write(USAGE)
+        return EXIT_USAGE
+    try:
+        return cmd(argv[1:])
+    except SettingsError as e:
+        warn(str(e))
+        return e.code
+    except OSError as e:
+        warn("I/O error: %s" % e)
+        return EXIT_IO
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

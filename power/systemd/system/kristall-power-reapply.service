@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+[Unit]
+Description=Kristall OS power: re-apply power limits after resume or a power source change
+Documentation=file:///usr/share/doc/kristall/contracts/power.md
+After=kristall-power.service tuned.service
+ConditionKernelCommandLine=!rd.live.image
+ConditionPathExists=!/etc/kristall/live
+
+[Service]
+Type=oneshot
+# Applies now, then checks again after 2 s and 8 s (firmware/EC often rewrites limits a moment
+# after a plug event or resume) and exits. Started by udev, the sleep hook and the tuned hook.
+ExecStart=/usr/bin/kristall-power reapply --settle
+SyslogIdentifier=kristall-power
+TimeoutSec=60

@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "KWin/WindowSwitcher",
+    "KPlugin": {
+        "Authors": [ { "Name": "Kristall OS" } ],
+        "Description": "App switcher in the Kristall design: one icon per app, the name of the chosen one",
+        "Description[de]": "App-Umschalter im Kristall-Design: ein Symbol pro App, darunter der Name der gewählten",
+        "Icon": "preferences-system-windows-switcher",
+        "Id": "org.kristall.switcher",
+        "License": "GPL-3.0-or-later",
+        "Name": "Kristall",
+        "Name[de]": "Kristall"
+    },
+    "X-Plasma-API": "declarativeappletscript"
+}

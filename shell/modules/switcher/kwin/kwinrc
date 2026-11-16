@@ -1,0 +1,20 @@
+# Merged into /etc/xdg/kwinrc by image/install.sh (keys here win, every other key is kept).
+# The Mac's app switcher on KWin's own switcher (hold/release handled in the compositor):
+# one entry per app, most recently used first, our layout, no window highlighting while tabbing.
+[TabBox]
+LayoutName=org.kristall.switcher
+ApplicationsMode=1
+HighlightWindows=false
+ShowTabBox=true
+DelayTime=110
+OrderMinimizedMode=0
+MinimizedMode=0
+DesktopMode=1
+ActivitiesMode=1
+MultiScreenMode=0
+
+[TabBoxAlternative]
+LayoutName=org.kristall.switcher
+ApplicationsMode=0
+HighlightWindows=false
+ShowTabBox=true

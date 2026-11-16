@@ -1,0 +1,17 @@
+[Unit]
+Description=Kristall OS automatic update (download and prepare; applied on next restart)
+Documentation=file:///usr/share/doc/kristall/contracts/update.md
+Wants=network-online.target
+After=network-online.target
+# Never inside the installer's live session.
+ConditionKernelCommandLine=!rd.live.image
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/kristall-update auto
+# Stay out of the owner's way: lowest CPU and disk priority.
+Nice=19
+CPUSchedulingPolicy=idle
+IOSchedulingClass=idle
+SyslogIdentifier=kristall-update
+TimeoutStartSec=6h

@@ -1,0 +1,16 @@
+{
+    "KPlugin": {
+        "Description": "Kristall window decoration: window buttons on the left, large rounded corners, soft layered shadow",
+        "Description[de]": "Kristall-Fensterdekoration: Fenstertasten links, große abgerundete Ecken, weicher mehrlagiger Schatten",
+        "EnabledByDefault": true,
+        "Id": "org.kristall.decoration",
+        "License": "GPL-3.0-or-later",
+        "Name": "Kristall",
+        "Name[de]": "Kristall"
+    },
+    "org.kde.kdecoration3": {
+        "blur": false,
+        "recommendedBorderSize": "None",
+        "styles": ["shadow", "titled"]
+    }
+}

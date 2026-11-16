@@ -1,0 +1,482 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""kristall-panels-helper — the panels module's one long-lived helper process.
+
+Started by the panels module (PanelsHelper.qml); newline-delimited JSON on stdin/stdout, exactly
+like shell-core's helper:
+  requests  {"id"?: <n>, "op": "<name>", ...}  ->  replies {"id": <n>, "ok": bool, "error"?: "…"}
+  events    {"event": "<name>", ...}            (unsolicited; the current state is sent once at start)
+
+It covers the system interfaces Quickshell 0.2.1 has no native service for. Everything is pushed by
+D-Bus signals; there is no timer and no polling, so while nothing changes it never wakes up.
+
+  brightness   org.kde.ScreenBrightness (PowerDevil): internal display first; set with the
+               "suppress indicator" flag so our own slider never triggers an on-screen display
+  kbd          org.kde.Solid.PowerManagement …/Actions/KeyboardBrightnessControl (absent = no backlight)
+  nightlight   org.kde.KWin.NightLight (KWin): on/off the way Plasma's own applet does it
+               (inhibit/uninhibit; switches Night Light on in kwinrc if it was never configured)
+  locked       org.freedesktop.ScreenSaver ActiveChanged (screen locker)
+  osd          org.kde.osdService signals osdProgress/osdText from plasmashell: every on-screen
+               display Plasma would show (volume/brightness keys …); our HUD shows them instead
+  notifyOwner  who owns org.freedesktop.Notifications (so the shell can claim it when it is free)
+  wifi.connect a new protected Wi-Fi network with a password from our own sheet
+               (NetworkManager AddAndActivateConnection; a wrong password is reported, never stored)
+Spec: shell/modules/panels/README.md. Exits when stdin closes (the shell went away).
+"""
+import json
+import os
+import pwd
+import shutil
+import subprocess
+import sys
+
+import gi
+
+gi.require_version("Gio", "2.0")
+gi.require_version("GLib", "2.0")
+from gi.repository import Gio, GLib  # noqa: E402
+
+LOG_TAG = "kristall-panels-helper"
+PROPS = "org.freedesktop.DBus.Properties"
+SB = "org.kde.ScreenBrightness"
+SB_PATH = "/org/kde/ScreenBrightness"
+PM = "org.kde.Solid.PowerManagement"
+KBD_PATH = "/org/kde/Solid/PowerManagement/Actions/KeyboardBrightnessControl"
+KBD = "org.kde.Solid.PowerManagement.Actions.KeyboardBrightnessControl"
+NL = "org.kde.KWin.NightLight"
+NL_PATH = "/org/kde/KWin/NightLight"
+NM = "org.freedesktop.NetworkManager"
+NM_PATH = "/org/freedesktop/NetworkManager"
+SUPPRESS_INDICATOR = 1          # org.kde.ScreenBrightness SetBrightness flag
+
+
+def log(*a):
+    print(LOG_TAG + ":", *a, file=sys.stderr, flush=True)
+
+
+def emit(obj):
+    try:
+        sys.stdout.write(json.dumps(obj, separators=(",", ":"), ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+    except BrokenPipeError:
+        GLib.idle_add(loop.quit)
+
+
+def unpack(v):
+    return v.unpack() if isinstance(v, GLib.Variant) else v
+
+
+class Helper:
+    def __init__(self):
+        self.session = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        try:
+            self.system = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+        except GLib.Error as e:
+            log("no system bus:", e.message)
+            self.system = None
+        self.brightness = {"available": False}
+        self.display = None              # D-Bus name of the display we control (e.g. "display0")
+        self.kbd = {"available": False}
+        self.night = {"available": False}
+        self.night_cookie = None
+        self.locked = False
+        self.connects = {}               # active connection path -> {ssid, settings path, sub ids}
+
+    # ---- plumbing ------------------------------------------------------------------------------
+    def call(self, bus, name, path, iface, method, params=None, reply=None, cb=None, timeout=5000):
+        def done(conn, res):
+            try:
+                v = conn.call_finish(res)
+                if cb:
+                    cb(unpack(v), None)
+            except GLib.Error as e:
+                if cb:
+                    cb(None, e)
+                else:
+                    log(f"{name} {method}: {e.message}")
+        bus.call(name, path, iface, method, params, GLib.VariantType(reply) if reply else None,
+                 Gio.DBusCallFlags.NO_AUTO_START, timeout, None, done)
+
+    def get_all(self, bus, name, path, iface, cb):
+        self.call(bus, name, path, PROPS, "GetAll", GLib.Variant("(s)", (iface,)), "(a{sv})",
+                  lambda v, e: cb(v[0] if v else None, e))
+
+    # ---- startup -------------------------------------------------------------------------------
+    def start(self):
+        runtime = os.environ.get("XDG_RUNTIME_DIR")
+        if runtime:
+            os.makedirs(os.path.join(runtime, "kristall"), mode=0o700, exist_ok=True)
+        ch = GLib.IOChannel.unix_new(sys.stdin.fileno())
+        ch.set_encoding(None)
+        ch.set_buffered(True)
+        GLib.io_add_watch(ch, GLib.PRIORITY_DEFAULT, GLib.IOCondition.IN | GLib.IOCondition.HUP | GLib.IOCondition.ERR, self.on_stdin)
+        s = self.session
+        Gio.bus_watch_name_on_connection(s, SB, Gio.BusNameWatcherFlags.NONE, self.sb_appeared, self.sb_vanished)
+        Gio.bus_watch_name_on_connection(s, PM, Gio.BusNameWatcherFlags.NONE, self.pm_appeared, self.pm_vanished)
+        Gio.bus_watch_name_on_connection(s, NL, Gio.BusNameWatcherFlags.NONE, self.nl_appeared, self.nl_vanished)
+        Gio.bus_watch_name_on_connection(s, "org.freedesktop.ScreenSaver", Gio.BusNameWatcherFlags.NONE, self.ss_appeared, self.ss_vanished)
+        Gio.bus_watch_name_on_connection(s, "org.freedesktop.Notifications", Gio.BusNameWatcherFlags.NONE, self.nf_appeared, self.nf_vanished)
+        for sig in ("BrightnessChanged", "BrightnessRangeChanged", "DisplayAdded", "DisplayRemoved"):
+            s.signal_subscribe(None, SB, sig, None, None, Gio.DBusSignalFlags.NONE, self.sb_signal)
+        for sig in ("keyboardBrightnessChanged", "keyboardBrightnessMaxChanged"):
+            s.signal_subscribe(None, KBD, sig, KBD_PATH, None, Gio.DBusSignalFlags.NONE, self.kbd_signal)
+        s.signal_subscribe(None, PROPS, "PropertiesChanged", NL_PATH, NL, Gio.DBusSignalFlags.NONE, self.nl_props)
+        s.signal_subscribe(None, "org.freedesktop.ScreenSaver", "ActiveChanged", None, None, Gio.DBusSignalFlags.NONE, self.ss_signal)
+        # plasmashell announces every OSD it shows (Plasma's own OSD window is replaced by a
+        # no-op in plasma/osd, see README); we draw ours from these
+        for sig in ("osdProgress", "osdText"):
+            s.signal_subscribe(None, "org.kde.osdService", sig, "/org/kde/osdService", None, Gio.DBusSignalFlags.NONE, self.osd_signal)
+        emit({"event": "ready", "version": 1})
+        self.send_brightness()
+        self.send_kbd()
+        self.send_night()
+        emit({"event": "locked", "locked": False})
+
+    def on_stdin(self, ch, cond):
+        if cond & (GLib.IOCondition.HUP | GLib.IOCondition.ERR) and not (cond & GLib.IOCondition.IN):
+            loop.quit()
+            return False
+        try:
+            status, line, _len, _term = ch.read_line()
+        except GLib.Error:
+            loop.quit()
+            return False
+        if status == GLib.IOStatus.EOF or line is None:
+            loop.quit()
+            return False
+        line = line.strip() if isinstance(line, str) else line.decode("utf-8", "replace").strip()
+        if line:
+            req = None
+            try:
+                req = json.loads(line)
+                self.handle(req)
+            except Exception as e:  # never die on a bad request
+                emit({"id": req.get("id") if isinstance(req, dict) else None, "ok": False, "error": str(e)})
+        return True
+
+    def reply(self, rid, ok=True, error=None, **extra):
+        if rid is None:
+            return
+        msg = {"id": rid, "ok": ok}
+        if error:
+            msg["error"] = error
+        msg.update(extra)
+        emit(msg)
+
+    def handle(self, req):
+        op, rid = req.get("op"), req.get("id")
+        if op == "brightness.set":
+            self.set_brightness(int(req["value"]), rid)
+        elif op == "kbd.set":
+            self.set_kbd(int(req["value"]), rid)
+        elif op == "nightlight.set":
+            self.set_night(bool(req["on"]), rid)
+        elif op == "wifi.connect":
+            self.wifi_connect(str(req["ssid"]), str(req.get("password", "")), str(req.get("security", "wpa-psk")), rid)
+        elif op == "state":
+            self.send_brightness()
+            self.send_kbd()
+            self.send_night()
+            emit({"event": "locked", "locked": self.locked})
+            self.reply(rid)
+        else:
+            self.reply(rid, False, "unknown op " + str(op))
+
+    # ---- screen brightness (PowerDevil) --------------------------------------------------------
+    def send_brightness(self):
+        emit(dict({"event": "brightness"}, **self.brightness))
+
+    def sb_appeared(self, conn, name, owner):
+        self.call(self.session, SB, SB_PATH, PROPS, "Get", GLib.Variant("(ss)", (SB, "DisplaysDBusNames")), "(v)", self.sb_displays)
+
+    def sb_displays(self, v, err):
+        names = list(v[0]) if v and not err else []
+        if not names:
+            self.display = None
+            self.brightness = {"available": False}
+            self.send_brightness()
+            return
+        found = {}
+
+        def got(name, props, e):
+            found[name] = props if props and not e else None
+            if len(found) < len(names):
+                return
+            ok = [n for n in names if found.get(n)]
+            if not ok:
+                self.brightness = {"available": False}
+                self.send_brightness()
+                return
+            pick = next((n for n in ok if found[n].get("IsInternal")), ok[0])
+            p = found[pick]
+            self.display = pick
+            self.brightness = {"available": int(p.get("MaxBrightness", 0)) > 0, "value": int(p.get("Brightness", 0)),
+                               "max": int(p.get("MaxBrightness", 0)), "display": pick, "label": str(p.get("Label", ""))}
+            self.send_brightness()
+        for n in names:
+            self.get_all(self.session, SB, SB_PATH + "/" + n, SB + ".Display", lambda props, e, n=n: got(n, props, e))
+
+    def sb_vanished(self, conn, name):
+        self.display = None
+        self.brightness = {"available": False}
+        self.send_brightness()
+
+    def sb_signal(self, conn, sender, path, iface, signal, params):
+        p = unpack(params)
+        if signal in ("DisplayAdded", "DisplayRemoved"):
+            self.sb_appeared(None, SB, sender)
+            return
+        if not self.display or p[0] != self.display:
+            return
+        if signal == "BrightnessChanged":
+            self.brightness["value"] = int(p[1])
+        elif signal == "BrightnessRangeChanged":
+            self.brightness["max"] = int(p[1])
+            self.brightness["value"] = int(p[2])
+            self.brightness["available"] = int(p[1]) > 0
+        self.send_brightness()
+
+    def set_brightness(self, value, rid):
+        if not self.display:
+            self.reply(rid, False, "no backlight")
+            return
+        value = max(0, min(int(self.brightness.get("max", 0)), value))
+        self.call(self.session, SB, SB_PATH + "/" + self.display, SB + ".Display", "SetBrightness",
+                  GLib.Variant("(iu)", (value, SUPPRESS_INDICATOR)), None,
+                  lambda v, e: self.reply(rid, e is None, e.message if e else None))
+
+    # ---- keyboard backlight (PowerDevil) -------------------------------------------------------
+    def send_kbd(self):
+        emit(dict({"event": "kbd"}, **self.kbd))
+
+    def pm_appeared(self, conn, name, owner):
+        def got_max(v, e):
+            if e or not v or int(v[0]) <= 0:
+                self.kbd = {"available": False}
+                self.send_kbd()
+                return
+            mx = int(v[0])
+
+            def got_val(v2, e2):
+                self.kbd = {"available": True, "max": mx, "value": int(v2[0]) if v2 and not e2 else 0}
+                self.send_kbd()
+            self.call(self.session, PM, KBD_PATH, KBD, "keyboardBrightness", None, "(i)", got_val)
+        self.call(self.session, PM, KBD_PATH, KBD, "keyboardBrightnessMax", None, "(i)", got_max)
+
+    def pm_vanished(self, conn, name):
+        self.kbd = {"available": False}
+        self.send_kbd()
+
+    def kbd_signal(self, conn, sender, path, iface, signal, params):
+        p = unpack(params)
+        if signal == "keyboardBrightnessChanged":
+            self.kbd["value"] = int(p[0])
+            self.send_kbd()
+        else:
+            self.pm_appeared(None, PM, sender)
+
+    def set_kbd(self, value, rid):
+        if not self.kbd.get("available"):
+            self.reply(rid, False, "no keyboard backlight")
+            return
+        value = max(0, min(int(self.kbd["max"]), value))
+        self.call(self.session, PM, KBD_PATH, KBD, "setKeyboardBrightnessSilent", GLib.Variant("(i)", (value,)), None,
+                  lambda v, e: self.reply(rid, e is None, e.message if e else None))
+
+    # ---- night light (KWin) --------------------------------------------------------------------
+    def send_night(self):
+        emit(dict({"event": "nightlight", "ours": self.night_cookie is not None}, **self.night))
+
+    def nl_appeared(self, conn, name, owner):
+        def got(props, e):
+            if e or props is None:
+                self.night = {"available": False}
+            else:
+                self.night = {"available": bool(props.get("available", False)), "enabled": bool(props.get("enabled", False)),
+                              "running": bool(props.get("running", False)), "inhibited": bool(props.get("inhibited", False))}
+            self.send_night()
+        self.get_all(self.session, NL, NL_PATH, NL, got)
+
+    def nl_vanished(self, conn, name):
+        self.night = {"available": False}
+        self.night_cookie = None
+        self.send_night()
+
+    def nl_props(self, conn, sender, path, iface, signal, params):
+        _iface, changed, _inv = unpack(params)
+        for k in ("available", "enabled", "running", "inhibited"):
+            if k in changed:
+                self.night[k] = bool(changed[k])
+        self.send_night()
+
+    def set_night(self, on, rid):
+        if not self.night.get("available"):
+            self.reply(rid, False, "night light not available")
+            return
+        if on:
+            if self.night_cookie is not None:
+                cookie, self.night_cookie = self.night_cookie, None
+                self.call(self.session, NL, NL_PATH, NL, "uninhibit", GLib.Variant("(u)", (cookie,)))
+            if not self.night.get("enabled"):
+                # never switched on: do what the settings page does — write kwinrc with change
+                # notification; KWin's night light watches its configuration (KConfigWatcher)
+                tool = shutil.which("kwriteconfig6")
+                if tool:
+                    subprocess.run([tool, "--file", "kwinrc", "--group", "NightColor", "--key", "Active", "--type", "bool", "--notify", "true"],
+                                   check=False)
+                else:
+                    log("kwriteconfig6 missing: cannot switch Night Light on")
+            self.reply(rid)
+        else:
+            if self.night_cookie is not None or not self.night.get("enabled"):
+                self.reply(rid)
+                return
+
+            def got(v, e):
+                if v:
+                    self.night_cookie = int(v[0])
+                self.send_night()
+                self.reply(rid, e is None, e.message if e else None)
+            self.call(self.session, NL, NL_PATH, NL, "inhibit", None, "(u)", got)
+        GLib.idle_add(lambda: (self.send_night(), False)[1])
+
+    # ---- screen locker -------------------------------------------------------------------------
+    def ss_appeared(self, conn, name, owner):
+        def got(v, e):
+            self.locked = bool(v[0]) if v and not e else False
+            emit({"event": "locked", "locked": self.locked})
+        self.call(self.session, "org.freedesktop.ScreenSaver", "/ScreenSaver", "org.freedesktop.ScreenSaver", "GetActive", None, "(b)", got)
+
+    def ss_vanished(self, conn, name):
+        self.locked = False
+        emit({"event": "locked", "locked": False})
+
+    def ss_signal(self, conn, sender, path, iface, signal, params):
+        self.locked = bool(unpack(params)[0])
+        emit({"event": "locked", "locked": self.locked})
+
+    # ---- notification service owner ------------------------------------------------------------
+    def nf_appeared(self, conn, name, owner):
+        def got(v, e):
+            pid = int(v[0]) if v and not e else 0
+            emit({"event": "notifyOwner", "owned": True, "mine": pid == os.getppid(), "pid": pid})
+        self.call(self.session, "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+                  "GetConnectionUnixProcessID", GLib.Variant("(s)", (owner,)), "(u)", got)
+
+    def nf_vanished(self, conn, name):
+        emit({"event": "notifyOwner", "owned": False, "mine": False, "pid": 0})
+
+    # ---- on-screen displays announced by plasmashell -------------------------------------------
+    def osd_signal(self, conn, sender, path, iface, signal, params):
+        p = unpack(params)
+        if signal == "osdProgress":
+            icon, percent, maximum, text = p
+            emit({"event": "osd", "icon": icon, "percent": int(percent), "max": int(maximum) or 100, "text": text, "progress": True})
+        else:
+            icon, text = p
+            emit({"event": "osd", "icon": icon, "text": text, "progress": False})
+
+    # ---- Wi-Fi: connect to a new protected network with a password ----------------------------
+    def wifi_connect(self, ssid, password, security, rid):
+        if not self.system:
+            self.reply(rid, False, "no system bus")
+            return
+
+        def got_devices(v, e):
+            if e or not v:
+                self.reply(rid, False, e.message if e else "no devices")
+                return
+            paths = list(v[0])
+            found = []
+
+            def got_type(path, t, e2):
+                found.append((path, t))
+                if len(found) < len(paths):
+                    return
+                wifi = [p for p, ty in found if ty == 2]
+                if not wifi:
+                    self.reply(rid, False, "no wifi device")
+                    return
+                self.add_and_activate(wifi[0], ssid, password, security, rid)
+            for p in paths:
+                self.call(self.system, NM, p, PROPS, "Get", GLib.Variant("(ss)", (NM + ".Device", "DeviceType")), "(v)",
+                          lambda r, e2, p=p: got_type(p, int(r[0]) if r and not e2 else 0, e2))
+            if not paths:
+                self.reply(rid, False, "no wifi device")
+        self.call(self.system, NM, NM_PATH, NM, "GetDevices", None, "(ao)", got_devices)
+
+    def add_and_activate(self, device, ssid, password, security, rid):
+        try:
+            user = pwd.getpwuid(os.getuid()).pw_name
+        except KeyError:
+            user = os.environ.get("USER") or os.environ.get("LOGNAME") or ""
+        conn = {"id": GLib.Variant("s", ssid), "type": GLib.Variant("s", "802-11-wireless")}
+        if user:
+            # owned by the user (settings.modify.own: no administrator password needed)
+            conn["permissions"] = GLib.Variant("as", ["user:" + user])
+        settings = {
+            "connection": conn,
+            "802-11-wireless": {"ssid": GLib.Variant("ay", ssid.encode()), "mode": GLib.Variant("s", "infrastructure")},
+        }
+        if security != "none":
+            settings["802-11-wireless-security"] = {"key-mgmt": GLib.Variant("s", "sae" if security == "sae" else "wpa-psk"),
+                                                    "psk": GLib.Variant("s", password)}
+        params = GLib.Variant("(a{sa{sv}}oo)", (settings, device, "/"))
+
+        def done(v, e):
+            if e or not v:
+                self.reply(rid, False, e.message if e else "failed")
+                emit({"event": "wifi", "ssid": ssid, "state": "failed", "reason": "error"})
+                return
+            settings_path, active = v[0], v[1]
+            self.reply(rid, True, None, active=active)
+            emit({"event": "wifi", "ssid": ssid, "state": "connecting"})
+            self.watch_activation(active, settings_path, ssid)
+        self.call(self.system, NM, NM_PATH, NM, "AddAndActivateConnection", params, "(oo)", done, timeout=30000)
+
+    def watch_activation(self, active, settings_path, ssid):
+        entry = {"ssid": ssid, "settings": settings_path, "done": False}
+        self.connects[active] = entry
+
+        def finish(state, reason):
+            if entry["done"]:
+                return
+            entry["done"] = True
+            self.system.signal_unsubscribe(entry["sub"])
+            GLib.source_remove(entry["timeout"])
+            self.connects.pop(active, None)
+            if state == "connected":
+                emit({"event": "wifi", "ssid": ssid, "state": "connected"})
+                return
+            # do not keep a profile with a wrong password: delete it again
+            self.call(self.system, NM, settings_path, NM + ".Settings.Connection", "Delete")
+            # 9 = NO_SECRETS on the active connection: the key was refused
+            emit({"event": "wifi", "ssid": ssid, "state": "failed", "reason": "password" if reason in (9,) else "other", "code": reason})
+
+        def on_state(conn, sender, path, iface, signal, params):
+            state, reason = unpack(params)
+            if state == 2:
+                finish("connected", 0)
+            elif state == 4:
+                finish("failed", int(reason))
+        entry["sub"] = self.system.signal_subscribe(NM, NM + ".Connection.Active", "StateChanged", active, None,
+                                                    Gio.DBusSignalFlags.NONE, on_state)
+        entry["timeout"] = GLib.timeout_add_seconds(45, lambda: (finish("failed", -1), False)[1])
+
+        # it may already be activated (or failed) before we subscribed
+        def got(v, e):
+            if v and not e:
+                st = int(unpack(v[0]))
+                if st == 2:
+                    finish("connected", 0)
+        self.call(self.system, NM, active, PROPS, "Get", GLib.Variant("(ss)", (NM + ".Connection.Active", "State")), "(v)", got)
+
+
+if __name__ == "__main__":
+    loop = GLib.MainLoop()
+    helper = Helper()
+    helper.start()
+    try:
+        loop.run()
+    except KeyboardInterrupt:
+        pass

@@ -1,0 +1,16 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Kristall OS contributors"
+            }
+        ],
+        "Category": "Kristall",
+        "Description": "Window list, agent input and screenshots for the Kristall shell and assistant",
+        "Description[de]": "Fensterliste, Assistenten-Eingabe und Bildschirmfotos für die Kristall-Oberfläche und den Assistenten",
+        "EnabledByDefault": true,
+        "License": "GPL",
+        "Name": "Kristall Bridge",
+        "Name[de]": "Kristall-Brücke"
+    }
+}

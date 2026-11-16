@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+[Unit]
+Description=Kristall OS power: diagnostic report 15 minutes after each boot
+Documentation=file:///usr/share/doc/kristall/contracts/power.md
+ConditionKernelCommandLine=!rd.live.image
+ConditionPathExists=!/etc/kristall/live
+
+[Timer]
+OnBootSec=15min
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

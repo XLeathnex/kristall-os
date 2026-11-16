@@ -1,0 +1,12 @@
+[Unit]
+Description=Tell the owner when a restart would finish a Kristall OS update
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/kristall-update notify
+SyslogIdentifier=kristall-update
+
+[Install]
+WantedBy=graphical-session.target

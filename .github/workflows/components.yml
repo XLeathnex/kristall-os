@@ -1,0 +1,134 @@
+# Every component's own test suite (<component>/tests/run.sh) inside the dev container
+# (tools/devenv), one job per component, so a push shows at a glance which component is broken.
+# The dev container is built once per change of tools/devenv/ (or of the assistant's pinned Python
+# requirements it bakes in) and kept in the Actions cache as a compressed `docker save` tarball;
+# every component job loads it from there. Runs on GitHub's free runners (4 CPUs, 16 GB RAM, ~14 GB
+# free disk after the cleanup below): the image is ~4.5 GB unpacked, ~1.4 GB compressed.
+name: Component tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: components-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEVENV_TAR: ${{ github.workspace }}/../devenv.tar.zst
+
+jobs:
+  devenv:
+    name: Dev container
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    outputs:
+      key: ${{ steps.key.outputs.key }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Cache key
+        id: key
+        run: echo "key=devenv-${{ hashFiles('tools/devenv/Dockerfile', 'tools/devenv/build.sh', 'assistant/core/image/requirements.txt', 'assistant/core/image/build-requirements.txt') }}" >> "$GITHUB_OUTPUT"
+
+      - name: Look for a cached dev container
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.DEVENV_TAR }}
+          key: ${{ steps.key.outputs.key }}
+          lookup-only: true
+
+      - name: Make room on the build machine
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: ublue-os/remove-unwanted-software@695eb75bc387dbcd9685a8e72d23439d8686cba6 # master 2025-10-10
+
+      - name: Build the dev container (no proxy here; build.sh uses the runner's CA bundle)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          bash tools/devenv/build.sh
+          docker run --rm kristall-devenv:latest bash -c 'echo "missing packages: $(cat /devenv-missing.txt 2>/dev/null | tr "\n" " ")"; rpm -q kwin quickshell plasma-milou kf6-baloo-file firefox'
+          docker save kristall-devenv:latest | zstd -T0 -10 -o "$DEVENV_TAR"
+          ls -lh "$DEVENV_TAR"
+
+      - name: Store the dev container
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.DEVENV_TAR }}
+          key: ${{ steps.key.outputs.key }}
+
+  test:
+    name: ${{ matrix.component }}
+    needs: devenv
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        component:
+          - image
+          - power
+          - kwin/glass
+          - kwin/bridge
+          - shell
+          - shell/modules/panels
+          - shell/modules/dock
+          - shell/modules/search
+          - shell/modules/apps
+          - shell/modules/switcher
+          - shell/modules/assistant
+          - assistant/core
+          - assistant/hands
+          - theme
+          - setup
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Fetch the dev container
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.DEVENV_TAR }}
+          key: ${{ needs.devenv.outputs.key }}
+          fail-on-cache-miss: true
+
+      - name: Load the dev container
+        run: |
+          set -euo pipefail
+          zstd -d -c "$DEVENV_TAR" | docker load
+          rm -f "$DEVENV_TAR"
+
+      - name: Run ${{ matrix.component }}/tests/run.sh
+        env:
+          COMPONENT: ${{ matrix.component }}
+        run: |
+          set -uo pipefail
+          if [ ! -f "$COMPONENT/tests/run.sh" ]; then
+            echo "::notice::$COMPONENT has no tests/run.sh yet"
+            echo "### $COMPONENT: no test suite yet" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # no network inside, like the sandbox; the checkout is writable (some suites build there)
+          docker run --rm --network none --name "kristall-ci-${COMPONENT//\//-}" \
+            -v "$PWD:/work" -w /work kristall-devenv:latest bash "/work/$COMPONENT/tests/run.sh" 2>&1 | tee "$RUNNER_TEMP/log.txt"
+          status=${PIPESTATUS[0]}
+          {
+            if [ "$status" = 0 ]; then echo "### PASS $COMPONENT"; else echo "### FAIL $COMPONENT (exit $status)"; fi
+            echo '```'
+            grep -aE '^(=+ |== |--- )?(PASS|FAIL|ok|SKIP|ERROR)|passed|failed|overall' "$RUNNER_TEMP/log.txt" | tail -40
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"

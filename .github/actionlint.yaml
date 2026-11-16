@@ -1,0 +1,5 @@
+# actionlint 1.7.12 predates GitHub's ubuntu-26.04 runner label (available since 2026; the
+# ublue-os image template uses it). Declare it so the linter accepts it.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04

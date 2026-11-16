@@ -1,0 +1,13 @@
+[Unit]
+Description=Skip Plasma Setup on machines that already have a user account
+Before=plasma-setup.service display-manager.service
+After=local-fs.target
+ConditionPathExists=!/etc/plasma-setup-done
+ConditionKernelCommandLine=!rd.live.image
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/kristall/plasma-setup-guard
+
+[Install]
+WantedBy=multi-user.target

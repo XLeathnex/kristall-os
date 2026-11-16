@@ -1,0 +1,3 @@
+__pycache__/
+*.pyc
+tools/devenv/ca-bundle.crt

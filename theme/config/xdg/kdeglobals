@@ -1,0 +1,35 @@
+# Kristall theme: system-wide defaults merged into /etc/xdg/kdeglobals (other keys are preserved).
+# The colour groups ([Colors:*], [WM], [ColorEffects:*]) are appended at build time from the
+# generated KristallLight scheme (theme/tools/gen-theme.py).
+[General]
+ColorScheme=KristallLight
+accentColorFromWallpaper=false
+font=Inter,9.75,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+menuFont=Inter,9.75,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+toolBarFont=Inter,9.75,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+smallestReadableFont=Inter,8.25,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+fixed=JetBrains Mono,9.75,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+XftAntialias=true
+XftHintStyle=hintnone
+XftSubPixel=none
+TerminalApplication=konsole
+TerminalService=org.kde.konsole.desktop
+
+[WM]
+activeFont=Inter,9.75,-1,5,700,0,0,0,0,0,0,0,0,0,0,1
+
+[KDE]
+widgetStyle=Breeze
+SingleClick=false
+ShowIconsOnPushButtons=false
+ShowIconsInMenuItems=false
+AutomaticLookAndFeel=true
+AutomaticLookAndFeelOnIdle=true
+DefaultLightLookAndFeel=org.kristall.desktop
+DefaultDarkLookAndFeel=org.kristall.desktop.dark
+
+[Icons]
+Theme=breeze
+
+[Sounds]
+Theme=kristall

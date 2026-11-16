@@ -1,0 +1,17 @@
+[Desktop Entry]
+# No NoDisplay=true: kglobalacceld ignores such files in share/kglobalaccel/ (see search's file).
+Type=Application
+Name=Kristall Apps
+Name[de]=Kristall-Apps
+Comment=All apps
+Comment[de]=Alle Apps
+Icon=view-app-grid
+Exec=kristall-shellctl apps toggle
+X-KDE-GlobalAccel-CommandShortcut=false
+Actions=Toggle
+
+[Desktop Action Toggle]
+Name=Show Apps
+Name[de]=Apps anzeigen
+Exec=kristall-shellctl apps toggle
+X-KDE-Shortcuts=Meta+A

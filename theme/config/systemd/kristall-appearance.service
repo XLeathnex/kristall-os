@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+[Unit]
+Description=Kristall appearance: light/dark and accent for every app at once
+Documentation=file:///usr/share/doc/kristall/contracts/theme.md
+PartOf=graphical-session.target
+After=graphical-session.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/kristall/theme/kristall-appearance run
+Restart=on-failure
+RestartSec=2
+SyslogIdentifier=kristall-appearance
+Slice=session.slice
+
+[Install]
+WantedBy=graphical-session.target

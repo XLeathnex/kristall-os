@@ -1,0 +1,18 @@
+[Desktop Entry]
+DefaultProfile=Kristall.profile
+
+[MainWindow]
+MenuBar=Enabled
+ToolBarsMovable=Disabled
+StatusBar=Disabled
+
+[TabBar]
+CloseTabOnMiddleMouseButton=true
+NewTabButton=true
+TabBarPosition=Top
+TabBarVisibility=ShowTabBarWhenNeeded
+ExpandTabWidth=true
+
+[KonsoleWindow]
+RememberWindowSize=true
+ShowWindowTitleOnTitleBar=true

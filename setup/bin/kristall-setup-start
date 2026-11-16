@@ -1,0 +1,25 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# kristall-setup-start — run by the user unit kristall-setup.service at every login: opens the
+# Setup Assistant until it has been finished (or skipped). Never in the installer's live session.
+# The shell may still be starting: the request is retried once a second for up to a minute
+# (login only; nothing runs afterwards). A shell restart resumes on its own (setup.running).
+set -u
+log() { logger -t kristall-setup -- "$*" 2>/dev/null || echo "kristall-setup: $*" >&2; }
+if [[ -e ${KRISTALL_SETUP_LIVE_MARKER:-/etc/kristall/live} ]] || grep -qw rd.live.image "${KRISTALL_SETUP_CMDLINE:-/proc/cmdline}" 2>/dev/null; then
+    log "live session: not starting"
+    exit 0
+fi
+done=$(kristall-settings get setup.done 2>/dev/null || echo false)
+if [[ $done == true ]]; then
+    exit 0
+fi
+for _ in $(seq 1 "${KRISTALL_SETUP_WAIT:-60}"); do
+    if kristall-shellctl setup start 2>/dev/null; then
+        log "Setup Assistant started"
+        exit 0
+    fi
+    sleep 1
+done
+log "the shell did not answer; the Setup Assistant opens at the next login"
+exit 0

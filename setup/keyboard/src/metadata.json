@@ -1,0 +1,16 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Kristall OS contributors"
+            }
+        ],
+        "Category": "Kristall",
+        "Description": "The key beside the space bar acts as Command: Mac keyboard shortcuts on a PC keyboard",
+        "Description[de]": "Die Taste neben der Leertaste wirkt als Befehlstaste: Mac-Tastaturkurzbefehle auf einer PC-Tastatur",
+        "EnabledByDefault": true,
+        "License": "GPL",
+        "Name": "Kristall Keyboard",
+        "Name[de]": "Kristall-Tastatur"
+    }
+}

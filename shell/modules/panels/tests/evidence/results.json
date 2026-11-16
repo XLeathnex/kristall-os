@@ -1,0 +1,41 @@
+{
+ "last_run": {
+  "sections": [
+   "static",
+   "cc",
+   "wifi",
+   "notifications",
+   "hud",
+   "absent",
+   "looks",
+   "idle"
+  ],
+  "failures": [
+   "Night Light button \u2192 KWin night light enabled (kwinrc + reloadConfig)",
+   "Night Light button again \u2192 inhibited (as Plasma's applet does)"
+  ],
+  "time": "2026-11-16T19:02:13"
+ },
+ "notifications_groups": 6,
+ "idle_panels_closed": {
+  "seconds": 5.0,
+  "frames": 0,
+  "cpu_ms": 0.0,
+  "wakeups": 1,
+  "processes": 4
+ },
+ "idle_after_panels": {
+  "seconds": 5.0,
+  "frames": 0,
+  "cpu_ms": 0.0,
+  "wakeups": 3,
+  "processes": 4
+ },
+ "idle_cc_open": {
+  "seconds": 4.0,
+  "frames": 0,
+  "cpu_ms": 0.0,
+  "wakeups": -3,
+  "processes": 4
+ }
+}

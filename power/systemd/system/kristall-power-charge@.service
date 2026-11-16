@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+[Unit]
+Description=Kristall OS power: set the battery charge limit to %i %%
+Documentation=file:///usr/share/doc/kristall/contracts/power.md
+After=kristall-power.service
+ConditionKernelCommandLine=!rd.live.image
+ConditionPathExists=!/etc/kristall/live
+
+[Service]
+Type=oneshot
+# The instance is validated again by kristall-power (50..100); the polkit rule only allows
+# instances in that range to be started by the owner.
+ExecStart=/usr/bin/kristall-power charge-limit %i
+SyslogIdentifier=kristall-power
+TimeoutSec=30

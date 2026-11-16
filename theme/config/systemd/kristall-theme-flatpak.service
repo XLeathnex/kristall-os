@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Lets every Flatpak app read the per-user GTK styling (~/.config/gtk-3.0 and gtk-4.0, written by
+# kristall-appearance and kde-gtk-config) read-only. A system-wide Flatpak override lives in
+# /var/lib/flatpak/overrides, which is not part of the image, so it is (re)applied at boot with
+# Flatpak's own command; repeated runs change nothing.
+[Unit]
+Description=Kristall theme: let Flatpak apps see the GTK styling
+ConditionPathExists=/usr/bin/flatpak
+After=local-fs.target
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/flatpak override --system --filesystem=xdg-config/gtk-3.0:ro --filesystem=xdg-config/gtk-4.0:ro
+
+[Install]
+WantedBy=multi-user.target

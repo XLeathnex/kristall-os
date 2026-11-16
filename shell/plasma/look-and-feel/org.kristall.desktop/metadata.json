@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [{ "Name": "Kristall OS" }],
+        "Category": "",
+        "Description": "Kristall OS: the desktop (wallpaper) without Plasma panels; the menu bar and Dock are the Kristall shell",
+        "Description[de]": "Kristall OS: der Schreibtisch (Hintergrundbild) ohne Plasma-Leisten; Menüleiste und Dock kommen von der Kristall-Shell",
+        "Id": "org.kristall.desktop",
+        "License": "GPL-3.0-or-later",
+        "Name": "Kristall",
+        "Website": "https://github.com/"
+    },
+    "X-Plasma-APIVersion": "2"
+}

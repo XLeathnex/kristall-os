@@ -1,0 +1,40 @@
+Kristall Mac keyboard — what each client received (headless KWin 6.8.3, German layout, physical keys via fake input).
+Physical: alt = the key beside the space bar (Command), win = Windows key (Option), altgr = right Alt.
+
+chord (Mac)                          physical keys           native Wayland app                        XWayland app          terminal              Wine game (*.exe)
+⌘C copy                              alt+c                   Ctrl+c                                    Ctrl+c                Ctrl+Shift+C          Alt+c
+⌘V paste                             alt+v                   Ctrl+v                                    Ctrl+v                Ctrl+Shift+V          Alt+v
+⌘X cut                               alt+x                   Ctrl+x                                    Ctrl+x                Ctrl+Shift+X          Alt+x
+⌘Z undo (key labelled Z)             alt+z                   Ctrl+z                                    Ctrl+z                Ctrl+Shift+Z          Alt+z
+⇧⌘Z redo                             alt+shift+z             Ctrl+Shift+Z                              Ctrl+Shift+Z          Ctrl+Shift+Z          Alt+Shift+Z
+⌘A select all                        alt+a                   Ctrl+a                                    Ctrl+a                Ctrl+Shift+A          Alt+a
+⌘S save                              alt+s                   Ctrl+s                                    Ctrl+s                Ctrl+Shift+S          Alt+s
+⌘Q quit                              alt+q                   Ctrl+q                                    Ctrl+q                Ctrl+Shift+Q          Alt+q
+⌘W close window                      alt+w                   Ctrl+w                                    Ctrl+w                Ctrl+Shift+W          Alt+w
+⌘T new tab                           alt+t                   Ctrl+t                                    Ctrl+t                Ctrl+Shift+T          Alt+t
+⌘F find                              alt+f                   Ctrl+f                                    Ctrl+f                Ctrl+Shift+F          Alt+f
+⌘N new                               alt+n                   Ctrl+n                                    Ctrl+n                Ctrl+Shift+N          Alt+n
+⌘, settings (KDE app: Ctrl+Shift+,)  alt+,                   Ctrl+Shift+semicolon                      Ctrl+comma            Ctrl+Shift+semicolon  Alt+comma
+⌘← line start                        alt+left                Home                                      Home                  Home                  Alt+Left
+⌘→ line end                          alt+right               End                                       End                   End                   Alt+Right
+⇧⌘← select to line start             alt+shift+left          Shift+Home                                Shift+Home            Shift+Home            Alt+Shift+Left
+⌘↑ document start                    alt+up                  Ctrl+Home                                 Ctrl+Home             Ctrl+Home             Alt+Up
+⌘↓ document end                      alt+down                Ctrl+End                                  Ctrl+End              Ctrl+End              Alt+Down
+⌘⌫ delete to line start              alt+backspace           Shift+Home BackSpace                      Shift+Home BackSpace  Ctrl+u                Alt+BackSpace
+⌥← word left                         win+left                Ctrl+Left                                 Ctrl+Left             Ctrl+Left             —
+⌥→ word right                        win+right               Ctrl+Right                                Ctrl+Right            Ctrl+Right            —
+⇧⌥← select word left                 win+shift+left          Ctrl+Shift+Left                           Ctrl+Shift+Left       Ctrl+Shift+Left       —
+⌥⌫ delete word                       win+backspace           Ctrl+BackSpace                            Ctrl+BackSpace        Ctrl+BackSpace        —
+⌥E (Windows key + E)                 win+e                   Alt+e                                     Alt+e                 Alt+e                 —
+⌃C (physical Control)                ctrl+c                  Ctrl+c                                    Ctrl+c                Ctrl+c                Ctrl+c
+⌃⌥Entf (Ctrl first: as printed)      ctrl+alt+delete         Ctrl+Alt+Delete                           Ctrl+Alt+Delete       Ctrl+Alt+Delete       Ctrl+Alt+Delete
+letters z y ü (no modifier)          z                       z                                         z                     z                     z
+system: search                       alt+space               global shortcut 'search'
+system: screenshot-screen            alt+shift+3             global shortcut 'screenshot-screen'
+system: screenshot-region            alt+shift+4             global shortcut 'screenshot-region'
+system: screenshot-tool              alt+shift+5             global shortcut 'screenshot-tool'
+system: emoji                        ctrl+alt+space          global shortcut 'emoji'
+system: assistant                    win+space               global shortcut 'assistant'
+⌘Tab app switcher                    alt+tab                 KWin switcher (Meta+Tab)
+⌘M / ⌘H / ⌃⌘F                                                minimise / hide app / full screen (KWin)
+foot (real terminal)                 ctrl+c / alt+c / alt+v  0x03 / nothing / paste

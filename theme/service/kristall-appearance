@@ -1,0 +1,409 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""kristall-appearance: one switch for the whole desktop's appearance.
+
+The shell reads appearance.theme / appearance.accent itself. This service makes everything else
+follow the same settings at the same moment: Plasma's colour scheme (Qt/KDE apps, the window
+decoration, the lock screen, plasmashell's wallpaper variant), GTK 3/4 and libadwaita apps, the
+desktop portal's colour-scheme and accent (Flatpak apps, Firefox), the terminal, and KWin's
+animation speed (Reduce Motion). "auto" is Plasma's own day/night switching (kded
+lookandfeelautoswitcher with our two look-and-feel packages); this service only follows it.
+
+    kristall-appearance run            the user service (systemd: kristall-appearance.service)
+    kristall-appearance apply          apply the current settings once and exit
+    kristall-appearance status [--json]
+    kristall-appearance accents --json
+    kristall-appearance wallpapers --json
+    kristall-appearance wallpaper set ID [--screen all]
+Logs: journalctl --user -t kristall-appearance. Contract: docs/contracts/theme.md.
+"""
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+
+LIB = os.environ.get("KRISTALL_THEME_LIB", "/usr/lib/kristall/theme")
+sys.path.insert(0, LIB)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools"))  # repository
+import kristall_colors as kc  # noqa: E402
+
+LNF_LIGHT = "org.kristall.desktop"
+LNF_DARK = "org.kristall.desktop.dark"
+SCHEMES = {"light": "KristallLight", "dark": "KristallDark"}
+GTK_THEMES = {"light": "adw-gtk3", "dark": "adw-gtk3-dark"}
+CONFIG = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+DATA = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+WALLPAPER_IDS = ["Kristall", "Kristall-Welle", "Kristall-Horizont"]
+
+
+def log(*a):
+    print("kristall-appearance:", *a, file=sys.stderr, flush=True)
+
+
+def run(cmd, timeout=15, quiet=True):
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        if r.returncode != 0 and not quiet:
+            log("command failed:", " ".join(cmd), r.stderr.strip()[:300])
+        return r
+    except (OSError, subprocess.TimeoutExpired) as e:
+        if not quiet:
+            log("command failed:", " ".join(cmd), e)
+        return None
+
+
+def have(cmd):
+    return shutil.which(cmd) is not None
+
+
+# --------------------------------------------------------------------------- settings
+def settings():
+    r = run(["kristall-settings", "get", "."], quiet=False)
+    try:
+        return json.loads(r.stdout) if r and r.returncode == 0 else {}
+    except ValueError:
+        return {}
+
+
+def wanted(s):
+    a = s.get("appearance", {}) if isinstance(s, dict) else {}
+    theme = a.get("theme", "auto")
+    if theme not in ("light", "dark", "auto"):
+        theme = "auto"
+    accent = a.get("accent", "blue")
+    tokens = kc.load_tokens()
+    if accent not in tokens["accents"]:
+        accent = "blue"
+    acc = s.get("accessibility", {}) if isinstance(s, dict) else {}
+    return {"theme": theme, "accent": accent, "reduceMotion": bool(acc.get("reduceMotion", False))}
+
+
+# --------------------------------------------------------------------------- KDE config
+def kread(file, group, key, default=None):
+    if have("kreadconfig6"):
+        args = ["kreadconfig6", "--file", file]
+        for g in group.split("]["):
+            args += ["--group", g]
+        r = run(args + ["--key", key])
+        if r and r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+        return default
+    sys.path.insert(0, LIB)
+    import kini  # noqa: E402
+    return kini.KIni(open(os.path.join(CONFIG, file)).read() if os.path.exists(os.path.join(CONFIG, file)) else "").get(group, key) or default
+
+
+def kwrite(file, group, key, value, notify=True, delete=False):
+    args = ["kwriteconfig6", "--file", file]
+    if notify:
+        args.append("--notify")
+    for g in group.split("]["):
+        args += ["--group", g]
+    args += ["--key", key]
+    if delete:
+        args.append("--delete")
+    elif isinstance(value, bool):
+        args += ["--type", "bool", "true" if value else "false"]
+    else:
+        args.append(str(value))
+    return run(args, quiet=False)
+
+
+def current_mode():
+    """light/dark as Plasma currently shows it (window background lightness, like the glass effect)"""
+    bg = kread("kdeglobals", "Colors:Window", "BackgroundNormal", "236,236,238")
+    try:
+        r, g, b = (int(v) for v in bg.split(",")[:3])
+    except ValueError:
+        return "light"
+    return "dark" if (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.5 else "light"
+
+
+# --------------------------------------------------------------------------- appliers
+def apply_plasma(w, mode_hint=None):
+    """Plasma colours (+ accent) and the automatic switch. Returns the effective mode."""
+    tokens = kc.load_tokens()
+    if w["theme"] == "auto":
+        changed = kread("kdeglobals", "KDE", "AutomaticLookAndFeel", "true") != "true"
+        kwrite("kdeglobals", "KDE", "DefaultLightLookAndFeel", LNF_LIGHT)
+        kwrite("kdeglobals", "KDE", "DefaultDarkLookAndFeel", LNF_DARK)
+        if changed:
+            # kded's look-and-feel auto switcher applies the right package within a moment;
+            # the service's kdeglobals watch follows it (follow_plasma)
+            kwrite("kdeglobals", "KDE", "AutomaticLookAndFeel", True)
+        mode = current_mode()
+    else:
+        mode = w["theme"]
+        kwrite("kdeglobals", "KDE", "AutomaticLookAndFeel", False)
+        kwrite("kdeglobals", "KDE", "LookAndFeelPackage", LNF_DARK if mode == "dark" else LNF_LIGHT)
+    set_scheme(mode, kc.accent_hex(tokens, w["accent"], mode))
+    return mode
+
+
+def set_scheme(mode, accent):
+    """Kristall colour scheme for `mode` with the accent `accent` (#hex). plasma-apply-colorscheme
+    either switches the scheme (taking the accent from kdeglobals [General] AccentColor) or, with
+    --accent-color, re-tints the current scheme; KWin blends the change over 300 ms."""
+    scheme = SCHEMES[mode]
+    want = "%d,%d,%d" % kc.hex2rgb(accent)
+    cur_scheme = kread("kdeglobals", "General", "ColorScheme", "")
+    cur_accent = (kread("kdeglobals", "General", "AccentColor", "") or "").replace(" ", "")
+    if not have("plasma-apply-colorscheme"):
+        log("plasma-apply-colorscheme missing; Qt apps keep their colours")
+        return
+    if cur_accent != want:
+        kwrite("kdeglobals", "General", "AccentColor", want, notify=False)
+    if cur_scheme != scheme:
+        run(["plasma-apply-colorscheme", scheme], timeout=30, quiet=False)
+    elif cur_accent != want:
+        run(["plasma-apply-colorscheme", "--accent-color", accent], timeout=30, quiet=False)
+
+
+def write_if_changed(path, text):
+    try:
+        if open(path, encoding="utf-8").read() == text:
+            return False
+    except OSError:
+        pass
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(tmp, path)
+    return True
+
+
+def ensure_import(css_path, line):
+    """add `@import 'kristall.css';` to the user's gtk.css, keeping whatever else is in it
+    (kde-gtk-config manages its own '@import colors.css' line in the same file)"""
+    try:
+        text = open(css_path, encoding="utf-8").read()
+    except OSError:
+        text = ""
+    if line in text:
+        return
+    write_if_changed(css_path, (text.rstrip("\n") + "\n" if text.strip() else "") + line + "\n")
+
+
+def apply_gtk(mode, accent):
+    tokens = kc.load_tokens()
+    for v in (3, 4):
+        d = os.path.join(CONFIG, f"gtk-{v}.0")
+        for name, svg in kc.GTK_GLYPHS.items():
+            write_if_changed(os.path.join(d, "kristall", name + ".svg"), svg + "\n")
+        write_if_changed(os.path.join(d, "kristall.css"), kc.gtk_css(tokens, mode, accent, v))
+        ensure_import(os.path.join(d, "gtk.css"), "@import 'kristall.css';")
+    theme = GTK_THEMES[mode]
+    # through kde-gtk-config (settings.ini, gsettings gtk-theme for Flatpak GTK 3, xsettings)
+    r = run(["gdbus", "call", "--session", "--dest", "org.kde.GtkConfig", "--object-path", "/GtkConfig",
+             "--method", "org.kde.GtkConfig.setGtkTheme", theme], timeout=5) if have("gdbus") else None
+    if not r or r.returncode != 0:
+        for v in (3, 4):
+            p = os.path.join(CONFIG, f"gtk-{v}.0", "settings.ini")
+            sys.path.insert(0, LIB)
+            import kini  # noqa: E402
+            ini = kini.KIni(open(p).read() if os.path.exists(p) else "")
+            ini.set("Settings", "gtk-theme-name", theme)
+            ini.set("Settings", "gtk-application-prefer-dark-theme", "true" if mode == "dark" else "false")
+            if ini.get("Settings", "gtk-decoration-layout") is None:
+                ini.set("Settings", "gtk-decoration-layout", "close,minimize,maximize:")
+            write_if_changed(p, ini.text())
+    if have("gsettings"):
+        # GNOME's own keys, read by GTK apps outside Plasma's portal (and by the GTK portal)
+        run(["gsettings", "set", "org.gnome.desktop.interface", "color-scheme", "prefer-dark" if mode == "dark" else "default"])
+        run(["gsettings", "set", "org.gnome.desktop.interface", "accent-color", tokens["accents"][accent]["adwaita"]])
+        run(["gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", theme])
+        # window buttons on the left in the Mac's order, also when kde-gtk-config is not running
+        run(["gsettings", "set", "org.gnome.desktop.wm.preferences", "button-layout", "close,minimize,maximize:"])
+
+
+KONSOLE_PROFILES = {"light": "Kristall", "dark": "Kristall Dark"}
+
+
+def gdbus(dest, path, method, *args, timeout=3):
+    r = run(["gdbus", "call", "--session", "--timeout", str(timeout), "--dest", dest, "--object-path", path,
+             "--method", method] + list(args), timeout=timeout + 2)
+    return r.stdout.strip() if r and r.returncode == 0 else None
+
+
+def apply_konsole(mode):
+    """Terminal: two shipped profiles; the default profile and every open session that uses one
+    of them move to the one for `mode`. A profile the owner chose is left alone."""
+    want = KONSOLE_PROFILES[mode]
+    ours = set(KONSOLE_PROFILES.values())
+    cur = kread("konsolerc", "Desktop Entry", "DefaultProfile", "Kristall.profile") or ""
+    if cur[:-len(".profile")] in ours and cur != want + ".profile":
+        kwrite("konsolerc", "Desktop Entry", "DefaultProfile", want + ".profile", notify=False)
+    if not have("gdbus"):
+        return
+    names = gdbus("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus.ListNames") or ""
+    for svc in set(re.findall(r"'(org\.kde\.konsole[^']*)'", names)):
+        intro = gdbus(svc, "/Sessions", "org.freedesktop.DBus.Introspectable.Introspect") or ""
+        for n in re.findall(r'<node name=\\?"(\d+)\\?"', intro):
+            path = f"/Sessions/{n}"
+            prof = gdbus(svc, path, "org.kde.konsole.Session.profile") or ""
+            m = re.search(r"'([^']*)'", prof)
+            if m and m.group(1) in ours and m.group(1) != want:
+                gdbus(svc, path, "org.kde.konsole.Session.setProfile", want)
+
+
+def apply_motion(w):
+    if w["reduceMotion"]:
+        if kread("kdeglobals", "KDE", "AnimationDurationFactor", "1") != "0":
+            kwrite("kdeglobals", "KDE", "AnimationDurationFactor", "0")
+    elif kread("kdeglobals", "KDE", "AnimationDurationFactor", None) == "0":
+        kwrite("kdeglobals", "KDE", "AnimationDurationFactor", None, delete=True)
+
+
+def apply_all(s=None):
+    t0 = time.monotonic()
+    w = wanted(s if s is not None else settings())
+    steps = {}
+    t = time.monotonic()
+    mode = apply_plasma(w)
+    steps["plasma"] = int((time.monotonic() - t) * 1000)
+    t = time.monotonic()
+    apply_gtk(mode, w["accent"])
+    steps["gtk"] = int((time.monotonic() - t) * 1000)
+    t = time.monotonic()
+    apply_konsole(mode)
+    apply_motion(w)
+    steps["other"] = int((time.monotonic() - t) * 1000)
+    st = {"theme": w["theme"], "mode": mode, "accent": w["accent"],
+          "accentHex": kc.accent_hex(kc.load_tokens(), w["accent"], mode), "ms": int((time.monotonic() - t0) * 1000), "steps": steps}
+    log("applied", json.dumps(st))
+    write_if_changed(os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "kristall", "appearance.json"), json.dumps(st) + "\n")
+    return st
+
+
+def follow_plasma():
+    """Plasma changed colours on its own (auto day/night, or System Settings): follow with GTK,
+    terminal and the accent's light/dark variant"""
+    w = wanted(settings())
+    mode = current_mode()
+    if w["theme"] != "auto" and mode != w["theme"]:
+        # the owner changed the colour scheme in System Settings: respect it for the followers
+        log("Plasma colours differ from appearance.theme; following Plasma")
+    tokens = kc.load_tokens()
+    if kread("kdeglobals", "General", "ColorScheme", "") in SCHEMES.values():
+        # Plasma switched light/dark: give the accent its variant for the new mode
+        set_scheme(mode, kc.accent_hex(tokens, w["accent"], mode))
+    apply_gtk(mode, w["accent"])
+    apply_konsole(mode)
+
+
+# --------------------------------------------------------------------------- service loop
+def serve():
+    try:
+        from gi.repository import Gio, GLib
+    except ImportError:
+        log("python3-gobject missing; applying once and exiting")
+        apply_all()
+        return 0
+    loop = GLib.MainLoop()
+    state = {"last": None, "busy": False, "pending_follow": None}
+
+    def on_settings(_src, cond):
+        line = proc.stdout.readline()
+        if not line:
+            log("kristall-settings watch ended")
+            loop.quit()
+            return False
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            return True
+        if ev.get("path", "").startswith(("appearance.theme", "appearance.accent", "accessibility.reduceMotion")):
+            GLib.idle_add(lambda: (apply_all(), False)[1])
+        return True
+
+    def on_kdeglobals(*_a):
+        # coalesce bursts (plasma-apply-colorscheme writes several times)
+        if state["pending_follow"]:
+            GLib.source_remove(state["pending_follow"])
+
+        def run_follow():
+            state["pending_follow"] = None
+            mode = current_mode()
+            if mode != state["last"]:
+                state["last"] = mode
+                follow_plasma()
+            return False
+        state["pending_follow"] = GLib.timeout_add(150, run_follow)
+
+    st = apply_all()
+    state["last"] = st["mode"]
+    proc = subprocess.Popen(["kristall-settings", "watch", "appearance", "accessibility"], stdout=subprocess.PIPE, text=True, bufsize=1)
+    GLib.io_add_watch(proc.stdout.fileno(), GLib.IO_IN | GLib.IO_HUP, on_settings)
+    kg = Gio.File.new_for_path(os.path.join(CONFIG, "kdeglobals"))
+    mon = kg.monitor_file(Gio.FileMonitorFlags.WATCH_MOVES, None)
+    mon.connect("changed", on_kdeglobals)
+    loop.run()
+    proc.terminate()
+    return 0
+
+
+# --------------------------------------------------------------------------- CLI
+def wallpapers():
+    names = {"Kristall": {"en": "Crystal", "de": "Kristall"}, "Kristall-Welle": {"en": "Wave", "de": "Welle"},
+             "Kristall-Horizont": {"en": "Horizon", "de": "Horizont"}}
+    out = []
+    for wid in WALLPAPER_IDS:
+        for d in os.environ.get("XDG_DATA_DIRS", "/usr/share").split(":"):
+            p = os.path.join(d, "wallpapers", wid)
+            if os.path.isdir(p):
+                out.append({"id": wid, "name": names[wid], "path": p + "/",
+                            "preview": os.path.join(p, "contents", "screenshot.jpg"), "hasDark": True})
+                break
+    return out
+
+
+def set_wallpaper(wid):
+    entry = next((w for w in wallpapers() if w["id"] == wid), None)
+    path = entry["path"] if entry else wid
+    if not os.path.exists(path):
+        log("no such wallpaper:", wid)
+        return 1
+    # the desktop (plasmashell) and the lock screen; the package's dark images follow the colour scheme
+    r = run(["plasma-apply-wallpaperimage", path], timeout=20, quiet=False)
+    kwrite("kscreenlockerrc", "Greeter][Wallpaper][org.kde.image][General", "Image", path)
+    kwrite("kscreenlockerrc", "Greeter][Wallpaper][org.kde.image][General", "PreviewImage", path)
+    return 0 if r and r.returncode == 0 else 1
+
+
+def main(argv):
+    cmd = argv[1] if len(argv) > 1 else "run"
+    if cmd == "run":
+        return serve()
+    if cmd == "apply":
+        print(json.dumps(apply_all()))
+        return 0
+    if cmd == "status":
+        w = wanted(settings())
+        st = {"theme": w["theme"], "accent": w["accent"], "mode": current_mode(),
+              "colorScheme": kread("kdeglobals", "General", "ColorScheme", ""),
+              "lookAndFeel": kread("kdeglobals", "KDE", "LookAndFeelPackage", ""),
+              "automatic": kread("kdeglobals", "KDE", "AutomaticLookAndFeel", "false") == "true",
+              "accentColor": kread("kdeglobals", "General", "AccentColor", "")}
+        print(json.dumps(st) if "--json" in argv else "\n".join(f"{k}: {v}" for k, v in st.items()))
+        return 0
+    if cmd == "accents":
+        t = kc.load_tokens()
+        print(json.dumps([{"id": k, "light": t["accents"][k]["light"], "dark": t["accents"][k]["dark"],
+                           "name": {"en": t["accents"][k]["en"], "de": t["accents"][k]["de"]}} for k in t["accentOrder"]],
+                         ensure_ascii=False))
+        return 0
+    if cmd == "wallpapers":
+        print(json.dumps(wallpapers(), ensure_ascii=False))
+        return 0
+    if cmd == "wallpaper" and len(argv) > 3 and argv[2] == "set":
+        return set_wallpaper(argv[3])
+    print(__doc__, file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

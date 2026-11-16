@@ -1,0 +1,52 @@
+# Fast checks that need no OS image: scripts, tools, manifests, package names, workflows.
+# Called by build.yml before every image build; can also be started by hand.
+name: Checks
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  image-component:
+    name: Image component tests
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Install linters
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/lint"
+          "$RUNNER_TEMP/lint/bin/pip" install --quiet shellcheck-py==0.11.0.1 actionlint-py==1.7.12.25 yamllint==1.38.0 pyyaml
+          echo "$RUNNER_TEMP/lint/bin" >> "$GITHUB_PATH"
+
+      - name: Run image/tests/run.sh
+        run: bash image/tests/run.sh
+
+  verify-names:
+    name: Package names and Flatpak IDs exist
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Flatpak IDs on Flathub
+        run: bash image/tests/verify-flathub.sh "$RUNNER_TEMP/verified.txt"
+
+      - name: RPM names in Fedora (same release as the base image)
+        run: |
+          set -euo pipefail
+          fedora=$(sed -n 's/^ARG FEDORA_VERSION=//p' Containerfile)
+          echo "Fedora ${fedora}"
+          podman run --rm -v "$PWD:/src:ro,Z" "quay.io/fedora/fedora:${fedora}" \
+            bash /src/image/tests/verify-fedora-packages.sh /src

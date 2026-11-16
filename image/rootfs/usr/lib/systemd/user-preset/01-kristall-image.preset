@@ -1,0 +1,3 @@
+# Kristall OS (image component): per-user units, enabled for every user via `systemctl --global`.
+enable kristall-update-notify.path
+enable kristall-update-notify.service

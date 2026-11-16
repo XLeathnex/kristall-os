@@ -1,0 +1,134 @@
+#!/usr/bin/python3 -I
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""kristall-bridgectl: inspect and drive kristall-bridge (tests and debugging).
+
+  kristall-bridgectl hello
+  kristall-bridgectl windows                       # window list as JSON
+  kristall-bridgectl watch [topic ...]             # print events (default: all topics)
+  kristall-bridgectl call METHOD ['{"json":"params"}']
+  kristall-bridgectl cursor
+  kristall-bridgectl click X Y [--button right] [--count 2]
+  kristall-bridgectl drag X1 Y1 X2 Y2 [--duration 300]
+  kristall-bridgectl scroll X Y DY [--dx N]
+  kristall-bridgectl key CHORD [--window ID]
+  kristall-bridgectl type TEXT [--window ID]
+  kristall-bridgectl screenshot [--window ID|--output NAME|--region X,Y,W,H] [--max-width N] [--exclude-shell]
+
+Agent commands open a session labelled "kristall-bridgectl" for the duration of the command.
+Privileged commands work when this tool is the installed /usr/bin/kristall-bridgectl (or when KWin
+runs with KRISTALL_BRIDGE_DEV=1).
+"""
+import argparse
+import json
+import os
+import sys
+
+for candidate in ("/usr/lib/kristall/bridge/python",
+                  os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "python")):
+    if os.path.exists(os.path.join(candidate, "kristall_bridge.py")):
+        sys.path.insert(0, candidate)
+        break
+
+from kristall_bridge import Bridge, BridgeError  # noqa: E402
+
+TOPICS = ["windows", "active", "stacking", "outputs", "desktops", "agent"]
+
+
+def out(obj):
+    print(json.dumps(obj, ensure_ascii=False, indent=2))
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(prog="kristall-bridgectl", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--socket", help="socket path (default $XDG_RUNTIME_DIR/kristall/bridge.sock)")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("hello")
+    sub.add_parser("windows")
+    sub.add_parser("cursor")
+    w = sub.add_parser("watch")
+    w.add_argument("topics", nargs="*")
+    c = sub.add_parser("call")
+    c.add_argument("method")
+    c.add_argument("params", nargs="?", default="{}")
+    k = sub.add_parser("click")
+    k.add_argument("x", type=float)
+    k.add_argument("y", type=float)
+    k.add_argument("--button", default="left")
+    k.add_argument("--count", type=int, default=1)
+    d = sub.add_parser("drag")
+    for n in ("x1", "y1", "x2", "y2"):
+        d.add_argument(n, type=float)
+    d.add_argument("--duration", type=int, default=300)
+    s = sub.add_parser("scroll")
+    s.add_argument("x", type=float)
+    s.add_argument("y", type=float)
+    s.add_argument("dy", type=float)
+    s.add_argument("--dx", type=float, default=0)
+    ky = sub.add_parser("key")
+    ky.add_argument("chord")
+    ky.add_argument("--window")
+    t = sub.add_parser("type")
+    t.add_argument("text")
+    t.add_argument("--window")
+    sh = sub.add_parser("screenshot")
+    sh.add_argument("--window")
+    sh.add_argument("--output")
+    sh.add_argument("--region")
+    sh.add_argument("--max-width", type=int, default=0)
+    sh.add_argument("--max-height", type=int, default=0)
+    sh.add_argument("--exclude-shell", action="store_true")
+    sh.add_argument("--cursor", action="store_true")
+    a = p.parse_args(argv)
+
+    try:
+        with Bridge(path=a.socket, client="kristall-bridgectl") as b:
+            if a.cmd == "hello":
+                out(b.info)
+            elif a.cmd == "windows":
+                out(b.call("window.list")["windows"])
+            elif a.cmd == "cursor":
+                out(b.call("cursor.get"))
+            elif a.cmd == "watch":
+                b.subscribe(*(a.topics or TOPICS))
+                while True:
+                    ev = b.next_event(timeout=3600)
+                    if ev:
+                        print(json.dumps(ev, ensure_ascii=False), flush=True)
+            elif a.cmd == "call":
+                out(b.call(a.method, **json.loads(a.params)))
+            elif a.cmd == "screenshot":
+                target = "desktop"
+                if a.window:
+                    target = {"window": a.window}
+                elif a.output:
+                    target = {"output": a.output}
+                elif a.region:
+                    x, y, w_, h = (float(v) for v in a.region.split(","))
+                    target = {"region": {"x": x, "y": y, "w": w_, "h": h}}
+                out(b.call("screenshot", target=target, maxWidth=a.max_width, maxHeight=a.max_height,
+                           excludeShell=a.exclude_shell, includeCursor=a.cursor))
+            else:
+                with b.agent_session("kristall-bridgectl") as s:
+                    if a.cmd == "click":
+                        out(s.click(a.x, a.y, button=a.button, count=a.count))
+                    elif a.cmd == "drag":
+                        out(s.drag((a.x1, a.y1), (a.x2, a.y2), duration_ms=a.duration))
+                    elif a.cmd == "scroll":
+                        out(s.scroll(a.x, a.y, dx=a.dx, dy=a.dy))
+                    elif a.cmd == "key":
+                        out(s.key(a.chord, window_id=a.window))
+                    elif a.cmd == "type":
+                        out(s.text(a.text, window_id=a.window))
+    except BridgeError as e:
+        print(f"kristall-bridgectl: {e}", file=sys.stderr)
+        return 2
+    except (OSError, TimeoutError) as e:
+        print(f"kristall-bridgectl: {e}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        return 130
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

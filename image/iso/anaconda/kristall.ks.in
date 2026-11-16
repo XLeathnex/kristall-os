@@ -1,0 +1,30 @@
+# Kristall OS: appended to /usr/share/anaconda/interactive-defaults.ks by build-live.sh.
+# @IMAGE_REF@ / @IMAGE_TAG@ / @PAYLOAD@ are filled in at ISO build time.
+
+# Install the OS image that travels on the USB stick (no download needed during installation).
+ostreecontainer --url=@PAYLOAD@ --transport=oci --no-signature-verification
+
+# From now on, take updates from the registry the image is published to.
+%post --erroronfail --log=/tmp/kristall-switch.log
+bootc switch --mutate-in-place --transport registry @IMAGE_REF@:@IMAGE_TAG@
+%end
+
+# Copy the apps that came on the USB stick, so they are there on first start.
+%post --nochroot --log=/tmp/kristall-flatpaks.log
+set -eu
+phys=""
+for r in /mnt/sysroot /mnt/sysimage; do
+  if [ -d "$r/ostree/deploy" ]; then phys=$r; break; fi
+done
+[ -n "$phys" ] || { echo "no ostree sysroot found; apps will be downloaded on first start"; exit 0; }
+stateroot=$(ls "$phys/ostree/deploy" | head -n1)
+target="$phys/ostree/deploy/$stateroot/var/lib"
+mkdir -p "$target"
+if [ -d /var/lib/flatpak ]; then
+  rsync -aAXUHK --filter='-x security.selinux' /var/lib/flatpak "$target/"
+fi
+%end
+
+%post --log=/tmp/kristall-relabel.log
+restorecon -RF /var/lib/flatpak 2>/dev/null || true
+%end

@@ -1,0 +1,28 @@
+{
+  "assistant": {
+    "enabled": true,
+    "name": "Kristall",
+    "language": "de",
+    "owner_name": "",
+    "voice": {
+      "de": "de_DE-thorsten-medium",
+      "en": "en_US-joe-medium"
+    },
+    "speaking_rate": 1.0,
+    "input_mode": "voice",
+    "speak_replies": "voice_only",
+    "recognizer": "parakeet",
+    "barge_in": "auto",
+    "wake_word": false,
+    "duck_other_audio": true,
+    "model": "claude-haiku-5-5",
+    "effort": "low",
+    "conversation_window_seconds": 180,
+    "end_of_speech_ms": 800,
+    "no_speech_timeout_seconds": 7,
+    "max_utterance_seconds": 45,
+    "models_unload_after_seconds": 300,
+    "brain_unload_after_seconds": 600,
+    "permission_timeout_seconds": 120
+  }
+}

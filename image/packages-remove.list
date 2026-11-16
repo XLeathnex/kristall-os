@@ -1,0 +1,11 @@
+# RPMs removed from the base because they would confuse the owner or duplicate a Kristall piece.
+# Removal is only used where nothing else depends on the package (checked against Fedora 45);
+# everything else is hidden instead (hidden-apps.list).
+
+# Plasma's own welcome wizard: the Kristall Setup Assistant (setup component) replaces it.
+plasma-welcome
+plasma-welcome-fedora
+# Offline help centre; KDE apps fall back to the online handbook in the browser.
+khelpcenter
+# Discover's update notifier would announce updates that kristall-update already handles.
+plasma-discover-notifier

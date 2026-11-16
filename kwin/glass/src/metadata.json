@@ -1,0 +1,19 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Kristall OS contributors"
+            },
+            {
+                "Name": "KWin development team (blur effect this is partly derived from)"
+            }
+        ],
+        "Category": "Appearance",
+        "Description": "Liquid Glass: refracting glass material for the Kristall shell and for every surface that asks for background blur",
+        "Description[de]": "Liquid Glass: lichtbrechendes Glasmaterial für die Kristall-Oberfläche und alle Fenster, die einen unscharfen Hintergrund anfordern",
+        "EnabledByDefault": true,
+        "License": "GPL",
+        "Name": "Kristall Liquid Glass",
+        "Name[de]": "Kristall Liquid Glass"
+    }
+}

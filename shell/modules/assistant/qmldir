@@ -1,0 +1,15 @@
+# Types of the assistant module for the implicit directory import (Quickshell 0.2.1 serves a module
+# directory that nothing imports by name without a qmldir). tests/run.sh checks it lists every *.qml.
+ActivityLine 1.0 ActivityLine.qml
+AgentCursor 1.0 AgentCursor.qml
+AssistantClient 1.0 AssistantClient.qml
+AssistantTestHooks 1.0 AssistantTestHooks.qml
+EdgeLight 1.0 EdgeLight.qml
+LightStrip 1.0 LightStrip.qml
+MicBadge 1.0 MicBadge.qml
+NoticeCard 1.0 NoticeCard.qml
+Orb 1.0 Orb.qml
+Panel 1.0 Panel.qml
+PanelBody 1.0 PanelBody.qml
+PermissionCard 1.0 PermissionCard.qml
+ReplyText 1.0 ReplyText.qml

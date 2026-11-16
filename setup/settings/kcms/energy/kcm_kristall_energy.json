@@ -1,0 +1,22 @@
+{
+    "KPlugin": {
+        "Name": "Battery & Energy",
+        "Name[de]": "Batterie und Energie",
+        "Description": "Energy mode, charge limit, health check",
+        "Description[de]": "Energiemodus, Ladegrenze, Gesundheitscheck",
+        "Icon": "battery-good",
+        "Authors": [
+            {
+                "Name": "Kristall OS contributors"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "FormFactors": [
+            "desktop"
+        ]
+    },
+    "X-KDE-System-Settings-Parent-Category": "kristall",
+    "X-KDE-Weight": 7,
+    "X-KDE-Keywords": "battery,energy,power,charge,mode",
+    "X-KDE-Keywords[de]": "batterie,akku,energie,laden,modus"
+}

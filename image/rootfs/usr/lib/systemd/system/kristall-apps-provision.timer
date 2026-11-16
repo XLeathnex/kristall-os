@@ -1,0 +1,11 @@
+[Unit]
+Description=Retry installing the Kristall OS default apps until all are present
+ConditionKernelCommandLine=!rd.live.image
+
+[Timer]
+OnBootSec=45s
+OnUnitInactiveSec=10min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

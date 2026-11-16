@@ -1,0 +1,204 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Kristall OS: tiny command-line client for the glass socket (docs/contracts/glass.md).
+# For scripts and tests; the owner never needs it.
+"""kristall-glass-ctl — talk to the Liquid Glass effect.
+
+  check                         exit 0 if glass is active, 1 if absent/failed/disabled
+  status                        print the status object (counters, windows, quality)
+  watch                         print every event until interrupted
+  apply --namespace NS --shapes JSON|@file [--output O] [--pid N] [--app-id ID]
+                                bind a surface and set its shapes; keeps the connection
+                                (shapes disappear when this command ends) until SIGINT/SIGTERM
+                                or until stdin closes when --stdin-hold is given
+  pipe                          raw mode: JSON lines from stdin go to the socket,
+                                events are printed to stdout (one JSON object per line)
+  quality high|efficient|auto   send a quality hint (auto = clear the hint) and hold
+  debug [--timing on|off] [--isolate refraction|none]
+                                toggle debug features; with --timing on, prints timing
+                                events until interrupted
+"""
+import argparse
+import json
+import os
+import select
+import signal
+import socket
+import sys
+import time
+
+
+def socket_path():
+    env = os.environ.get("KRISTALL_GLASS_SOCKET")
+    if env:
+        return env
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    if not runtime:
+        sys.exit("XDG_RUNTIME_DIR is not set")
+    return os.path.join(runtime, "kristall", "glass.sock")
+
+
+class Conn:
+    def __init__(self, timeout=2.0):
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.settimeout(timeout)
+        self.sock.connect(socket_path())
+        self.buf = b""
+
+    def send(self, obj):
+        self.sock.sendall((json.dumps(obj, separators=(",", ":")) + "\n").encode())
+
+    def events(self, timeout=None):
+        """yield events until timeout (None = forever)"""
+        end = None if timeout is None else time.monotonic() + timeout
+        while True:
+            while b"\n" in self.buf:
+                line, self.buf = self.buf.split(b"\n", 1)
+                if line.strip():
+                    yield json.loads(line)
+            remaining = None if end is None else end - time.monotonic()
+            if remaining is not None and remaining <= 0:
+                return
+            r, _, _ = select.select([self.sock], [], [], remaining)
+            if not r:
+                return
+            data = self.sock.recv(65536)
+            if not data:
+                return
+            self.buf += data
+
+    def wait_for(self, name, timeout=2.0):
+        for ev in self.events(timeout):
+            if ev.get("event") == name:
+                return ev
+        return None
+
+
+def hold():
+    stop = []
+    signal.signal(signal.SIGTERM, lambda *a: stop.append(1))
+    try:
+        while not stop:
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        pass
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = p.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("check")
+    sub.add_parser("status")
+    sub.add_parser("watch")
+    sub.add_parser("pipe")
+    a = sub.add_parser("apply")
+    a.add_argument("--surface", default="cli")
+    a.add_argument("--namespace")
+    a.add_argument("--app-id")
+    a.add_argument("--output")
+    a.add_argument("--pid", type=int, default=0, help="window owner pid (default 0 = any process)")
+    a.add_argument("--shapes", required=True, help="JSON array or @file")
+    a.add_argument("--stdin-hold", action="store_true")
+    q = sub.add_parser("quality")
+    q.add_argument("tier", choices=["high", "efficient", "auto"])
+    d = sub.add_parser("debug")
+    d.add_argument("--timing", choices=["on", "off"])
+    d.add_argument("--isolate", choices=["refraction", "none"])
+    args = p.parse_args()
+
+    try:
+        c = Conn()
+    except OSError as e:
+        if args.cmd == "check":
+            print("absent")
+            return 1
+        sys.exit(f"glass is not available ({socket_path()}): {e.strerror}")
+    hello = c.wait_for("hello")
+    if hello is None:
+        sys.exit("no hello from the glass server")
+
+    if args.cmd == "check":
+        print(hello.get("state"))
+        return 0 if hello.get("state") == "active" else 1
+    if args.cmd == "status":
+        c.send({"op": "status"})
+        print(json.dumps(c.wait_for("status"), indent=2))
+        return 0
+    if args.cmd == "watch":
+        print(json.dumps(hello), flush=True)
+        c.sock.settimeout(None)
+        for ev in c.events():
+            print(json.dumps(ev), flush=True)
+        return 0
+    if args.cmd == "pipe":
+        print(json.dumps(hello), flush=True)
+        c.sock.setblocking(False)
+        stdin_open = True
+        while True:
+            fds = [c.sock] + ([sys.stdin] if stdin_open else [])
+            r, _, _ = select.select(fds, [], [], None if stdin_open else 0.5)
+            if c.sock in r:
+                data = c.sock.recv(65536)
+                if not data:
+                    return 0
+                c.buf += data
+                while b"\n" in c.buf:
+                    line, c.buf = c.buf.split(b"\n", 1)
+                    print(line.decode(), flush=True)
+            if stdin_open and sys.stdin in r:
+                line = sys.stdin.readline()
+                if not line:
+                    stdin_open = False
+                    return 0
+                c.sock.setblocking(True)
+                c.sock.sendall(line.encode() if line.endswith("\n") else (line + "\n").encode())
+                c.sock.setblocking(False)
+    if args.cmd == "apply":
+        shapes = args.shapes
+        if shapes.startswith("@"):
+            with open(shapes[1:]) as f:
+                shapes = f.read()
+        match = {"pid": args.pid}
+        if args.namespace:
+            match["namespace"] = args.namespace
+        if args.app_id:
+            match["appId"] = args.app_id
+        if args.output:
+            match["output"] = args.output
+        c.send({"op": "bind", "surface": args.surface, "match": match})
+        c.send({"op": "shapes", "surface": args.surface, "shapes": json.loads(shapes)})
+        ev = c.wait_for("bound", 2.0)
+        print(json.dumps(ev), flush=True)
+        if args.stdin_hold:
+            sys.stdin.read()
+        else:
+            hold()
+        return 0
+    if args.cmd == "quality":
+        c.send({"op": "config", "qualityHint": None if args.tier == "auto" else args.tier})
+        print(json.dumps(c.wait_for("state", 1.0) or {}), flush=True)
+        if args.tier != "auto":
+            hold()
+        return 0
+    if args.cmd == "debug":
+        msg = {"op": "debug"}
+        if args.timing:
+            msg["timing"] = args.timing == "on"
+        if args.isolate:
+            msg["isolate"] = args.isolate
+        c.send(msg)
+        print(json.dumps(c.wait_for("debug")), flush=True)
+        if args.timing == "on":
+            c.sock.settimeout(None)
+            try:
+                for ev in c.events():
+                    if ev.get("event") == "timing":
+                        print(json.dumps(ev), flush=True)
+            except KeyboardInterrupt:
+                pass
+        return 0
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

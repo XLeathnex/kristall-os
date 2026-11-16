@@ -1,0 +1,458 @@
+#!/usr/bin/python3 -IS
+# SPDX-License-Identifier: GPL-3.0-or-later
+# kristall-apps: the default app set of Kristall OS (manifest queries + first-boot Flatpak provisioning).
+# Specification: docs/contracts/apps.md. Standard library only.
+import errno
+import fcntl
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import time
+
+SCHEMA = 1
+MANIFEST = os.environ.get("KRISTALL_APPS_MANIFEST", "/usr/share/kristall/apps/apps.json")
+STATE_DIR = os.environ.get("KRISTALL_APPS_STATE_DIR", "/var/lib/kristall/apps")
+STATUS_FILE = os.path.join(STATE_DIR, "status.json")
+STATE_FILE = os.path.join(STATE_DIR, "state.json")
+LOCK_FILE = os.path.join(STATE_DIR, ".lock")
+DRM_DIR = os.environ.get("KRISTALL_DRM_DIR", "/sys/class/drm")
+TIMER = "kristall-apps-provision.timer"
+
+ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+FLATPAK_RE = re.compile(r"^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+){2,}$")
+CATEGORIES = {"system", "internet", "media", "graphics", "games", "developer", "utilities",
+              "productivity"}
+KINDS = {"rpm", "flatpak"}
+
+
+def log(msg):
+    sys.stderr.write("kristall-apps: %s\n" % msg)
+    sys.stderr.flush()
+
+
+def now_iso():
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def read_json(path, default=None):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return default
+
+
+def write_json_atomic(path, doc):
+    d = os.path.dirname(path)
+    os.makedirs(d, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".tmp-", suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(doc, f, ensure_ascii=False, indent=2, sort_keys=True)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def run(cmd, timeout=None):
+    try:
+        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           timeout=timeout, check=False)
+        return p.returncode, p.stdout.decode("utf-8", "replace")
+    except FileNotFoundError:
+        return 127, "%s: not found" % cmd[0]
+    except subprocess.TimeoutExpired:
+        return 124, "%s: timed out" % cmd[0]
+
+
+# ---------------------------------------------------------------- manifest
+
+def validate(doc):
+    """Return a list of error strings (empty = valid)."""
+    errs = []
+    if not isinstance(doc, dict) or doc.get("schema") != SCHEMA:
+        return ["top level must be an object with \"schema\": %d" % SCHEMA]
+    apps = doc.get("apps")
+    if not isinstance(apps, list) or not apps:
+        return ["\"apps\" must be a non-empty array"]
+    seen, docks, desktop_ids = set(), {}, {}
+    for i, a in enumerate(apps):
+        where = "apps[%d]" % i
+        if not isinstance(a, dict):
+            errs.append("%s: must be an object" % where)
+            continue
+        aid = a.get("id")
+        where = "apps[%d] (%s)" % (i, aid)
+        if not isinstance(aid, str) or not ID_RE.match(aid):
+            errs.append("%s: id must match %s" % (where, ID_RE.pattern))
+        elif aid in seen:
+            errs.append("%s: duplicate id" % where)
+        seen.add(aid)
+        kind = a.get("kind")
+        if kind not in KINDS:
+            errs.append("%s: kind must be one of %s" % (where, sorted(KINDS)))
+        if kind == "rpm" and not (isinstance(a.get("package"), str) and a["package"]):
+            errs.append("%s: rpm apps need \"package\"" % where)
+        if kind == "flatpak":
+            fp = a.get("flatpak")
+            if not isinstance(fp, dict) or not FLATPAK_RE.match(str(fp.get("id", ""))):
+                errs.append("%s: flatpak apps need \"flatpak\": {\"id\": <app id>}" % where)
+            else:
+                for k in ("remote", "branch"):
+                    if k in fp and not isinstance(fp[k], str):
+                        errs.append("%s: flatpak.%s must be a string" % (where, k))
+                ov = fp.get("overrides", [])
+                if not isinstance(ov, list) or not all(isinstance(o, str) and o.startswith("--") for o in ov):
+                    errs.append("%s: flatpak.overrides must be a list of --options" % where)
+            if not isinstance(a.get("embed_in_iso"), bool):
+                errs.append("%s: flatpak apps need boolean \"embed_in_iso\"" % where)
+            if a.get("embed_in_iso") and a.get("proprietary"):
+                errs.append("%s: proprietary apps must not be embedded in the ISO" % where)
+        did = a.get("desktop_id")
+        if not isinstance(did, str) or not did.endswith(".desktop"):
+            errs.append("%s: desktop_id must end in .desktop" % where)
+        elif did in desktop_ids:
+            errs.append("%s: desktop_id also used by %s" % (where, desktop_ids[did]))
+        else:
+            desktop_ids[did] = aid
+        name = a.get("name")
+        if not isinstance(name, dict) or not all(isinstance(name.get(l), str) and name.get(l)
+                                                  for l in ("en", "de")):
+            errs.append("%s: name needs non-empty \"en\" and \"de\"" % where)
+        if a.get("category") not in CATEGORIES:
+            errs.append("%s: category must be one of %s" % (where, sorted(CATEGORIES)))
+        for b in ("default", "show_in_apps", "proprietary"):
+            if not isinstance(a.get(b), bool):
+                errs.append("%s: \"%s\" must be true or false" % (where, b))
+        dock = a.get("dock")
+        if dock is not None:
+            if not isinstance(dock, int) or isinstance(dock, bool) or dock < 1:
+                errs.append("%s: dock must be null or a positive integer" % where)
+            elif dock in docks:
+                errs.append("%s: dock position %d also used by %s" % (where, dock, docks[dock]))
+            else:
+                docks[dock] = aid
+            if a.get("show_in_apps") is False:
+                errs.append("%s: an app in the Dock must also be shown in Apps" % where)
+        if not isinstance(a.get("license"), str) or not a.get("license"):
+            errs.append("%s: license must be a non-empty string" % where)
+    if docks and sorted(docks) != list(range(1, len(docks) + 1)):
+        errs.append("dock positions must be 1..N without gaps (got %s)" % sorted(docks))
+    runtimes = doc.get("runtimes", [])
+    if not isinstance(runtimes, list):
+        errs.append("\"runtimes\" must be an array")
+        runtimes = []
+    for i, r in enumerate(runtimes):
+        where = "runtimes[%d]" % i
+        if not isinstance(r, dict) or not FLATPAK_RE.match(str(r.get("id", ""))):
+            errs.append("%s: needs \"id\": <runtime or extension id>" % where)
+            continue
+        if not isinstance(r.get("branch"), str) or not r["branch"]:
+            errs.append("%s (%s): needs \"branch\"" % (where, r["id"]))
+        if "remote" in r and not isinstance(r["remote"], str):
+            errs.append("%s (%s): remote must be a string" % (where, r["id"]))
+    return errs
+
+
+def load_manifest(path=None):
+    doc = read_json(path or MANIFEST)
+    if doc is None:
+        raise SystemExit("kristall-apps: cannot read manifest %s" % (path or MANIFEST))
+    errs = validate(doc)
+    if errs:
+        for e in errs:
+            log("manifest error: " + e)
+        raise SystemExit(3)
+    return doc
+
+
+def flatpak_info_installed(app_id):
+    rc, _ = run(["flatpak", "info", "--system", app_id], timeout=60)
+    return rc == 0
+
+
+def rpm_installed(pkg):
+    rc, _ = run(["rpm", "-q", pkg], timeout=60)
+    return rc == 0
+
+
+# ---------------------------------------------------------------- status
+
+def item_entry(app):
+    return {"id": app["id"], "flatpak": app["flatpak"]["id"], "name": app["name"], "state": "pending"}
+
+
+def write_status(items, state, current=None, reason=None):
+    done = sum(1 for i in items if i["state"] in ("installed", "skipped"))
+    failed = [{"id": i["id"], "error": i.get("error")} for i in items if i["state"] == "failed"]
+    write_json_atomic(STATUS_FILE, {
+        "schema": SCHEMA,
+        "state": state,
+        "total": len(items),
+        "done": done,
+        "current": current,
+        "failed": failed,
+        "reason": reason,
+        "items": items,
+        "updated": now_iso(),
+    })
+
+
+def nm_connectivity():
+    rc, out = run(["busctl", "get-property", "org.freedesktop.NetworkManager",
+                   "/org/freedesktop/NetworkManager", "org.freedesktop.NetworkManager",
+                   "Connectivity"], timeout=10)
+    if rc != 0:
+        return None
+    parts = out.split()
+    return int(parts[1]) if len(parts) >= 2 and parts[1].isdigit() else None
+
+
+def has_intel_gpu():
+    try:
+        for card in os.listdir(DRM_DIR):
+            try:
+                with open(os.path.join(DRM_DIR, card, "device", "vendor")) as f:
+                    if f.read().strip().lower() == "0x8086":
+                        return True
+            except OSError:
+                continue
+    except OSError:
+        pass
+    return False
+
+
+def ensure_intel_vaapi():
+    """Flatpak only fetches the Intel VA-API driver extension when it notices the GPU; make sure."""
+    if not has_intel_gpu():
+        return
+    rc, out = run(["flatpak", "list", "--system", "--runtime", "--columns=ref"], timeout=120)
+    if rc != 0:
+        return
+    for ref in out.split():
+        parts = ref.split("/")
+        if len(parts) == 3 and parts[0] == "org.freedesktop.Platform":
+            ext = "runtime/org.freedesktop.Platform.VAAPI.Intel/%s/%s" % (parts[1], parts[2])
+            run(["flatpak", "install", "--system", "-y", "--noninteractive", "flathub", ext],
+                timeout=1800)
+
+
+def ensure_runtimes(manifest, state):
+    """Runtimes and extensions the image's look needs in Flatpak apps (apps.json "runtimes", e.g.
+    the adw-gtk3 GTK 3 themes). Installed once each, best effort: a failure is logged and tried
+    again on the next run; one the owner removed later is not brought back."""
+    done = set(state.get("runtimes_provisioned", []))
+    arch = None
+    for r in manifest.get("runtimes", []):
+        key = "%s//%s" % (r["id"], r["branch"])
+        if key in done:
+            continue
+        if arch is None:
+            rc, out = run(["flatpak", "--default-arch"], timeout=60)
+            arch = out.strip() if rc == 0 and out.strip() else "x86_64"
+        ref = "runtime/%s/%s/%s" % (r["id"], arch, r["branch"])
+        rc, _ = run(["flatpak", "info", "--system", ref], timeout=60)
+        if rc != 0:
+            log("installing %s" % ref)
+            rc, out = run(["flatpak", "install", "--system", "-y", "--noninteractive",
+                           r.get("remote", "flathub"), ref], timeout=1800)
+            if rc != 0:
+                log("installing %s failed (retried later): %s" % (ref, out.strip()[-300:]))
+                continue
+        done.add(key)
+    state["runtimes_provisioned"] = sorted(done)
+
+
+# ---------------------------------------------------------------- provisioning
+
+def provision(manifest):
+    apps = [a for a in manifest["apps"] if a["kind"] == "flatpak" and a["default"]]
+    state = read_json(STATE_FILE, {}) or {}
+    provisioned = set(state.get("provisioned", []))
+    items = []
+    for a in apps:
+        it = item_entry(a)
+        if a["id"] in provisioned:
+            it["state"] = "skipped"  # installed once before; a removal by the owner is respected
+        items.append(it)
+    write_status(items, "installing")
+
+    rc, out = run(["flatpak", "remote-add", "--system", "--if-not-exists", "flathub",
+                   "/etc/flatpak/remotes.d/flathub.flatpakrepo"], timeout=120)
+    if rc not in (0, 127):
+        log("adding the Flathub remote failed: " + out.strip())
+
+    pending = [(a, it) for a, it in zip(apps, items) if it["state"] == "pending"]
+    for a, it in pending:
+        fp = a["flatpak"]
+        if flatpak_info_installed(fp["id"]):
+            it["state"] = "installed"  # e.g. embedded by the installer ISO
+        else:
+            conn = nm_connectivity()
+            if conn is not None and conn < 4:
+                write_status(items, "waiting-for-network", reason="offline")
+                log("no internet connection yet; will retry")
+                save_state(state, provisioned)
+                return 75  # EX_TEMPFAIL: the timer tries again
+            it["state"] = "installing"
+            write_status(items, "installing", current={"id": a["id"], "name": a["name"]})
+            log("installing %s (%s)" % (a["name"]["en"], fp["id"]))
+            ref = fp["id"] if not fp.get("branch") else "app/%s//%s" % (fp["id"], fp["branch"])
+            rc, out = run(["flatpak", "install", "--system", "-y", "--noninteractive",
+                           fp.get("remote", "flathub"), ref], timeout=4 * 3600)
+            if rc != 0:
+                it["state"] = "failed"
+                it["error"] = out.strip().splitlines()[-1] if out.strip() else "exit %d" % rc
+                log("installing %s failed: %s" % (fp["id"], out.strip()))
+                write_status(items, "installing")
+                continue
+            it["state"] = "installed"
+        if fp.get("overrides"):
+            run(["flatpak", "override", "--system"] + fp["overrides"] + [fp["id"]], timeout=60)
+        provisioned.add(a["id"])
+        save_state(state, provisioned)
+        write_status(items, "installing")
+
+    ensure_intel_vaapi()
+    ensure_runtimes(manifest, state)
+    failed = [i for i in items if i["state"] == "failed"]
+    write_status(items, "error" if failed else "done")
+    save_state(state, provisioned)
+    return 1 if failed else 0
+
+
+def save_state(state, provisioned):
+    state["schema"] = SCHEMA
+    state["provisioned"] = sorted(provisioned)
+    state["updated"] = now_iso()
+    write_json_atomic(STATE_FILE, state)
+
+
+def cmd_provision(args):
+    if os.geteuid() != 0 and os.environ.get("KRISTALL_APPS_FORCE_ROOT") != "1":
+        log("provision must run as root (it is started by systemd)")
+        return 2
+    manifest = load_manifest()
+    os.makedirs(STATE_DIR, exist_ok=True)
+    fd = os.open(LOCK_FILE, os.O_RDWR | os.O_CREAT, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as e:
+        if e.errno in (errno.EWOULDBLOCK, errno.EAGAIN):
+            log("already running")
+            return 0
+        raise
+    try:
+        rc = provision(manifest)
+    finally:
+        os.close(fd)
+    if rc == 0 and os.environ.get("KRISTALL_APPS_NO_SYSTEMCTL") != "1":
+        # Everything is in place: stop retrying for the rest of this boot.
+        run(["systemctl", "stop", "--no-block", TIMER])
+    # Waiting (75) and per-app failures (1) are reported in status.json and retried by the
+    # timer; the unit itself succeeds so that systemd keeps re-triggering it normally.
+    return 0
+
+
+# ---------------------------------------------------------------- queries
+
+def cmd_list(args):
+    manifest = load_manifest()
+    apps = manifest["apps"]
+    if "--default" in args:
+        apps = [a for a in apps if a["default"]]
+    if "--dock" in args:
+        apps = sorted((a for a in apps if a.get("dock")), key=lambda a: a["dock"])
+    if "--embed" in args:
+        apps = [a for a in apps if a["kind"] == "flatpak" and a["embed_in_iso"] and a["default"]]
+    if "--flatpak-ids" in args:
+        for a in apps:
+            if a["kind"] == "flatpak":
+                print(a["flatpak"]["id"])
+        return 0
+    if "--installed" in args:
+        out = []
+        for a in apps:
+            b = dict(a)
+            b["installed"] = (flatpak_info_installed(a["flatpak"]["id"]) if a["kind"] == "flatpak"
+                              else rpm_installed(a["package"]))
+            out.append(b)
+        apps = out
+    print(json.dumps({"schema": SCHEMA, "apps": apps}, ensure_ascii=False))
+    return 0
+
+
+def cmd_status(args):
+    st = read_json(STATUS_FILE)
+    if st is None:
+        st = {"schema": SCHEMA, "state": "not-started", "total": 0, "done": 0, "current": None,
+              "failed": [], "reason": None, "items": [], "updated": None}
+    if "--json" in args:
+        print(json.dumps(st, ensure_ascii=False, sort_keys=True))
+        return 0
+    de = (os.environ.get("LC_ALL") or os.environ.get("LC_MESSAGES") or os.environ.get("LANG") or "").startswith("de")
+    if st["state"] == "installing":
+        print(("Installiere deine Apps … %d von %d" if de else "Installing your apps… %d of %d")
+              % (st["done"], st["total"]))
+    elif st["state"] == "waiting-for-network":
+        print("Warte auf Internetverbindung …" if de else "Waiting for an internet connection…")
+    elif st["state"] == "done":
+        print("Alle Apps sind installiert." if de else "All apps are installed.")
+    elif st["state"] == "error":
+        print(("%d App(s) konnten nicht installiert werden; neuer Versuch folgt." if de
+               else "%d app(s) could not be installed; will retry.") % len(st["failed"]))
+    else:
+        print("Noch nicht gestartet." if de else "Not started yet.")
+    return 0
+
+
+def cmd_validate(args):
+    path = args[0] if args else MANIFEST
+    doc = read_json(path)
+    if doc is None:
+        log("cannot read or parse %s" % path)
+        return 3
+    errs = validate(doc)
+    for e in errs:
+        print("ERROR " + e)
+    if not errs:
+        print("OK %s (%d apps)" % (path, len(doc["apps"])))
+    return 3 if errs else 0
+
+
+USAGE = """usage: kristall-apps <command>
+
+  list [--default] [--dock] [--embed] [--installed] [--flatpak-ids]
+                       print the app manifest (JSON), optionally filtered
+  status [--json]      progress of the first-boot app installation
+  provision            (root, systemd) install the default Flatpaks; resumable
+  validate [FILE]      check a manifest against the contract
+"""
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        sys.stdout.write(USAGE)
+        return 0 if argv else 2
+    cmds = {"list": cmd_list, "status": cmd_status, "provision": cmd_provision,
+            "validate": cmd_validate}
+    if argv[0] not in cmds:
+        log("unknown command %r" % argv[0])
+        sys.stderr.write(USAGE)
+        return 2
+    return cmds[argv[0]](argv[1:])
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

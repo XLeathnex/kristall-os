@@ -1,0 +1,3 @@
+# Types of the search module for the implicit directory import (Quickshell 0.2.1). Keep in sync.
+SearchTestHooks 1.0 SearchTestHooks.qml
+SearchWindow 1.0 SearchWindow.qml

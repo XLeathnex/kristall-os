@@ -1,0 +1,11 @@
+# Lock screen: our wallpaper (light/dark variant follows the colour scheme), clock and media controls.
+[Greeter]
+WallpaperPlugin=org.kde.image
+
+[Greeter][Wallpaper][org.kde.image][General]
+Image=/usr/share/wallpapers/Kristall/
+PreviewImage=/usr/share/wallpapers/Kristall/
+
+[Greeter][LnF][General]
+alwaysShowClock=true
+showMediaControls=true

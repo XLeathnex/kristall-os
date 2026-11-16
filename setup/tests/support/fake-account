@@ -1,0 +1,120 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Test stand-in for kristall-assistant-account (docs/contracts/assistant-ipc.md §9): the same
+# commands, events and result lines, driven by a scenario. State (installed? signed in?) lives in
+# $KRISTALL_FAKE_ACCOUNT_DIR/state.json so it survives between calls like the real CLI's.
+#   KRISTALL_FAKE_ACCOUNT = success | install-fail | offline | abandon | need-code | login-fail
+#   KRISTALL_FAKE_ACCOUNT_START = cli_missing | signed_out | ready   (initial status)
+import json
+import os
+import sys
+import time
+
+d = os.environ.get("KRISTALL_FAKE_ACCOUNT_DIR", "/tmp")
+scenario = os.environ.get("KRISTALL_FAKE_ACCOUNT", "success")
+try:  # a test may switch the scenario between calls
+    with open(os.path.join(d, "scenario")) as f:
+        scenario = f.read().strip() or scenario
+except OSError:
+    pass
+state_path = os.path.join(d, "state.json")
+calls = os.path.join(d, "calls.log")
+
+
+def out(**ev):
+    sys.stdout.write(json.dumps(ev) + "\n")
+    sys.stdout.flush()
+
+
+def load():
+    try:
+        with open(state_path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {"status": os.environ.get("KRISTALL_FAKE_ACCOUNT_START", "cli_missing")}
+
+
+def save(st):
+    with open(state_path, "w") as f:
+        json.dump(st, f)
+
+
+def status_obj(st):
+    return {"status": st["status"], "cli_path": None if st["status"] == "cli_missing" else "~/.local/bin/claude",
+            "cli_version": None if st["status"] == "cli_missing" else "2.9.0", "min_version": "2.1.0",
+            "logged_in": st["status"] == "ready", "auth_method": "claude.ai" if st["status"] == "ready" else None, "detail": ""}
+
+
+def fail(code, de, en, st):
+    out(event="result", ok=False, status=status_obj(st), error={"code": code, "message": {"de": de, "en": en}, "detail": "fake"})
+    return 1
+
+
+def main():
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
+    with open(calls, "a") as f:
+        f.write(" ".join(sys.argv[1:]) + "\n")
+    st = load()
+    if cmd == "status":
+        out(event="status", **status_obj(st))
+        out(event="result", ok=True, status=status_obj(st))
+        return 0
+    if cmd == "install":
+        out(event="progress", stage="download_installer", percent=10)
+        time.sleep(0.6)
+        if scenario == "offline":
+            return fail("offline", "Keine Verbindung zum Internet.", "No connection to the internet.", st)
+        out(event="progress", stage="download_installer", percent=45)
+        time.sleep(0.6)
+        if scenario == "install-fail":
+            out(event="log", line="curl: (22) The requested URL returned error: 503")
+            return fail("install_failed", "Claude konnte nicht installiert werden.", "Claude could not be installed.", st)
+        out(event="progress", stage="running_installer", percent=80)
+        time.sleep(0.6)
+        out(event="progress", stage="verifying", percent=100)
+        st["status"] = "signed_out"
+        save(st)
+        out(event="result", ok=True, status=status_obj(st))
+        return 0
+    if cmd == "login":
+        out(event="progress", stage="waiting_for_browser")
+        out(event="open_url", url="https://claude.ai/oauth/authorize?code=true&client_id=fake")
+        if scenario == "abandon":
+            while True:          # the owner never finishes in the browser
+                time.sleep(1)
+        if scenario == "need-code":
+            out(event="need_code")
+            line = sys.stdin.readline().strip()
+            try:
+                code = json.loads(line).get("code", "")
+            except ValueError:
+                code = line
+            out(event="progress", stage="code_received")
+            with open(calls, "a") as f:
+                f.write("code " + code + "\n")
+            if code != "KRISTALL-1234":
+                return fail("login_failed", "Der Code wurde nicht angenommen.", "The code was not accepted.", st)
+        else:
+            time.sleep(1.5)
+        if scenario == "login-fail":
+            return fail("login_failed", "Die Anmeldung wurde nicht abgeschlossen.", "Sign-in was not completed.", st)
+        st["status"] = "ready"
+        save(st)
+        out(event="progress", stage="done")
+        out(event="result", ok=True, status=status_obj(st))
+        return 0
+    if cmd == "logout":
+        st["status"] = "signed_out"
+        save(st)
+        out(event="result", ok=True, status=status_obj(st))
+        return 0
+    if cmd == "update":
+        st["status"] = "signed_out" if st["status"] != "ready" else "ready"
+        save(st)
+        out(event="result", ok=True, status=status_obj(st))
+        return 0
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,3 @@
+# Merged into /etc/xdg/kwinrc: the Mac keyboard plugin (fail-safe: without it keys are stock).
+[Plugins]
+kristall_keyboardEnabled=true

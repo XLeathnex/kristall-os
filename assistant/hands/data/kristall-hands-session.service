@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+[Unit]
+Description=Kristall assistant hands: re-arm timers and reminders, set accessibility mode
+PartOf=graphical-session.target
+After=graphical-session.target
+# Not in the installer's live session.
+ConditionKernelCommandLine=!rd.live.image
+
+[Service]
+Type=oneshot
+ExecStart=@BIN@/kristall-hands session-start
+SyslogIdentifier=kristall-hands
+TimeoutStartSec=30
+
+[Install]
+WantedBy=graphical-session.target

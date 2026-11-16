@@ -1,0 +1,14 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Called by 60-kristall-power.rules for an internal (removable=fixed) USB device that was just
+# configured: allow autosuspend unless one of its interfaces is HID (03) or a hub (09).
+dev=${1:-}
+[ -n "$dev" ] && [ -f "$dev/power/control" ] || exit 0
+for c in "$dev"/*:*/bInterfaceClass; do
+  [ -e "$c" ] || continue
+  case "$(cat "$c" 2>/dev/null)" in
+    03 | 09) exit 0 ;;
+  esac
+done
+echo auto >"$dev/power/control" 2>/dev/null || true
+exit 0

@@ -1,0 +1,15 @@
+{
+  "keyboard": {
+    "macShortcuts": true,
+    "commandKey": "ctrl",
+    "passthroughApps": [],
+    "terminalApps": []
+  },
+  "setup": {
+    "done": false,
+    "running": false,
+    "step": "",
+    "skipped": false,
+    "version": 1
+  }
+}

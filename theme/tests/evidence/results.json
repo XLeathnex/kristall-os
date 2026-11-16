@@ -1,0 +1,255 @@
+{
+ "apps": {
+  "files-light-1.0": {
+   "bar": "Dateien",
+   "menus": [
+    "mark",
+    "Dateien",
+    "File",
+    "Edit",
+    "View",
+    "Go",
+    "Tools",
+    "Settings"
+   ]
+  },
+  "settings-light-1.0": {
+   "bar": "Systemeinstellungen",
+   "menus": [
+    "mark",
+    "Systemeinstellungen",
+    "Ablage",
+    "Fenster",
+    "status:sound"
+   ]
+  },
+  "texteditor-light-1.0": {
+   "bar": "Kate",
+   "menus": [
+    "mark",
+    "Kate",
+    "File",
+    "Edit",
+    "Selection",
+    "View",
+    "Go",
+    "Sessions"
+   ]
+  },
+  "terminal-light-1.0": {
+   "bar": "Terminal",
+   "menus": [
+    "mark",
+    "Terminal",
+    "File",
+    "Edit",
+    "View",
+    "Bookmarks",
+    "Plugins",
+    "Settings"
+   ]
+  },
+  "firefox-light-1.0": {
+   "bar": "Firefox",
+   "menus": [
+    "mark",
+    "Firefox",
+    "Ablage",
+    "Fenster",
+    "status:sound"
+   ]
+  },
+  "files-dark-1.0": {
+   "bar": "Dateien",
+   "menus": [
+    "mark",
+    "Dateien",
+    "File",
+    "Edit",
+    "View",
+    "Go",
+    "Tools",
+    "Settings"
+   ]
+  },
+  "settings-dark-1.0": {
+   "bar": "Systemeinstellungen",
+   "menus": [
+    "mark",
+    "Systemeinstellungen",
+    "Ablage",
+    "Fenster",
+    "status:sound"
+   ]
+  },
+  "texteditor-dark-1.0": {
+   "bar": "Kate",
+   "menus": [
+    "mark",
+    "Kate",
+    "File",
+    "Edit",
+    "Selection",
+    "View",
+    "Go",
+    "Sessions"
+   ]
+  },
+  "terminal-dark-1.0": {
+   "bar": "Terminal",
+   "menus": [
+    "mark",
+    "Terminal",
+    "File",
+    "Edit",
+    "View",
+    "Bookmarks",
+    "Plugins",
+    "Settings"
+   ]
+  },
+  "firefox-dark-1.0": {
+   "bar": "Firefox",
+   "menus": [
+    "mark",
+    "Firefox",
+    "Ablage",
+    "Fenster",
+    "status:sound"
+   ]
+  },
+  "files-light-1.6": {
+   "bar": "Dateien",
+   "menus": [
+    "mark",
+    "Dateien",
+    "File",
+    "Edit",
+    "View",
+    "Go",
+    "Tools",
+    "Settings"
+   ]
+  },
+  "settings-light-1.6": {
+   "bar": "Systemeinstellungen",
+   "menus": [
+    "mark",
+    "Systemeinstellungen",
+    "Ablage",
+    "Fenster",
+    "status:sound"
+   ]
+  },
+  "texteditor-light-1.6": {
+   "bar": "Kate",
+   "menus": [
+    "mark",
+    "Kate",
+    "File",
+    "Edit",
+    "Selection",
+    "View",
+    "Go",
+    "Sessions"
+   ]
+  },
+  "terminal-light-1.6": {
+   "bar": "Terminal",
+   "menus": [
+    "mark",
+    "Terminal",
+    "File",
+    "Edit",
+    "View",
+    "Bookmarks",
+    "Plugins",
+    "Settings"
+   ]
+  },
+  "firefox-light-1.6": {
+   "bar": "Firefox",
+   "menus": [
+    "mark",
+    "Firefox",
+    "Ablage",
+    "Fenster",
+    "status:sound"
+   ]
+  },
+  "files-dark-1.6": {
+   "bar": "Dateien",
+   "menus": [
+    "mark",
+    "Dateien",
+    "File",
+    "Edit",
+    "View",
+    "Go",
+    "Tools",
+    "Settings"
+   ]
+  },
+  "settings-dark-1.6": {
+   "bar": "Systemeinstellungen",
+   "menus": [
+    "mark",
+    "Systemeinstellungen",
+    "Ablage",
+    "Fenster",
+    "status:sound"
+   ]
+  },
+  "texteditor-dark-1.6": {
+   "bar": "Kate",
+   "menus": [
+    "mark",
+    "Kate",
+    "File",
+    "Edit",
+    "Selection",
+    "View",
+    "Go",
+    "Sessions"
+   ]
+  },
+  "terminal-dark-1.6": {
+   "bar": "Terminal",
+   "menus": [
+    "mark",
+    "Terminal",
+    "File",
+    "Edit",
+    "View",
+    "Bookmarks",
+    "Plugins",
+    "Settings"
+   ]
+  },
+  "firefox-dark-1.6": {
+   "bar": "Firefox",
+   "menus": [
+    "mark",
+    "Firefox",
+    "Ablage",
+    "Fenster",
+    "status:sound"
+   ]
+  }
+ },
+ "switch": {
+  "dark": {
+   "texteditor": 0.37,
+   "files": 0.4,
+   "terminal": 0.48,
+   "firefox": 0.61
+  },
+  "light": {
+   "files": 0.39,
+   "texteditor": 0.39,
+   "terminal": 0.52,
+   "firefox": 0.71
+  }
+ },
+ "failures_last_run": []
+}

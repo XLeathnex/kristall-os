@@ -1,0 +1,12 @@
+[Unit]
+Description=Start the previous Kristall OS version on the next restart
+Documentation=file:///usr/share/doc/kristall/contracts/update.md
+ConditionKernelCommandLine=!rd.live.image
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/kristall-update rollback
+Nice=10
+IOSchedulingClass=idle
+SyslogIdentifier=kristall-update
+TimeoutStartSec=6h

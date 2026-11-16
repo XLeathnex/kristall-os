@@ -1,0 +1,25 @@
+# Types of the setup module for the implicit directory import (Quickshell 0.2.1 serves a module
+# directory loaded by URL without a generated qmldir, so same-directory types would not resolve).
+# Keep in sync with the *.qml files (setup/tests/test_static.py checks it).
+AccountFlow 1.0 AccountFlow.qml
+Backdrop 1.0 Backdrop.qml
+Crystal 1.0 Crystal.qml
+MicCheck 1.0 MicCheck.qml
+MiniDesktop 1.0 MiniDesktop.qml
+SetupHelper 1.0 SetupHelper.qml
+SetupTestHooks 1.0 SetupTestHooks.qml
+SetupWindow 1.0 SetupWindow.qml
+StepAppearance 1.0 StepAppearance.qml
+StepAssistant 1.0 StepAssistant.qml
+StepBase 1.0 StepBase.qml
+StepDisplay 1.0 StepDisplay.qml
+StepDone 1.0 StepDone.qml
+StepEnergy 1.0 StepEnergy.qml
+StepGlass 1.0 StepGlass.qml
+StepKeyboard 1.0 StepKeyboard.qml
+StepMicrophone 1.0 StepMicrophone.qml
+StepNetwork 1.0 StepNetwork.qml
+StepPrivacy 1.0 StepPrivacy.qml
+StepTrackpad 1.0 StepTrackpad.qml
+StepVoice 1.0 StepVoice.qml
+StepWelcome 1.0 StepWelcome.qml

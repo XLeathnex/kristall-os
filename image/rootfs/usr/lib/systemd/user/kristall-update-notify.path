@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch the Kristall OS update state
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Path]
+PathChanged=/var/lib/kristall/update/state.json
+
+[Install]
+WantedBy=graphical-session.target

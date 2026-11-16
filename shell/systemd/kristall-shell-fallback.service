@@ -1,0 +1,8 @@
+[Unit]
+Description=Kristall Shell fallback (plain Plasma panel)
+Documentation=file:///usr/share/doc/kristall/contracts/shell.md
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/kristall/kristall-shell-fallback
+SyslogIdentifier=kristall-shell

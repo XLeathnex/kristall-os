@@ -1,0 +1,15 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [{ "Name": "Kristall OS" }],
+        "Category": "",
+        "Description": "Kristall OS, dark appearance (used by the automatic light/dark switch)",
+        "Description[de]": "Kristall OS, dunkles Erscheinungsbild (für den automatischen Wechsel zwischen hell und dunkel)",
+        "Id": "org.kristall.desktop.dark",
+        "License": "GPL-3.0-or-later",
+        "Name": "Kristall Dark",
+        "Name[de]": "Kristall Dunkel",
+        "Website": "https://github.com/"
+    },
+    "X-Plasma-APIVersion": "2"
+}

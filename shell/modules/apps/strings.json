@@ -1,0 +1,36 @@
+{
+  "en": {
+    "apps.search": "Search",
+    "apps.open": "Open",
+    "apps.addToDock": "Keep in Dock",
+    "apps.removeFromDock": "Remove from Dock",
+    "apps.uninstall": "Uninstall",
+    "apps.noResults": "No Results",
+    "apps.category.all": "All",
+    "apps.category.productivity": "Productivity",
+    "apps.category.internet": "Internet",
+    "apps.category.media": "Music & Video",
+    "apps.category.graphics": "Creativity",
+    "apps.category.games": "Games",
+    "apps.category.developer": "Developer Tools",
+    "apps.category.utilities": "Utilities",
+    "apps.category.system": "System"
+  },
+  "de": {
+    "apps.search": "Suchen",
+    "apps.open": "Öffnen",
+    "apps.addToDock": "Im Dock behalten",
+    "apps.removeFromDock": "Aus dem Dock entfernen",
+    "apps.uninstall": "Deinstallieren",
+    "apps.noResults": "Keine Treffer",
+    "apps.category.all": "Alle",
+    "apps.category.productivity": "Produktivität",
+    "apps.category.internet": "Internet",
+    "apps.category.media": "Musik & Video",
+    "apps.category.graphics": "Kreativität",
+    "apps.category.games": "Spiele",
+    "apps.category.developer": "Entwicklung",
+    "apps.category.utilities": "Dienstprogramme",
+    "apps.category.system": "System"
+  }
+}

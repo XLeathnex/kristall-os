@@ -1,0 +1,5 @@
+# Build context of the Containerfile (owned by the image component). Only version-control
+# metadata is excluded; component directories must stay visible at /ctx during the build.
+.git
+.github
+**/__pycache__

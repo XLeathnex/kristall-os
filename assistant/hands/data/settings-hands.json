@@ -1,0 +1,38 @@
+{
+  "assistant": {
+    "hands": {
+      "cursor": {
+        "enabled": true,
+        "speed": 1.0,
+        "linger_seconds": 6
+      },
+      "accessibility": "always",
+      "screenshot": {
+        "max_width": 1280,
+        "max_height": 800
+      },
+      "snapshot": {
+        "max_items": 120,
+        "max_depth": 30
+      },
+      "protected_apps": [
+        "org.kde.polkit-kde-authentication-agent-1",
+        "polkit-kde-authentication-agent-1",
+        "org.kde.kwalletd6",
+        "kwalletd6",
+        "org.kde.kwalletmanager",
+        "org.kde.ksshaskpass",
+        "ksshaskpass",
+        "pinentry",
+        "pinentry-qt",
+        "org.gnupg.pinentry-qt",
+        "org.keepassxc.KeePassXC",
+        "com.bitwarden.desktop",
+        "com.1password.1Password",
+        "1password",
+        "kscreenlocker_greet",
+        "org.kde.kscreenlocker_greet"
+      ]
+    }
+  }
+}

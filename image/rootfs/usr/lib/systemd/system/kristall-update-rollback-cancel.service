@@ -1,0 +1,12 @@
+[Unit]
+Description=Undo going back to the previous Kristall OS version
+Documentation=file:///usr/share/doc/kristall/contracts/update.md
+ConditionKernelCommandLine=!rd.live.image
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/kristall-update rollback --cancel
+Nice=10
+IOSchedulingClass=idle
+SyslogIdentifier=kristall-update
+TimeoutStartSec=6h

@@ -1,0 +1,23 @@
+{
+  "appearance": {
+    "theme": "auto",
+    "glass": 0.3,
+    "accent": "blue",
+    "glassQuality": "auto",
+    "reduceTransparency": false
+  },
+  "accessibility": {
+    "reduceMotion": false,
+    "increaseContrast": false
+  },
+  "bar": {
+    "showSeconds": false,
+    "showDate": true,
+    "showDayOfWeek": true,
+    "showBatteryPercentage": false,
+    "clock": "auto",
+    "dimWhenMaximized": true,
+    "showAssistant": true,
+    "showControlCenter": true
+  }
+}

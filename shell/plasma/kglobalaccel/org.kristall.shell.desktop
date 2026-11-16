@@ -1,0 +1,24 @@
+[Desktop Entry]
+# No NoDisplay=true: kglobalacceld (KF 6.32 / Plasma 6.8) ignores desktop files in share/kglobalaccel/
+# that carry it. Files here are not listed by app launchers anyway (not in share/applications/).
+Type=Application
+Name=Kristall Shell
+Name[de]=Kristall-Shell
+Comment=Menu bar and desktop shell
+Comment[de]=Menüleiste und Schreibtisch-Shell
+Icon=preferences-desktop
+Exec=kristall-shellctl shell status
+X-KDE-GlobalAccel-CommandShortcut=false
+Actions=FocusMenuBar;CloseMenus
+
+[Desktop Action FocusMenuBar]
+Name=Move focus to the menu bar
+Name[de]=Fokus auf die Menüleiste
+Exec=kristall-shellctl bar focus
+X-KDE-Shortcuts=Ctrl+F2
+
+[Desktop Action CloseMenus]
+Name=Close open menus
+Name[de]=Geöffnete Menüs schließen
+Exec=kristall-shellctl shell close-menus
+X-KDE-Shortcuts=

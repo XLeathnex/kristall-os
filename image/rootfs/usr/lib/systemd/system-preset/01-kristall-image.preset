@@ -1,0 +1,11 @@
+# Kristall OS (image component). Sorted before the base's presets so these decisions win.
+enable kristall-update.timer
+enable kristall-update-refresh.service
+enable kristall-apps-provision.timer
+enable kristall-plasma-setup-guard.service
+enable plasma-setup.service
+# kristall-update replaces these: they would update without our conditions or status file.
+disable rpm-ostreed-automatic.timer
+disable flatpak-system-update.timer
+# Upstream bootc timer reboots the machine by itself: never for this owner.
+disable bootc-fetch-apply-updates.timer

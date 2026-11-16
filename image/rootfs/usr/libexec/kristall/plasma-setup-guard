@@ -1,0 +1,20 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Plasma Setup (KDE's first-boot wizard that creates the owner's account) must only run on a
+# machine without user accounts. If one already exists (e.g. created by the installer), mark the
+# wizard as done so it never appears.
+set -euo pipefail
+FLAG=${KRISTALL_PLASMA_SETUP_FLAG:-/etc/plasma-setup-done}
+PASSWD=${KRISTALL_PASSWD:-/etc/passwd}
+LOGIN_DEFS=${KRISTALL_LOGIN_DEFS:-/etc/login.defs}
+[[ -e $FLAG ]] && exit 0
+uid_min=1000
+if [[ -r $LOGIN_DEFS ]]; then
+  v=$(awk '$1 == "UID_MIN" { print $2 }' "$LOGIN_DEFS")
+  [[ $v =~ ^[0-9]+$ ]] && uid_min=$v
+fi
+if awk -F: -v min="$uid_min" '$3 >= min && $3 < 60000 && $1 != "plasma-setup" { found = 1 } END { exit !found }' "$PASSWD"; then
+  echo "a user account exists already; Plasma Setup is not needed"
+  touch "$FLAG"
+fi
+exit 0

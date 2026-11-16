@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Kristall OS (power component): the person at the computer may, without a password,
+// - set the battery charge limit (kristall-power-charge@50..100.service; the value is validated
+//   again by kristall-power), and
+// - refresh the power diagnostic report (kristall-power-doctor.service).
+// Contract: docs/contracts/power.md §7.
+polkit.addRule(function (action, subject) {
+    if (action.id !== "org.freedesktop.systemd1.manage-units") {
+        return polkit.Result.NOT_HANDLED;
+    }
+    var unit = action.lookup("unit");
+    var verb = action.lookup("verb");
+    if (verb !== "start" || !subject.local || !subject.active) {
+        return polkit.Result.NOT_HANDLED;
+    }
+    if (unit === "kristall-power-doctor.service" ||
+        /^kristall-power-charge@(5[0-9]|[6-9][0-9]|100)\.service$/.test(unit)) {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

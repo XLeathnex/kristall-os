@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Install Kristall OS
+Name[de]=Kristall OS installieren
+Comment=Put Kristall OS on this computer
+Comment[de]=Kristall OS auf diesem Computer installieren
+Exec=liveinst
+Icon=org.fedoraproject.AnacondaInstaller
+Terminal=false
+Categories=System;
+X-KDE-autostart-phase=2

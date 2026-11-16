@@ -1,0 +1,25 @@
+{
+ "last_run": {
+  "sections": [
+   "ctl"
+  ],
+  "failures": [],
+  "time": "2026-11-16T19:23:13"
+ },
+ "idle_bar": {
+  "seconds": 5.0,
+  "frames": 0,
+  "cpu_ms": 0.0,
+  "wakeups": 0,
+  "processes": 5
+ },
+ "idle_after_menu": {
+  "seconds": 4.0,
+  "frames": 0,
+  "cpu_ms": 0.0,
+  "wakeups": 0,
+  "processes": 5
+ },
+ "restart_seconds": 1.5,
+ "scale16_bar_device_px": 38
+}

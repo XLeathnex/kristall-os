@@ -1,0 +1,19 @@
+[Desktop Entry]
+# NoDisplay must not be set: kglobalacceld (KF 6.32 / Plasma 6.8) ignores desktop files with
+# NoDisplay=true in share/kglobalaccel/ (verified in the dev container). Files here are not listed
+# by app launchers anyway (they are not in share/applications/).
+Type=Application
+Name=Kristall Search
+Name[de]=Kristall-Suche
+Comment=Search or Ask
+Comment[de]=Suchen oder fragen
+Icon=search
+Exec=kristall-shellctl search toggle
+X-KDE-GlobalAccel-CommandShortcut=false
+Actions=Toggle
+
+[Desktop Action Toggle]
+Name=Search or Ask
+Name[de]=Suchen oder fragen
+Exec=kristall-shellctl search toggle
+X-KDE-Shortcuts=Meta+Space

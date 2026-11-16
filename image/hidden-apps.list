@@ -1,0 +1,42 @@
+# Desktop entries (/usr/share/applications/<id>) that get NoDisplay=true: they stay installed and
+# keep working (file associations, "Open with…", D-Bus activation) but do not appear in Apps/Search.
+# Hiding is used instead of removal wherever removing could break something.
+
+# Second app store; the App Center (Bazaar) is the one store the owner sees.
+org.kde.discover.desktop
+org.kde.discover.flatpak.desktop
+# Developer/admin tools that a Mac owner would never expect in the app list
+org.kde.kate.desktop
+htop.desktop
+nvtop.desktop
+org.kde.kdebugsettings.desktop
+org.kde.kjournaldbrowser.desktop
+org.kde.partitionmanager.desktop
+org.kde.kmenuedit.desktop
+org.kde.kwalletmanager.desktop
+org.kde.kcolorschemeeditor.desktop
+org.kde.kfontview.desktop
+org.kde.keditbookmarks.desktop
+org.kde.knetattach.desktop
+org.kde.drkonqi.coredump.gui.desktop
+org.kde.kdeconnect.nonplasma.desktop
+# Remote desktop servers: switched on from System Settings when wanted
+org.kde.krfb.desktop
+org.kde.krfb.virtualmonitor.desktop
+org.kde.krdpserver.desktop
+# Duplicates of Search / System Monitor / Files
+org.kde.kfind.desktop
+org.kde.filelight.desktop
+org.kde.kcharselect.desktop
+# Opened automatically when a file needs it (like the Mac's Archive Utility)
+org.kde.ark.desktop
+# Input-method setup tools (reachable from System Settings → Keyboard)
+org.freedesktop.IBus.Setup.desktop
+ibus-setup-anthy.desktop
+ibus-setup-chewing.desktop
+ibus-setup-hangul.desktop
+ibus-setup-libbopomofo.desktop
+ibus-setup-libpinyin.desktop
+ibus-setup-m17n.desktop
+ibus-setup-tb.desktop
+ibus-setup-typing-booster.desktop

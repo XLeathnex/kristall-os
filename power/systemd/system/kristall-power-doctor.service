@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+[Unit]
+Description=Kristall OS power: write the system diagnostic report
+Documentation=file:///usr/share/doc/kristall/contracts/power.md
+After=kristall-power.service tuned.service
+
+[Service]
+Type=oneshot
+# Root gives the report RAPL lock state, energy counters and the debugfs PSR / package C-state
+# counters. Output: /var/lib/kristall/power/doctor-system.{json,txt} (world-readable).
+ExecStart=/usr/bin/kristall-power doctor --local --system-only --idle-seconds 15
+Slice=kristall-background.slice
+Nice=10
+SyslogIdentifier=kristall-power
+TimeoutSec=180

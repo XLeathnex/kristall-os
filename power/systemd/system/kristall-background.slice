@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+[Unit]
+Description=Kristall OS background work (updates, app installation, diagnostics)
+Documentation=file:///usr/share/doc/kristall/contracts/power.md
+
+[Slice]
+# Low share when the owner's work competes; on hybrid Intel CPUs the generator
+# kristall-power-ecores additionally confines this slice to the efficiency cores.
+CPUWeight=20
+IOWeight=20

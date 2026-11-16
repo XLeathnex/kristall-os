@@ -1,0 +1,6 @@
+[KTextEditor Renderer]
+Auto Color Theme Selection=true
+Text Font=JetBrains Mono,9.75,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+
+[MainWindow]
+MenuBar=Enabled

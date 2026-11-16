@@ -1,0 +1,565 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""kristall-shell-helper — the shell's one long-lived helper process.
+
+Started by the shell (services/Helper.qml) and speaks newline-delimited JSON on stdin/stdout:
+requests  {"id": <n>, "op": "<name>", ...}      replies {"id": <n>, "ok": true, ...} / {"id", "ok": false, "error"}
+events    {"event": "<name>", ...}               (unsolicited)
+
+It does the things Quickshell 0.2.1 has no native service for, without polling:
+  * DBusMenu (com.canonical.dbusmenu) for application menus at a given service/path
+  * update status (watches /var/lib/kristall/update/, runs `kristall-update status --json`)
+  * Plasma colour scheme lightness (watches kdeglobals) for appearance.theme = "auto"
+  * wall-clock jumps (resume from suspend, time zone change) so the clock re-aligns
+  * session actions (lock, sleep, restart, shut down, log out, restart-to-update)
+  * loads KDE's appmenu kded module so KWin advertises the app-menu protocol to apps
+  * removes the last-resort fallback panel once the shell runs again
+  * owns the assistant's global shortcut as a kglobalaccel D-Bus component action, so key
+    *releases* are seen too (push-to-talk): events `shortcut {action, state: pressed|released, heldMs}`
+Spec: docs/contracts/shell.md §7. Exits when stdin closes (the shell went away).
+"""
+import json
+import os
+import shutil
+import subprocess
+import sys
+
+import gi
+
+gi.require_version("Gio", "2.0")
+gi.require_version("GLib", "2.0")
+from gi.repository import Gio, GLib  # noqa: E402
+
+LOG_TAG = "kristall-shell-helper"
+DBUSMENU = "com.canonical.dbusmenu"
+
+
+def log(*a):
+    print(LOG_TAG + ":", *a, file=sys.stderr, flush=True)
+
+
+def emit(obj):
+    try:
+        sys.stdout.write(json.dumps(obj, separators=(",", ":"), ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+    except BrokenPipeError:
+        GLib.idle_add(lambda: loop.quit())
+
+
+def unpack(v):
+    return v.unpack() if isinstance(v, GLib.Variant) else v
+
+
+# ---------------------------------------------------------------------------------------------
+# DBusMenu
+# ---------------------------------------------------------------------------------------------
+
+def clean_label(text):
+    """Strip mnemonics ('_File' -> 'File', '__' -> '_'); also Qt-style '&'."""
+    out, i = [], 0
+    while i < len(text):
+        c = text[i]
+        if c in "_&" and i + 1 < len(text):
+            if text[i + 1] == c:
+                out.append(c)
+                i += 2
+                continue
+            i += 1
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def convert_item(node):
+    item_id, props, children = node
+    props = {k: unpack(v) for k, v in props.items()}
+    if props.get("visible", True) is False:
+        return None
+    kind = "separator" if props.get("type") == "separator" else "item"
+    out = {"id": int(item_id), "type": kind}
+    if kind == "item":
+        out["label"] = clean_label(str(props.get("label", "")))
+        out["enabled"] = bool(props.get("enabled", True))
+        tt = props.get("toggle-type", "")
+        if tt in ("checkmark", "radio"):
+            out["toggle"] = tt
+            out["checked"] = int(props.get("toggle-state", 0)) == 1
+        sc = props.get("shortcut")
+        if sc:
+            out["shortcut"] = [list(map(str, chord)) for chord in sc]
+        kids = [convert_item(unpack(c)) for c in children]
+        kids = [k for k in kids if k is not None]
+        if kids or props.get("children-display") == "submenu":
+            out["children"] = kids
+    return out
+
+
+class MenuClient:
+    """One DBusMenu on the bus, mirrored as a JSON tree under a key chosen by the shell."""
+
+    def __init__(self, helper, key, service, path):
+        self.helper, self.key, self.service, self.path = helper, key, service, path
+        self.bus = helper.session
+        self.revision = -1
+        self.pending = None
+        self.subs = [
+            self.bus.signal_subscribe(service, DBUSMENU, sig, path, None, Gio.DBusSignalFlags.NONE, self.on_signal)
+            for sig in ("LayoutUpdated", "ItemsPropertiesUpdated", "ItemActivationRequested")
+        ]
+
+    def close(self):
+        for s in self.subs:
+            self.bus.signal_unsubscribe(s)
+        self.subs = []
+        if self.pending:
+            GLib.source_remove(self.pending)
+            self.pending = None
+
+    def on_signal(self, _conn, _sender, _path, _iface, signal, params):
+        if signal == "ItemActivationRequested":
+            emit({"event": "menu.activate", "key": self.key, "item": int(params.unpack()[0])})
+            return
+        # coalesce bursts: apps often send several updates while building a menu
+        if self.pending is None:
+            self.pending = GLib.timeout_add(40, self._refresh_due)
+
+    def _refresh_due(self):
+        self.pending = None
+        self.fetch()
+        return False
+
+    def call(self, method, params, reply_type, cb=None):
+        def done(conn, res):
+            try:
+                v = conn.call_finish(res)
+                if cb:
+                    cb(v.unpack() if v is not None else None, None)
+            except GLib.Error as e:
+                if cb:
+                    cb(None, e.message)
+                else:
+                    log("dbusmenu", method, self.service, self.path, e.message)
+
+        self.bus.call(self.service, self.path, DBUSMENU, method, params,
+                      GLib.VariantType(reply_type) if reply_type else None,
+                      Gio.DBusCallFlags.NONE, 2000, None, done)
+
+    def fetch(self, reply_id=None):
+        def got(v, err):
+            if err:
+                emit({"event": "menu.error", "key": self.key, "error": err})
+                if reply_id is not None:
+                    emit({"id": reply_id, "ok": False, "error": err})
+                return
+            revision, root = v
+            self.revision = revision
+            tree = convert_item(root) or {"id": 0, "type": "item", "children": []}
+            tree.setdefault("children", [])
+            emit({"event": "menu.layout", "key": self.key, "revision": revision, "menu": tree})
+            if reply_id is not None:
+                emit({"id": reply_id, "ok": True})
+
+        self.call("GetLayout", GLib.Variant("(iias)", (0, -1, [])), "(u(ia{sv}av))", got)
+
+    def about_to_show(self, item_id):
+        def done(v, err):
+            if not err and v and v[0]:
+                self.fetch()
+        self.call("AboutToShow", GLib.Variant("(i)", (int(item_id),)), "(b)", done)
+
+    def event(self, item_id, kind):
+        self.call("Event", GLib.Variant("(isvu)", (int(item_id), kind, GLib.Variant("i", 0), 0)), None)
+
+
+# ---------------------------------------------------------------------------------------------
+# helper
+# ---------------------------------------------------------------------------------------------
+# Global shortcuts with press *and* release (kglobalaccel D-Bus component)
+# ---------------------------------------------------------------------------------------------
+# Desktop-file shortcuts (share/kglobalaccel/*.desktop) only run a command on press; kglobalacceld
+# signals globalShortcutPressed/Released only for actions a D-Bus client registered itself
+# (verified with KF 6.32 / kglobalacceld 6.8.3 in the dev container). The assistant's
+# push-to-talk key is therefore registered here: component "kristall-shell", action
+# "assistant-talk". Keys are Qt key combinations; the owner can change them in System Settings ▸
+# Shortcuts (kglobalacceld stores that, and loads it again when we register).
+QT_ALT, QT_SHIFT, QT_META = 0x08000000, 0x02000000, 0x10000000
+SHORTCUTS = {
+    # Alt+Space (Option+Space on the Mac-style keyboard), the Copilot key (Meta+Shift+F23; with
+    # the stock xkb keymap kglobalacceld sees that key as Meta+Shift+TouchpadOn)
+    "assistant-talk": {"name": "Talk to the assistant (hold to talk)", "name_de": "Mit dem Assistenten sprechen (gedrückt halten zum Sprechen)",
+                       "keys": [QT_ALT | 0x20, QT_META | QT_SHIFT | 0x01000046, QT_META | QT_SHIFT | 0x01100111]},
+}
+COMPONENT = "kristall-shell"
+COMPONENT_NAME = "Kristall Shell"
+KGA = "org.kde.kglobalaccel"
+SET_PRESENT, NO_AUTOLOADING, IS_DEFAULT = 0x2, 0x4, 0x8
+
+
+class GlobalShortcuts:
+    def __init__(self, bus):
+        self.bus = bus
+        self.down = {}            # action -> monotonic press time (key repeat sends more presses)
+        self.subs = []
+        self.registered = False
+        self.active_keys = {}
+        if os.environ.get("KRISTALL_SHELL_NO_SHORTCUTS") == "1":
+            return
+        Gio.bus_watch_name_on_connection(bus, KGA, Gio.BusNameWatcherFlags.NONE, self.appeared, self.vanished)
+
+    def action_id(self, action):
+        de = os.environ.get("KRISTALL_LANG", os.environ.get("LANG", "")).startswith("de")
+        info = SHORTCUTS[action]
+        return [COMPONENT, action, COMPONENT_NAME, info["name_de"] if de else info["name"]]
+
+    def call(self, method, params, cb=None):
+        def done(conn, res):
+            try:
+                v = conn.call_finish(res)
+                if cb:
+                    cb(v.unpack() if v is not None else None)
+            except GLib.Error as e:
+                log(f"kglobalaccel {method}: {e.message}")
+        self.bus.call(KGA, "/kglobalaccel", "org.kde.KGlobalAccel", method, params, None, Gio.DBusCallFlags.NONE, 5000, None, done)
+
+    def appeared(self, _conn, _name, _owner):
+        path = "/component/" + COMPONENT.replace("-", "_")
+        for sub in self.subs:
+            self.bus.signal_unsubscribe(sub)
+        self.subs = [self.bus.signal_subscribe(KGA, "org.kde.kglobalaccel.Component", sig, path, None, Gio.DBusSignalFlags.NONE, self.on_signal)
+                     for sig in ("globalShortcutPressed", "globalShortcutReleased")]
+        for action, info in SHORTCUTS.items():
+            aid = self.action_id(action)
+            keys = GLib.Variant("a(ai)", [([k],) for k in info["keys"]])
+            self.call("doRegister", GLib.Variant("(as)", (aid,)))
+            # the defaults (what "Reset" restores), then the active keys: kglobalacceld loads the
+            # owner's own keys if they changed them, else these
+            self.call("setShortcutKeys", GLib.Variant.new_tuple(GLib.Variant("as", aid), keys, GLib.Variant("u", IS_DEFAULT)))
+            self.call("setShortcutKeys", GLib.Variant.new_tuple(GLib.Variant("as", aid), keys, GLib.Variant("u", SET_PRESENT)),
+                      lambda v, a=action: self.got_keys(a, v))
+        self.registered = True
+
+    def got_keys(self, action, v):
+        # a(ai): one key sequence per entry, up to four key combinations each (we use the first)
+        keys = [seq[0][0] for seq in (v[0] if v else []) if seq and seq[0] and seq[0][0]]
+        self.active_keys[action] = keys
+        log(f"shortcut {action}: keys {[hex(k) for k in keys]}" + ("" if keys else " (none: taken by another action?)"))
+        emit({"event": "shortcut.registered", "action": action, "keys": keys})
+
+    def vanished(self, _conn, _name):
+        if self.registered:
+            log("kglobalaccel went away; re-registering when it is back")
+        self.registered = False
+        self.down = {}
+
+    def on_signal(self, _conn, _sender, _path, _iface, signal, params):
+        comp, action = params.unpack()[0], params.unpack()[1]
+        if comp != COMPONENT or action not in SHORTCUTS:
+            return
+        now = GLib.get_monotonic_time() / 1000.0
+        if signal == "globalShortcutPressed":
+            if action in self.down:
+                return            # auto-repeat of a held key
+            self.down[action] = now
+            emit({"event": "shortcut", "action": action, "state": "pressed"})
+        elif signal == "globalShortcutReleased":
+            t0 = self.down.pop(action, None)
+            if t0 is None:
+                return
+            emit({"event": "shortcut", "action": action, "state": "released", "heldMs": round(now - t0)})
+
+    def close(self):
+        # give the keys back (no grab while no shell listens); kglobalacceld keeps them stored
+        for action in SHORTCUTS:
+            try:
+                self.bus.call_sync(KGA, "/kglobalaccel", "org.kde.KGlobalAccel", "setInactive", GLib.Variant("(as)", (self.action_id(action),)),
+                                   None, Gio.DBusCallFlags.NONE, 1000, None)
+            except GLib.Error:
+                pass
+
+
+class Helper:
+    def __init__(self):
+        self.session = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        try:
+            self.system = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+        except GLib.Error as e:
+            log("no system bus:", e.message)
+            self.system = None
+        self.menus = {}
+        self.monitors = []
+        self.update_running = False
+        self.update_again = False
+        self.config_home = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+        self.state_home = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
+
+    # ---- startup
+    def start(self):
+        ch = GLib.IOChannel.unix_new(sys.stdin.fileno())
+        ch.set_encoding(None)
+        ch.set_buffered(True)
+        GLib.io_add_watch(ch, GLib.PRIORITY_DEFAULT, GLib.IOCondition.IN | GLib.IOCondition.HUP | GLib.IOCondition.ERR, self.on_stdin)
+        self.watch_update()
+        self.watch_scheme()
+        self.watch_time()
+        self.load_appmenu_module()
+        self.shortcuts = GlobalShortcuts(self.session)
+        emit({"event": "ready", "version": 1})
+
+    def on_stdin(self, ch, cond):
+        if cond & (GLib.IOCondition.HUP | GLib.IOCondition.ERR) and not (cond & GLib.IOCondition.IN):
+            loop.quit()
+            return False
+        try:
+            status, line, _len, _term = ch.read_line()
+        except GLib.Error:
+            loop.quit()
+            return False
+        if status == GLib.IOStatus.EOF or line is None:
+            loop.quit()
+            return False
+        line = line.strip() if isinstance(line, str) else line.decode("utf-8", "replace").strip()
+        if line:
+            try:
+                req = json.loads(line)
+                self.handle(req)
+            except Exception as e:  # never die on a bad request
+                emit({"id": req.get("id") if isinstance(req, dict) else None, "ok": False, "error": str(e)})
+        return True
+
+    def handle(self, req):
+        op, rid = req.get("op"), req.get("id")
+        if op == "menu.open":
+            key = str(req["key"])
+            old = self.menus.pop(key, None)
+            if old:
+                old.close()
+            m = MenuClient(self, key, req["service"], req["path"])
+            self.menus[key] = m
+            m.fetch(rid)
+            return
+        if op == "menu.close":
+            m = self.menus.pop(str(req["key"]), None)
+            if m:
+                m.close()
+        elif op == "menu.aboutToShow":
+            m = self.menus.get(str(req["key"]))
+            if m:
+                m.about_to_show(req.get("item", 0))
+        elif op == "menu.event":
+            m = self.menus.get(str(req["key"]))
+            if m:
+                m.event(req["item"], req.get("kind", "clicked"))
+        elif op == "session":
+            self.session_action(req.get("action", ""))
+        elif op == "watch.socket":
+            self.watch_socket(str(req["path"]))
+        elif op == "update.refresh":
+            self.refresh_update()
+        elif op == "fallback.cleanup":
+            GLib.timeout_add_seconds(int(req.get("delay", 15)), self.cleanup_fallback)
+        elif op == "ping":
+            pass
+        else:
+            emit({"id": rid, "ok": False, "error": "unknown op " + str(op)})
+            return
+        if rid is not None:
+            emit({"id": rid, "ok": True})
+
+    # ---- file monitors (inotify through GIO; nothing polls)
+    def monitor_dir(self, path, cb):
+        try:
+            os.makedirs(path, exist_ok=True) if path.startswith(self.config_home) else None
+            mon = Gio.File.new_for_path(path).monitor_directory(Gio.FileMonitorFlags.WATCH_MOVES, None)
+        except GLib.Error as e:
+            log("cannot watch", path, e.message)
+            return
+        mon.set_rate_limit(100)
+        mon.connect("changed", cb)
+        self.monitors.append(mon)
+
+    # sockets of the compositor plugins: tell the shell when they appear/disappear (no retry polling)
+    def watch_socket(self, path):
+        if not hasattr(self, "sockets"):
+            self.sockets = {}
+        if path in self.sockets:
+            emit({"event": "socket", "path": path, "exists": os.path.exists(path)})
+            return
+        d = os.path.dirname(path)
+        try:
+            os.makedirs(d, mode=0o700, exist_ok=True)
+        except OSError:
+            pass
+
+        def changed(_m, f, other, _e):
+            names = {f.get_path() if f else None, other.get_path() if other else None}
+            if path in names or d in names:
+                exists = os.path.exists(path)
+                if exists != self.sockets.get(path):
+                    self.sockets[path] = exists
+                    emit({"event": "socket", "path": path, "exists": exists})
+        self.sockets[path] = os.path.exists(path)
+        self.monitor_dir(d, changed)
+        emit({"event": "socket", "path": path, "exists": self.sockets[path]})
+
+    # update status ---------------------------------------------------------------------------
+    def watch_update(self):
+        d = os.environ.get("KRISTALL_UPDATE_STATE_DIR", "/var/lib/kristall/update")
+        if os.path.isdir(d):
+            self.monitor_dir(d, lambda *_: self.refresh_update())
+        self.refresh_update()
+
+    def refresh_update(self):
+        if self.update_running:
+            self.update_again = True
+            return
+        cmd = os.environ.get("KRISTALL_UPDATE_CMD", "kristall-update")
+        if not shutil.which(cmd.split()[0]):
+            emit({"event": "update", "status": {"schema": 1, "state": "unknown"}})
+            return
+        self.update_running = True
+        try:
+            proc = Gio.Subprocess.new(cmd.split() + ["status", "--json"], Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE)
+        except GLib.Error as e:
+            self.update_running = False
+            log("kristall-update:", e.message)
+            return
+
+        def done(p, res):
+            self.update_running = False
+            try:
+                _ok, out, _err = p.communicate_utf8_finish(res)
+                status = json.loads(out.strip().splitlines()[-1]) if out and out.strip() else {"schema": 1, "state": "unknown"}
+            except Exception as e:  # noqa: BLE001
+                log("kristall-update status failed:", e)
+                status = {"schema": 1, "state": "unknown"}
+            emit({"event": "update", "status": status})
+            if self.update_again:
+                self.update_again = False
+                self.refresh_update()
+
+        proc.communicate_utf8_async(None, None, done)
+
+    # Plasma colour scheme ----------------------------------------------------------------------
+    def watch_scheme(self):
+        self.scheme_dark = None
+        self.monitor_dir(self.config_home, lambda _m, f, _o, _e: self.read_scheme() if f.get_basename() == "kdeglobals" else None)
+        self.read_scheme()
+
+    def read_scheme(self):
+        dark = False
+        paths = [os.path.join(self.config_home, "kdeglobals")]
+        for d in (os.environ.get("XDG_CONFIG_DIRS") or "/etc/xdg").split(":"):
+            paths.append(os.path.join(d, "kdeglobals"))
+        for p in paths:
+            value = self.ini_value(p, "Colors:Window", "BackgroundNormal")
+            if value:
+                try:
+                    r, g, b = [int(x) for x in value.split(",")[:3]]
+                    dark = (max(r, g, b) + min(r, g, b)) / 2 / 255 < 0.5
+                except ValueError:
+                    pass
+                break
+        if dark != self.scheme_dark:
+            self.scheme_dark = dark
+            emit({"event": "plasma", "dark": dark})
+
+    @staticmethod
+    def ini_value(path, group, key):
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                cur = None
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("["):
+                        cur = line[1:line.find("]")]
+                    elif cur == group and "=" in line:
+                        k, v = line.split("=", 1)
+                        if k.strip() == key:
+                            return v.strip()
+        except OSError:
+            pass
+        return None
+
+    # wall clock jumps --------------------------------------------------------------------------
+    def watch_time(self):
+        if self.system:
+            self.system.signal_subscribe("org.freedesktop.login1", "org.freedesktop.login1.Manager", "PrepareForSleep",
+                                         "/org/freedesktop/login1", None, Gio.DBusSignalFlags.NONE,
+                                         lambda *a: (not a[5].unpack()[0]) and emit({"event": "time.changed", "reason": "resume"}))
+            self.system.signal_subscribe("org.freedesktop.timedate1", "org.freedesktop.DBus.Properties", "PropertiesChanged",
+                                         "/org/freedesktop/timedate1", None, Gio.DBusSignalFlags.NONE,
+                                         lambda *a: emit({"event": "time.changed", "reason": "timezone"}))
+        self.monitor_dir("/etc", lambda _m, f, _o, _e: f.get_basename() == "localtime" and emit({"event": "time.changed", "reason": "timezone"}))
+
+    # session actions ---------------------------------------------------------------------------
+    def dbus_call(self, bus, name, path, iface, method, params=None, fallback=None):
+        if bus is None:
+            if fallback:
+                fallback()
+            return
+
+        def done(conn, res):
+            try:
+                conn.call_finish(res)
+            except GLib.Error as e:
+                log(f"{name} {method}: {e.message}")
+                if fallback:
+                    fallback()
+
+        bus.call(name, path, iface, method, params, None, Gio.DBusCallFlags.NONE, 5000, None, done)
+
+    @staticmethod
+    def spawn(argv):
+        try:
+            subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, start_new_session=True)
+        except OSError as e:
+            log("cannot run", argv[0], e)
+
+    def session_action(self, action):
+        log("session action:", action)
+        login1 = ("org.freedesktop.login1", "/org/freedesktop/login1", "org.freedesktop.login1.Manager")
+        if action == "lock":
+            self.dbus_call(self.session, "org.freedesktop.ScreenSaver", "/ScreenSaver", "org.freedesktop.ScreenSaver", "Lock",
+                           fallback=lambda: self.spawn(["loginctl", "lock-session"]))
+        elif action == "sleep":
+            self.dbus_call(self.system, *login1, "Suspend", GLib.Variant("(b)", (True,)), fallback=lambda: self.spawn(["systemctl", "suspend"]))
+        elif action in ("restart", "shutdown", "logout"):
+            # Plasma's own confirmation (with countdown), like the Mac's "Are you sure…" dialog
+            method = {"restart": "promptReboot", "shutdown": "promptShutDown", "logout": "promptLogout"}[action]
+            direct = {"restart": "logoutAndReboot", "shutdown": "logoutAndShutdown", "logout": "logout"}[action]
+            self.dbus_call(self.session, "org.kde.LogoutPrompt", "/LogoutPrompt", "org.kde.LogoutPrompt", method,
+                           fallback=lambda: self.dbus_call(self.session, "org.kde.Shutdown", "/Shutdown", "org.kde.Shutdown", direct))
+        elif action == "restart-update":
+            self.spawn(["kristall-update", "restart"])
+        else:
+            log("unknown session action", action)
+
+    # app menus need KDE's appmenu module: KWin offers the app-menu protocol only while it runs --
+    def load_appmenu_module(self):
+        self.dbus_call(self.session, "org.kde.kded6", "/kded", "org.kde.kded6", "loadModule", GLib.Variant("(s)", ("appmenu",)))
+
+    # last-resort fallback panel (see kristall-shell-fallback) --------------------------------
+    def cleanup_fallback(self):
+        marker = os.path.join(self.state_home, "kristall", "shell", "fallback-panel")
+        if not os.path.exists(marker):
+            return False
+        script = "panels().forEach(function (p) { p.remove(); });"
+        log("shell is running again: removing the fallback panel")
+        self.dbus_call(self.session, "org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell", "evaluateScript", GLib.Variant("(s)", (script,)))
+        try:
+            os.unlink(marker)
+        except OSError:
+            pass
+        return False
+
+
+if __name__ == "__main__":
+    loop = GLib.MainLoop()
+    helper = Helper()
+    helper.start()
+    try:
+        loop.run()
+    except KeyboardInterrupt:
+        pass
+    helper.shortcuts.close()

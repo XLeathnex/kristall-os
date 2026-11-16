@@ -1,0 +1,9 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Test stand-in for kristall-update: `status --json` prints $KRISTALL_UPDATE_STATE_DIR/status.json.
+d="${KRISTALL_UPDATE_STATE_DIR:-/tmp}"
+if [ "$1" = status ]; then
+    if [ -f "$d/status.json" ]; then tr -d '\n' < "$d/status.json"; echo; else echo '{"schema":1,"state":"up-to-date"}'; fi
+    exit 0
+fi
+echo "mock kristall-update: $*" >> "$d/calls.log"

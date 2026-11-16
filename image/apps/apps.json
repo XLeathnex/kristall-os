@@ -1,0 +1,366 @@
+{
+  "schema": 1,
+  "apps": [
+    {
+      "id": "files",
+      "kind": "rpm",
+      "package": "dolphin",
+      "desktop_id": "org.kde.dolphin.desktop",
+      "name": {
+        "en": "Files",
+        "de": "Dateien"
+      },
+      "category": "system",
+      "default": true,
+      "show_in_apps": true,
+      "dock": 1,
+      "license": "GPL-2.0-or-later",
+      "proprietary": false
+    },
+    {
+      "id": "browser",
+      "kind": "rpm",
+      "package": "firefox",
+      "desktop_id": "org.mozilla.firefox.desktop",
+      "name": {
+        "en": "Firefox",
+        "de": "Firefox"
+      },
+      "category": "internet",
+      "default": true,
+      "show_in_apps": true,
+      "dock": 2,
+      "license": "MPL-2.0",
+      "proprietary": false
+    },
+    {
+      "id": "music",
+      "kind": "flatpak",
+      "flatpak": {
+        "id": "org.kde.elisa",
+        "remote": "flathub"
+      },
+      "embed_in_iso": true,
+      "desktop_id": "org.kde.elisa.desktop",
+      "name": {
+        "en": "Music",
+        "de": "Musik"
+      },
+      "category": "media",
+      "default": true,
+      "show_in_apps": true,
+      "dock": 3,
+      "license": "LGPL-3.0-or-later",
+      "proprietary": false
+    },
+    {
+      "id": "video",
+      "kind": "rpm",
+      "package": "haruna",
+      "desktop_id": "org.kde.haruna.desktop",
+      "name": {
+        "en": "Video Player",
+        "de": "Videoplayer"
+      },
+      "category": "media",
+      "default": true,
+      "show_in_apps": true,
+      "dock": null,
+      "license": "GPL-3.0-or-later",
+      "proprietary": false
+    },
+    {
+      "id": "images",
+      "kind": "flatpak",
+      "flatpak": {
+        "id": "org.kde.gwenview",
+        "remote": "flathub"
+      },
+      "embed_in_iso": true,
+      "desktop_id": "org.kde.gwenview.desktop",
+      "name": {
+        "en": "Image Viewer",
+        "de": "Bildbetrachter"
+      },
+      "category": "graphics",
+      "default": true,
+      "show_in_apps": true,
+      "dock": null,
+      "license": "GPL-2.0-or-later",
+      "proprietary": false
+    },
+    {
+      "id": "documents",
+      "kind": "flatpak",
+      "flatpak": {
+        "id": "org.kde.okular",
+        "remote": "flathub"
+      },
+      "embed_in_iso": true,
+      "desktop_id": "org.kde.okular.desktop",
+      "name": {
+        "en": "Document Viewer",
+        "de": "Dokumentbetrachter"
+      },
+      "category": "productivity",
+      "default": true,
+      "show_in_apps": true,
+      "dock": null,
+      "license": "GPL-2.0-or-later",
+      "proprietary": false
+    },
+    {
+      "id": "text-editor",
+      "kind": "rpm",
+      "package": "kwrite",
+      "desktop_id": "org.kde.kwrite.desktop",
+      "name": {
+        "en": "Text Editor",
+        "de": "Texteditor"
+      },
+      "category": "productivity",
+      "default": true,
+      "show_in_apps": true,
+      "dock": null,
+      "license": "LGPL-2.0-or-later",
+      "proprietary": false
+    },
+    {
+      "id": "calculator",
+      "kind": "flatpak",
+      "flatpak": {
+        "id": "org.kde.kcalc",
+        "remote": "flathub"
+      },
+      "embed_in_iso": true,
+      "desktop_id": "org.kde.kcalc.desktop",
+      "name": {
+        "en": "Calculator",
+        "de": "Rechner"
+      },
+      "category": "utilities",
+      "default": true,
+      "show_in_apps": true,
+      "dock": null,
+      "license": "GPL-2.0-or-later",
+      "proprietary": false
+    },
+    {
+      "id": "screenshot",
+      "kind": "rpm",
+      "package": "spectacle",
+      "desktop_id": "org.kde.spectacle.desktop",
+      "name": {
+        "en": "Screenshot",
+        "de": "Bildschirmfoto"
+      },
+      "category": "utilities",
+      "default": true,
+      "show_in_apps": true,
+      "dock": null,
+      "license": "GPL-2.0-or-later",
+      "proprietary": false
+    },
+    {
+      "id": "system-monitor",
+      "kind": "rpm",
+      "package": "plasma-systemmonitor",
+      "desktop_id": "org.kde.plasma-systemmonitor.desktop",
+      "name": {
+        "en": "System Monitor",
+        "de": "Systemmonitor"
+      },
+      "category": "utilities",
+      "default": true,
+      "show_in_apps": true,
+      "dock": null,
+      "license": "GPL-2.0-or-later",
+      "proprietary": false
+    },
+    {
+      "id": "archives",
+      "kind": "rpm",
+      "package": "ark",
+      "desktop_id": "org.kde.ark.desktop",
+      "name": {
+        "en": "Archive Utility",
+        "de": "Archivprogramm"
+      },
+      "category": "utilities",
+      "default": true,
+      "show_in_apps": false,
+      "dock": null,
+      "license": "GPL-2.0-or-later",
+      "proprietary": false
+    },
+    {
+      "id": "terminal",
+      "kind": "rpm",
+      "package": "konsole",
+      "desktop_id": "org.kde.konsole.desktop",
+      "name": {
+        "en": "Terminal",
+        "de": "Terminal"
+      },
+      "category": "developer",
+      "default": true,
+      "show_in_apps": true,
+      "dock": null,
+      "license": "GPL-2.0-or-later",
+      "proprietary": false
+    },
+    {
+      "id": "code",
+      "kind": "flatpak",
+      "flatpak": {
+        "id": "com.visualstudio.code",
+        "remote": "flathub"
+      },
+      "embed_in_iso": false,
+      "desktop_id": "com.visualstudio.code.desktop",
+      "name": {
+        "en": "Visual Studio Code",
+        "de": "Visual Studio Code"
+      },
+      "category": "developer",
+      "default": true,
+      "show_in_apps": true,
+      "dock": 4,
+      "license": "LicenseRef-proprietary (Microsoft)",
+      "proprietary": true
+    },
+    {
+      "id": "blender",
+      "kind": "flatpak",
+      "flatpak": {
+        "id": "org.blender.Blender",
+        "remote": "flathub"
+      },
+      "embed_in_iso": true,
+      "desktop_id": "org.blender.Blender.desktop",
+      "name": {
+        "en": "Blender",
+        "de": "Blender"
+      },
+      "category": "graphics",
+      "default": true,
+      "show_in_apps": true,
+      "dock": 5,
+      "license": "GPL-3.0-or-later",
+      "proprietary": false
+    },
+    {
+      "id": "roblox",
+      "kind": "flatpak",
+      "flatpak": {
+        "id": "org.vinegarhq.Sober",
+        "remote": "flathub"
+      },
+      "embed_in_iso": false,
+      "desktop_id": "org.vinegarhq.Sober.desktop",
+      "name": {
+        "en": "Roblox (Sober)",
+        "de": "Roblox (Sober)"
+      },
+      "category": "games",
+      "default": true,
+      "show_in_apps": true,
+      "dock": 6,
+      "license": "LicenseRef-proprietary (VinegarHQ)",
+      "proprietary": true
+    },
+    {
+      "id": "roblox-studio",
+      "kind": "flatpak",
+      "flatpak": {
+        "id": "org.vinegarhq.Vinegar",
+        "remote": "flathub"
+      },
+      "embed_in_iso": true,
+      "desktop_id": "org.vinegarhq.Vinegar.desktop",
+      "name": {
+        "en": "Roblox Studio (Vinegar)",
+        "de": "Roblox Studio (Vinegar)"
+      },
+      "category": "games",
+      "default": true,
+      "show_in_apps": true,
+      "dock": 7,
+      "license": "GPL-3.0-only",
+      "proprietary": false
+    },
+    {
+      "id": "steam",
+      "kind": "flatpak",
+      "flatpak": {
+        "id": "com.valvesoftware.Steam",
+        "remote": "flathub"
+      },
+      "embed_in_iso": false,
+      "desktop_id": "com.valvesoftware.Steam.desktop",
+      "name": {
+        "en": "Steam",
+        "de": "Steam"
+      },
+      "category": "games",
+      "default": true,
+      "show_in_apps": true,
+      "dock": 8,
+      "license": "LicenseRef-proprietary (Valve)",
+      "proprietary": true
+    },
+    {
+      "id": "app-center",
+      "kind": "flatpak",
+      "flatpak": {
+        "id": "io.github.kolunmi.Bazaar",
+        "remote": "flathub",
+        "overrides": [
+          "--filesystem=host-etc:ro"
+        ]
+      },
+      "embed_in_iso": true,
+      "desktop_id": "io.github.kolunmi.Bazaar.desktop",
+      "name": {
+        "en": "App Center",
+        "de": "App-Center"
+      },
+      "category": "system",
+      "default": true,
+      "show_in_apps": true,
+      "dock": 9,
+      "license": "GPL-3.0-or-later",
+      "proprietary": false
+    },
+    {
+      "id": "settings",
+      "kind": "rpm",
+      "package": "plasma-systemsettings",
+      "desktop_id": "systemsettings.desktop",
+      "name": {
+        "en": "System Settings",
+        "de": "Systemeinstellungen"
+      },
+      "category": "system",
+      "default": true,
+      "show_in_apps": true,
+      "dock": 10,
+      "license": "GPL-2.0-or-later",
+      "proprietary": false
+    }
+  ],
+  "runtimes": [
+    {
+      "id": "org.gtk.Gtk3theme.adw-gtk3",
+      "branch": "3.22",
+      "remote": "flathub",
+      "why": "GTK 3 Flatpak apps get the light theme the theme component sets (adw-gtk3)"
+    },
+    {
+      "id": "org.gtk.Gtk3theme.adw-gtk3-dark",
+      "branch": "3.22",
+      "remote": "flathub",
+      "why": "the same in dark mode"
+    }
+  ]
+}

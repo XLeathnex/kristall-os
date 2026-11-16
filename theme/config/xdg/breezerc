@@ -1,0 +1,13 @@
+# Kristall theme: the stock Breeze widget style, configured toward the Mac (merged into /etc/xdg/breezerc).
+[Style]
+MenuOpacity=82
+WindowDragMode=WD_FULL
+MnemonicsMode=MN_NEVER
+ToolBarDrawItemSeparator=false
+TabBarDrawCenteredTabs=true
+SidePanelDrawFrame=false
+DockWidgetDrawFrame=false
+ScrollBarAddLineButtons=0
+ScrollBarSubLineButtons=0
+ViewDrawTreeBranchLines=false
+SliderDrawTickMarks=false

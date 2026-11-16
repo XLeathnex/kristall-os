@@ -1,0 +1,74 @@
+#!/usr/bin/python3 -I
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Badges and progress for the Dock: listens on the session bus for the Unity launcher API
+(com.canonical.Unity.LauncherEntry.Update — the standard way apps publish a count, a progress bar
+or an urgent flag for their launcher icon) and prints one JSON line per update:
+  {"app": "org.kde.dolphin", "count": 3, "countVisible": true, "progress": 0.4,
+   "progressVisible": true, "urgent": false}
+The app's state is forgotten when its bus name disappears ({"app": …, "gone": true}).
+Blocks in the GLib main loop: no timers, no polling. Exits when stdout closes."""
+import json
+import sys
+
+from gi.repository import Gio, GLib
+
+state = {}      # app -> dict
+owners = {}     # unique bus name -> set(app)
+
+
+def emit(obj):
+    try:
+        sys.stdout.write(json.dumps(obj, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+    except (BrokenPipeError, OSError):
+        loop.quit()
+
+
+def app_of(uri):
+    a = uri.split("://", 1)[-1] if uri else ""
+    return a[:-8] if a.endswith(".desktop") else a
+
+
+def on_update(conn, sender, path, iface, signal, params):
+    try:
+        uri, props = params.unpack()
+    except (TypeError, ValueError):
+        return
+    app = app_of(uri)
+    if not app:
+        return
+    s = state.setdefault(app, {"app": app, "count": 0, "countVisible": False, "progress": 0.0,
+                                "progressVisible": False, "urgent": False})
+    keys = {"count": ("count", int), "count-visible": ("countVisible", bool), "progress": ("progress", float),
+            "progress-visible": ("progressVisible", bool), "urgent": ("urgent", bool)}
+    for k, v in props.items():
+        if k in keys:
+            name, conv = keys[k]
+            try:
+                s[name] = conv(v)
+            except (TypeError, ValueError):
+                pass
+    owners.setdefault(sender, set()).add(app)
+    emit(s)
+
+
+def on_owner_changed(conn, sender, path, iface, signal, params):
+    name, old, new = params.unpack()
+    if new == "" and name in owners:
+        for app in owners.pop(name):
+            state.pop(app, None)
+            emit({"app": app, "gone": True})
+
+
+bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+bus.signal_subscribe(None, "com.canonical.Unity.LauncherEntry", "Update", None, None, Gio.DBusSignalFlags.NONE, on_update)
+bus.signal_subscribe("org.freedesktop.DBus", "org.freedesktop.DBus", "NameOwnerChanged", "/org/freedesktop/DBus", None,
+                     Gio.DBusSignalFlags.NONE, on_owner_changed)
+loop = GLib.MainLoop()
+GLib.io_add_watch(GLib.IOChannel.unix_new(sys.stdin.fileno()), GLib.PRIORITY_DEFAULT, GLib.IO_HUP | GLib.IO_ERR,
+                  lambda *a: loop.quit() or False)
+emit({"ready": True})
+try:
+    loop.run()
+except KeyboardInterrupt:
+    pass

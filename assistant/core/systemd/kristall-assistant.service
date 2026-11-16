@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+[Unit]
+Description=Kristall assistant (voice and Claude)
+Documentation=file:///usr/share/kristall/assistant/ASSETS.md
+PartOf=graphical-session.target
+# Not in the installer's live session (no owner, no account).
+ConditionKernelCommandLine=!rd.live.image
+After=graphical-session.target pipewire.service wireplumber.service
+# Fail soft: a broken install must not crash-loop forever.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=notify
+ExecStart=@BIN@/kristall-assistant
+Restart=on-failure
+RestartSec=3
+SyslogIdentifier=kristall-assistant
+Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+# Speech models (~1.5 GB while loaded) and the Claude process share a 16 GB machine with Blender.
+MemoryHigh=3G
+MemoryMax=5G
+TimeoutStopSec=10
+
+[Install]
+WantedBy=graphical-session.target

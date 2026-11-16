@@ -1,0 +1,22 @@
+{
+    "KPlugin": {
+        "Name": "Software Update",
+        "Name[de]": "Softwareupdate",
+        "Description": "Updates arrive by themselves; restart to finish; go back to the previous version",
+        "Description[de]": "Updates kommen von selbst; Neustart zum Abschließen; zur vorherigen Version zurück",
+        "Icon": "system-software-update",
+        "Authors": [
+            {
+                "Name": "Kristall OS contributors"
+            }
+        ],
+        "License": "GPL-3.0-or-later",
+        "FormFactors": [
+            "desktop"
+        ]
+    },
+    "X-KDE-System-Settings-Parent-Category": "kristall",
+    "X-KDE-Weight": 2,
+    "X-KDE-Keywords": "update,upgrade,rollback,restart",
+    "X-KDE-Keywords[de]": "update,aktualisieren,zurück,neustart"
+}

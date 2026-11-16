@@ -1,0 +1,14 @@
+[Unit]
+Description=Check for Kristall OS updates now
+Documentation=file:///usr/share/doc/kristall/contracts/update.md
+Wants=network-online.target
+After=network-online.target
+ConditionKernelCommandLine=!rd.live.image
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/kristall-update check
+Nice=10
+IOSchedulingClass=idle
+SyslogIdentifier=kristall-update
+TimeoutStartSec=6h

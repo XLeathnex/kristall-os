@@ -1,0 +1,24 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# systemd user environment generator (installed as
+# /usr/lib/systemd/user-environment-generators/60-kristall-accessibility; docs/contracts/hands.md §5).
+# Runs when the owner's user manager starts, before any session program. While the assistant is
+# enabled (setting assistant.enabled, default true) and assistant.hands.accessibility is "always"
+# (the default), every app of the session starts with its accessibility tree switched on, so the
+# assistant can read apps that only look at accessibility when they start:
+#   QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1  Qt 5/6 register with AT-SPI whatever the bus status says
+#   GNOME_ACCESSIBILITY=1               Firefox/Gecko (and GTK 3's atk-bridge) enable accessibility at start
+#   ACCESSIBILITY_ENABLED=1             Chromium and Electron (VS Code, Steam) enable their tree at start
+# The AT-SPI bus status (org.a11y.Status.IsEnabled; ScreenReaderEnabled stays false) is set by
+# kristall-hands-session.service. Changes to the settings take effect at the next login.
+# A generator must never fail: anything unexpected means "print nothing".
+set -u
+settings="${KRISTALL_SETTINGS_BIN:-/usr/bin/kristall-settings}"
+[ -x "$settings" ] || exit 0
+get() { timeout 3 "$settings" get "$1" 2>/dev/null; }
+enabled=$(get assistant.enabled) || enabled=true
+mode=$(get assistant.hands.accessibility) || mode='"always"'
+[ "$enabled" = false ] && exit 0
+[ "$mode" = '"always"' ] || exit 0
+printf '%s\n' QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1 GNOME_ACCESSIBILITY=1 ACCESSIBILITY_ENABLED=1
+exit 0

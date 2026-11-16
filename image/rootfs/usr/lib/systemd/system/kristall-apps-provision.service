@@ -1,0 +1,14 @@
+[Unit]
+Description=Install the Kristall OS default apps (resumes after interruptions)
+Documentation=file:///usr/share/doc/kristall/contracts/apps.md
+Wants=network-online.target
+After=network-online.target flatpak-add-flathub-repos.service
+ConditionKernelCommandLine=!rd.live.image
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/kristall-apps provision
+Nice=10
+IOSchedulingClass=idle
+SyslogIdentifier=kristall-apps
+TimeoutStartSec=8h
