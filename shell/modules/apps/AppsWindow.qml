@@ -9,7 +9,6 @@ import Quickshell
 import Quickshell.Wayland
 import qs.core
 import qs.services
-import "../dock/common"
 
 PanelWindow {
     id: appsWindow
@@ -148,6 +147,7 @@ PanelWindow {
         KTextField {
             id: field
             search: true
+            focusRing: false
             scheme: panel.scheme
             width: 300
             anchors.horizontalCenter: parent.horizontalCenter

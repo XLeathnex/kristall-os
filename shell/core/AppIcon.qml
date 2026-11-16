@@ -8,7 +8,6 @@
 //               that size, so changing `size` per frame only scales a texture
 //   plain       folders and the Trash: normalised, never on a plate
 import QtQuick
-import qs.core
 import "squircle.js" as Squircle
 
 Item {

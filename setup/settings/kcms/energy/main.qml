@@ -17,6 +17,9 @@ KCM.SimpleKCM {
     readonly property var daemon: powerFile.data
     readonly property bool auto: daemon ? (daemon.automatic && !daemon.manual) : Lang.setting("power.automatic", true) === true
     readonly property string mode: st ? String(st.mode || "") : ""
+    // why the mode is what it is (power.md §7.2/§7.3: automatic.reason / reason)
+    readonly property string reason: daemon && daemon.reason ? String(daemon.reason) : (st && st.automatic ? String(st.automatic.reason || "") : "")
+    readonly property string batteryBase: String(Lang.setting("power.batteryBase", "quiet"))
     readonly property var battery: st ? st.battery : null
     readonly property var limit: st ? st.charge_limit : null
     readonly property int chargeLimit: Number(Lang.setting("power.chargeLimit", 100))
@@ -70,13 +73,32 @@ KCM.SimpleKCM {
             onActivated: i => setMode.run(["mode", values[i]])
         }
         Note {
-            text: page.auto ? Lang.t("Wählt selbst: leise im Akkubetrieb, volle Leistung, wenn ein Spiel oder Blender sie braucht. Gerade: ",
-                                     "Chooses by itself: quiet on battery, full power when a game or Blender needs it. Right now: ") + page.modeName(page.mode) + "."
+            objectName: "energy.modeNote"
+            text: page.auto ? (page.reason === "auto-battery" ? Lang.t("Automatisch · leise im Akkubetrieb.", "Automatic · quiet on battery.")
+                               : page.reason === "auto-low-battery" ? Lang.t("Automatisch · leise, weil der Akku fast leer ist.", "Automatic · quiet because the battery is low.")
+                               : page.reason === "auto-game" || page.reason === "auto-heavy-app" ? Lang.t("Automatisch · volle Leistung für ein Spiel oder eine anspruchsvolle App.", "Automatic · full power for a game or a demanding app.")
+                               : Lang.t("Wählt selbst: leise im Akkubetrieb, volle Leistung, wenn ein Spiel oder Blender sie braucht. Gerade: ",
+                                        "Chooses by itself: quiet on battery, full power when a game or Blender needs it. Right now: ") + page.modeName(page.mode) + ".")
                             : Lang.t("Du hast selbst gewählt. „Automatisch“ übernimmt wieder, wenn du es auswählst oder dich neu anmeldest.",
                                      "You chose yourself. “Automatic” takes over again when you pick it or log in again.")
         }
-        QQC2.CheckBox {
+        QQC2.ComboBox {
+            implicitContentWidthPolicy: QQC2.ComboBox.WidestText
+            objectName: "energy.batteryBase"
+            visible: page.auto
             Kirigami.FormData.label: Lang.t("Im Akkubetrieb:", "On battery:")
+            readonly property var values: ["quiet", "balanced"]
+            model: [Lang.t("Leise (empfohlen)", "Quiet (recommended)"), Lang.t("Ausgewogen", "Balanced")]
+            currentIndex: page.batteryBase === "balanced" ? 1 : 0
+            onActivated: i => Settings.set("power.batteryBase", values[i])
+        }
+        Note {
+            visible: page.auto
+            text: page.batteryBase === "balanced" ? Lang.t("Ausgewogen, bis der Akku knapp wird – schneller, aber kürzere Laufzeit.", "Balanced until the battery runs low — faster, but shorter battery life.")
+                                                  : Lang.t("Leise vom ersten Moment ohne Netzteil – die längste Laufzeit, kaum Lüfter.", "Quiet from the moment you unplug — the longest battery life, hardly any fan.")
+        }
+        QQC2.CheckBox {
+            Kirigami.FormData.label: page.auto ? "" : Lang.t("Im Akkubetrieb:", "On battery:")
             text: Lang.t("Bildschirm etwas abdunkeln", "Slightly dim the display")
             checked: Lang.setting("power.dimOnBattery", true) === true
             onToggled: Settings.set("power.dimOnBattery", checked)

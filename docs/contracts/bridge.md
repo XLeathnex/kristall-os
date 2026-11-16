@@ -44,6 +44,11 @@ Clients must ignore fields and events they do not know.
     without argument (`-I -s -S -E -B -P -O -OO -u -b -bb -q -R`) and `-W x`/`-X x` are skipped;
     `-c`, `-m` and `-` are never privileged. So `/usr/bin/kristall-hands` with a
     `#!/usr/bin/python3 -I` shebang, or `python3 /usr/lib/kristall/hands/main.py`, are privileged.
+  - *(addition, 2026-11-16)* A Python interpreter *under* the trusted prefix (a virtual
+    environment's `bin/python`, `python3`, `python3.N` copied to `/usr/lib/kristall/…`) gets the
+    same script rule — `-c`/`-m` are not trusted there either; other general interpreters there
+    (shells, perl, node, ruby, lua, …) are never trusted. (A venv's usual symlinked interpreter
+    resolves to `/usr/bin/python3.N` anyway; the assistant daemon runs `-m` and is unprivileged.)
   - The decision is made once, at connect; `hello` reports it (`privileged`).
 - Everything else is available to any same-user peer.
 - While the screen is locked, every privileged method returns `denied` and an active agent session

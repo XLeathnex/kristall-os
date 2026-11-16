@@ -9,9 +9,9 @@
 //   previous  bring the least recently used app forward
 //   commit    nothing to do (KWin commits on key release)
 import QtQuick
+import qs.core
 import Quickshell
 import qs.services
-import "../dock/common"
 
 Scope {
     id: switcher

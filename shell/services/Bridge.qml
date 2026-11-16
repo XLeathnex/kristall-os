@@ -47,7 +47,7 @@ Singleton {
 
     property int _nextId: 1
     property var _pending: ({})
-    property int _backoff: 250
+    property int _backoff: 250          // reconnect backoff: 250 ms doubling to 5 s, reset on success
     // Connect only while the socket exists (the helper watches it with inotify): no connect
     // attempts, warnings or wake-ups while the compositor plugin is absent. Without the helper we
     // fall back to retrying with backoff 0.25 s .. 5 s (contract).
@@ -58,10 +58,9 @@ Singleton {
             if (ev.event !== "socket" || ev.path !== root.socketPath)
                 return;
             root.socketExists = ev.exists;
-            if (ev.exists && !sock.connected) {
+            if (ev.exists && !root.isConnected()) {
                 root._backoff = 250;
-                sock.connected = false;
-                sock.connected = true;
+                root._connect();
             }
         }
         function onReadyChanged() {
@@ -77,12 +76,12 @@ Singleton {
     Timer {
         id: noHelper
         interval: 3000
-        onTriggered: if (!Helper.ready && !sock.connected) { sock.connected = false; sock.connected = true; }
+        onTriggered: if (!Helper.ready && !root.isConnected()) root._connect()
     }
 
     // call(method, params, cb(result, error)) — error is {code, message} or null
     function call(method, params, cb) {
-        if (!sock.connected) {
+        if (!isConnected()) {
             if (cb)
                 cb(null, { code: "unavailable", message: "bridge not connected" });
             return;
@@ -192,34 +191,60 @@ Singleton {
             cb(m.result !== undefined ? m.result : null, m.error || null);
     }
 
-    Socket {
-        id: sock
-        path: root.socketPath
-        connected: false
-        onConnectedChanged: {
-            if (connected) {
-                retry.stop();
-                root._backoff = 250;
-                root.call("hello", { client: "kristall-shell", version: 1 }, (r, e) => {
-                    if (r) {
-                        root.capabilities = r.capabilities || [];
-                        root.locked = r.locked === true;
-                    }
-                });
-                // "menus" declares that we display application menus: only while a client is subscribed to
-                // it do applications export their menus (bridge contract, topic "menus")
-                root.call("subscribe", { events: ["windows", "active", "stacking", "outputs", "menus"] }, (r, e) => {
-                    if (e)
-                        console.warn("bridge: subscribe failed:", e.code, e.message);
-                });
-                root.connected = true;
-            } else {
-                root._reset();
-            }
+    // One Socket object per connection attempt: after a refused connect (ENOENT, ECONNREFUSED) or
+    // a lost connection the old object is destroyed and a fresh one tries again — a Socket that
+    // failed once does not reliably connect again when `connected` is toggled.
+    property var sock: null
+    function isConnected() {
+        return sock !== null && sock.connected;
+    }
+    function _connect() {
+        if (sock) {
+            const old = sock;
+            sock = null;
+            old.destroy();
         }
-        onError: root._reset()
-        parser: SplitParser {
-            onRead: data => root._handle(data)
+        sock = sockComp.createObject(root);
+        sock.connected = true;
+    }
+    function _onConnectedChanged(s) {
+        if (s !== sock)
+            return;
+        if (s.connected) {
+            retry.stop();
+            root._backoff = 250;
+            root.call("hello", { client: "kristall-shell", version: 1 }, (r, e) => {
+                if (r) {
+                    root.capabilities = r.capabilities || [];
+                    root.locked = r.locked === true;
+                }
+            });
+            // "menus" declares that we display application menus: only while a client is subscribed to
+            // it do applications export their menus (bridge contract, topic "menus")
+            root.call("subscribe", { events: ["windows", "active", "stacking", "outputs", "menus"] }, (r, e) => {
+                if (e)
+                    console.warn("bridge: subscribe failed:", e.code, e.message);
+            });
+            root.connected = true;
+        } else {
+            root._reset();
+        }
+    }
+    function _onError(s) {
+        if (s === sock)
+            root._reset();
+    }
+    Component {
+        id: sockComp
+        Socket {
+            id: oneSock
+            path: root.socketPath
+            connected: false
+            onConnectedChanged: root._onConnectedChanged(oneSock)
+            onError: root._onError(oneSock)
+            parser: SplitParser {
+                onRead: data => root._handle(data)
+            }
         }
     }
 
@@ -230,8 +255,7 @@ Singleton {
             root._backoff = Math.min(root._backoff * 2, 5000);
             if (!root.socketExists && Helper.ready)
                 return;           // the helper tells us when it appears
-            sock.connected = false;
-            sock.connected = true;
+            root._connect();
         }
     }
 }

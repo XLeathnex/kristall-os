@@ -2,7 +2,7 @@
 // The menu bar of one output (design.md §8, shell.md §3).
 // Left: our mark and its menu · the front app's name (bold) · that app's own menus (DBusMenu via
 // the bridge's window.menu) or a minimal menu set. Right: tray (StatusNotifierItem) · battery ·
-// Wi-Fi · sound · Control Center · assistant · clock. Glass strip; solid and calmer while the front
+// Wi-Fi · sound · Search · Control Center · assistant · clock. Glass strip; solid and calmer while the front
 // window on this output is maximised (macOS 27). Text colour follows the glass legibility signal.
 import QtQuick
 import Quickshell
@@ -20,7 +20,8 @@ PanelWindow {
     readonly property string screenName: screen ? screen.name : ""
 
     WlrLayershell.namespace: "kristall-bar"
-    WlrLayershell.layer: WlrLayer.Top
+    // Top normally; Overlay while revealed over a full-screen window (KWin keeps Overlay above it)
+    WlrLayershell.layer: revealed || slide.running ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     anchors { top: true; left: true; right: true }
     implicitHeight: Theme.size.bar
@@ -32,6 +33,91 @@ PanelWindow {
     readonly property bool frontHere: front !== null && front.output === screenName
     readonly property bool dimmed: Settings.get("bar.dimWhenMaximized", true) && frontHere && !front.minimized && (front.maximized || front.fullscreen)
     readonly property string scheme: dimmed ? Theme.scheme : strip.scheme
+
+    // ---- full screen: the bar slides down when the pointer rests at the top edge -----------------
+    // A full-screen window covers the Top layer. While one is in front on this output, a 2-px hot
+    // strip on the Overlay layer (exclusive zone 0, no keyboard) waits at the top edge; 250 ms of
+    // rest there reveal the bar (Overlay, slides in over 200 ms); it slides away when the pointer
+    // has left the bar and no menu of this bar is open. Games keep the edge: no strip while the
+    // full-screen window is an X11 (Xwayland) client, a known game/emulator app, or reports pointer
+    // lock (`pointerLocked`, bridge contract addition requested).
+    readonly property var fullscreenWin: frontHere && front.fullscreen && !front.minimized ? front : null
+    readonly property bool gameLike: {
+        const w = fullscreenWin;
+        if (!w)
+            return false;
+        if (w.xwayland === true || w.pointerLocked === true || w.pointerConstrained === true)
+            return true;
+        const id = String(w.appId || "").toLowerCase();
+        return /\.exe$|^steam_app_|^gamescope$|^org\.vinegarhq\.|^sober$|^roblox|^minecraft|retroarch|^dosbox|dolphin-emu|^org\.dolphin_emu\./.test(id);
+    }
+    readonly property bool revealAllowed: fullscreenWin !== null && !gameLike
+    property bool revealed: false
+    property real slideY: 0                 // 0 = in place; −bar = out of sight above the edge
+    onRevealAllowedChanged: if (!revealAllowed) _hideReveal(true)
+    function _reveal() {
+        if (revealed || !revealAllowed)
+            return;
+        slideY = -Theme.size.bar;
+        revealed = true;
+        slide.to = 0;
+        slide.restart();
+    }
+    function _hideReveal(now) {
+        hideTimer.stop();
+        if (!revealed)
+            return;
+        if (now || Theme.reduceMotion) {
+            slide.stop();
+            revealed = false;
+            slideY = 0;
+            return;
+        }
+        slide.to = -Theme.size.bar;
+        slide.restart();
+    }
+    NumberAnimation {
+        id: slide
+        target: barWindow
+        property: "slideY"
+        duration: Theme.duration("short") > 0 ? 200 : 0
+        easing.type: Easing.BezierSpline
+        easing.bezierCurve: Theme.curve("easeOut")
+        onFinished: if (barWindow.slideY < 0) { barWindow.revealed = false; barWindow.slideY = 0; }
+    }
+    readonly property bool menuOpenHere: Menus.current !== null && Menus.current.screen === screenName
+    readonly property bool pointerOnBar: barHover.hovered
+    Timer {
+        // the pointer left the bar (and no menu of it is open): slide away
+        id: hideTimer
+        interval: 250
+        onTriggered: if (!barWindow.pointerOnBar && !barWindow.menuOpenHere) barWindow._hideReveal(false)
+    }
+    onPointerOnBarChanged: if (revealed && !pointerOnBar && !menuOpenHere) hideTimer.restart()
+    onMenuOpenHereChanged: if (revealed && !pointerOnBar && !menuOpenHere) hideTimer.restart()
+    HoverHandler { id: barHover }
+    readonly property Translate slideTransform: Translate { y: barWindow.slideY }
+    PanelWindow {
+        id: hotStrip
+        screen: barWindow.screen
+        visible: barWindow.revealAllowed && !barWindow.revealed
+        color: "transparent"
+        WlrLayershell.namespace: "kristall-bar-reveal"
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        exclusionMode: ExclusionMode.Ignore
+        anchors { top: true; left: true; right: true }
+        implicitHeight: 2
+        HoverHandler {
+            id: edgeHover
+            onHoveredChanged: hovered ? restTimer.restart() : restTimer.stop()
+        }
+        Timer {
+            id: restTimer
+            interval: 250
+            onTriggered: if (edgeHover.hovered) barWindow._reveal()
+        }
+    }
     readonly property string appId: front ? front.appId : ""
     readonly property string appName: front ? Apps.displayName(front.appId) : Strings.pick(Apps.byId("files") ? Apps.byId("files").name : { en: "Files", de: "Dateien" })
     readonly property bool hasAppMenu: front !== null && front.menu !== null && front.menu !== undefined && AppMenus.trees.app !== undefined
@@ -51,7 +137,10 @@ PanelWindow {
         function onLayoutChanged(key) { if (key === "app") barWindow._refreshTitles(); }
     }
 
-    Component.onCompleted: BarRegistry.add(screenName, barWindow)
+    Component.onCompleted: {
+        BarRegistry.add(screenName, barWindow);
+        contentItem.transform = [slideTransform];
+    }
     Component.onDestruction: BarRegistry.remove(screenName, barWindow)
 
     // ---- menu tracking (press-and-drag across titles, ←/→) -------------------------------------
@@ -274,6 +363,18 @@ PanelWindow {
             menuMinWidth: 280
         }
         BarButton {
+            // Search (magnifier), left of Control Center as on the Mac
+            bar: barWindow
+            owner: "status:search"
+            padding: Theme.size.barStatusPadding
+            icon: "bold/magnifying-glass"
+            accessibleName: Strings.t("bar.search")
+            tooltip: Strings.t("bar.search")
+            active: ShellBus.isOpen("search", barWindow.screenName)
+            onClicked: ShellBus.request("search", "toggle", "", barWindow.screenName)
+        }
+        BarButton {
+            id: ccButton
             bar: barWindow
             owner: "status:control-center"
             visible: Settings.get("bar.showControlCenter", true)
@@ -281,7 +382,13 @@ PanelWindow {
             icon: "kristall/control-center"
             accessibleName: Strings.t("bar.controlCenter")
             active: ShellBus.isOpen("control-center", barWindow.screenName)
-            onClicked: ShellBus.request("panels", "toggle-control-center", "", barWindow.screenName)
+            // the button's rectangle (output coordinates): the Control Center opens anchored under
+            // it and its glass grows out of the button (shell.md §5)
+            onClicked: {
+                const r = Menus.itemRect(ccButton, 0, 0);
+                ShellBus.request("panels", "toggle-control-center",
+                                 JSON.stringify({ x: Math.round(r.x), y: 0, w: Math.round(r.w), h: Theme.size.bar }), barWindow.screenName);
+            }
         }
         BarButton {
             bar: barWindow

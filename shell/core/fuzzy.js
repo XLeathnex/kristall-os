@@ -21,7 +21,23 @@ function words(n) {
     return n === "" ? [] : n.split(" ");
 }
 
-// one field: {n: normalised text, w: words, i: initials, c: compact (no spaces)}
+// letters and digits present in a normalised string, as a bit mask (a–z: bits 0–25, 0–9: 26,
+// + and #: 27) — a cheap necessary condition before typo and subsequence matching
+function charMask(s) {
+    let m = 0;
+    for (let k = 0; k < s.length; ++k)
+        m |= charBit(s.charCodeAt(k));
+    return m;
+}
+function charBit(c) {
+    if (c >= 97 && c <= 122)
+        return 1 << (c - 97);
+    if (c >= 48 && c <= 57)
+        return 1 << 26;
+    return c === 43 || c === 35 ? 1 << 27 : 0;
+}
+
+// one field: {n: normalised text, w: words, i: initials, c: compact (no spaces), m: char mask}
 function prepareField(text) {
     const n = norm(text);
     // split camel case and dotted ids too ("VisualStudioCode", "org.kde.dolphin")
@@ -30,7 +46,8 @@ function prepareField(text) {
     let i = "";
     for (const x of w)
         i += x.charAt(0);
-    return { n: n, w: w, i: i, c: n.replace(/ /g, "") };
+    const c = n.replace(/ /g, "");
+    return { n: n, w: w, i: i, c: c, m: charMask(c) };
 }
 
 // fields: [{text, weight}] → prepared entry
@@ -145,10 +162,16 @@ function scoreField(f, q, qw, cq) {
     const at = f.c.indexOf(cq);
     if (cq.length >= 3 && at > 0)
         return 600 - Math.min(50, at);
+    // query letters this field does not contain at all: each needs at least one edit, and a
+    // subsequence needs none — most fields stop here without any distance computation
+    let missing = 0;
+    for (let k = 0; k < cq.length; ++k)
+        if ((f.m & charBit(cq.charCodeAt(k))) === 0)
+            ++missing;
     // typos against word prefixes of about the query's length (people rarely mistype the first
     // letter: only words that start with it are compared, which keeps this cheap)
     const typos = allowedTypos(cq.length);
-    if (typos > 0) {
+    if (typos > 0 && missing <= typos) {
         let best = typos + 1;
         const c0 = cq.charCodeAt(0);
         for (const w of f.w) {
@@ -163,7 +186,7 @@ function scoreField(f, q, qw, cq) {
         if (best <= typos)
             return 480 - 90 * best;
     }
-    if (cq.length >= 3 && f.weight >= 0.9) {
+    if (cq.length >= 3 && f.weight >= 0.9 && missing === 0) {
         const gaps = subsequence(cq, f.c);
         if (gaps >= 0 && gaps <= 2)
             return 300 - 30 * gaps;
@@ -172,9 +195,9 @@ function scoreField(f, q, qw, cq) {
 }
 
 // best weighted score over an entry's prepared fields
-function score(entry, q, qw) {
+function score(entry, q, qw, cqIn) {
     let best = 0;
-    const cq = q.indexOf(" ") >= 0 ? q.replace(/ /g, "") : q;
+    const cq = cqIn !== undefined ? cqIn : (q.indexOf(" ") >= 0 ? q.replace(/ /g, "") : q);
     for (let i = 0; i < entry.length; ++i) {
         const f = entry[i];
         if (f.weight * 1000 <= best)
@@ -188,5 +211,5 @@ function score(entry, q, qw) {
 
 function query(text) {
     const q = norm(text);
-    return { q: q, w: words(q) };
+    return { q: q, w: words(q), c: q.replace(/ /g, "") };
 }

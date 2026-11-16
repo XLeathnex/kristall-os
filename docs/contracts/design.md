@@ -109,6 +109,15 @@ Spacing grid (4 px with 2-px half steps): `xxs 2, xs 4, s 6, m 8, l 12, xl 16, x
 | listRow / listRowCompact | 32 / 24 | 44 with a subtitle |
 | tooltip padding | 8 × 4 | |
 
+Control Center, notifications and HUD (`PanelMetrics`, a core singleton; estimates from macOS
+26/27 screenshots like the bar metrics): Control Center grid of 4 cells of 68 with gaps of 10
+inside a padding of 10 (`ccCell 68`, `ccGap 10`, `ccPadding 10` → `ccInner 302`, `ccWidth 322`,
+`ccHalf 146`), `ccTop 6` below the bar, `ccEdge 8` to the screen edge, round toggles 36
+(`ccRound`), lists scroll above 300 (`ccListMax`); notification cards 344 wide (`cardWidth`,
+`cardPadding 12`, `cardIcon 32`, `cardImage 40`, `cardGap 8`, `stackPeek 8`), banners 6 below the
+bar and 10 from the edge, at most 3, 5 s (3.5 s low urgency); small widget 168; HUD 300 × 72,
+1.5 s; `shadowPad 48` around panel glass for its shadow.
+
 ## 5. Corner radii and concentricity
 
 Rule: a shape inside another shape with padding *p* has radius `outer − p` (never less than
@@ -151,6 +160,8 @@ glass contract; QML `Rectangle` corners are circular — acceptable below 10 px)
 | fieldBackground | white 70 % | white 8 % |
 | fallback (no glass) | #F6F6F8 | #1E1E20 |
 | destructive / success / warning | #FF3B30 / #28CD41 / #FFCC00 | #FF453A / #32D74B / #FFD60A |
+| micOrange (microphone in use: privacy dot, mic badge) | #FF9500 | #FF9F0A |
+| rim (hairline of solid glass objects, `KGlassRim`) | black 16 % | white 24 % |
 | focusRing | accent 55 % | accent 55 % |
 
 Accent (`appearance.accent`, default `blue`): blue #007AFF/#0A84FF, purple #AF52DE/#BF5AF2,
@@ -173,6 +184,7 @@ theme (dark: × 1.6, ≤ 0.6):
 | control | 8 | 2 | 0.14 | 11, 14, 18 |
 | knob | 6 | 1 | 0.22 | 10, 12 |
 | window (theme) | 48 | 16 | 0.32 | — |
+| ambient (under floating chrome: the Dock) | 24 | 3 | 0.30 | 12, 16, 20, 24, 28, 32, 40, 48 (the nearest is used) |
 
 A new radius: add it to `SHAPES` in the generator and to `KShadow.available`.
 
@@ -215,6 +227,14 @@ Increase Contrast adds +0.12 tint (+0.15 for `effect` roles) and +0.05 fallback 
 | hud | rect | 22 | 0.6 | 14 | 8 | regular | 0.50 → 0.88 | 0.88 → 0.96 |
 | tooltip | rect | 8 | 0.6 | 4 | 2 | regular | 0.82 → 0.94 | 0.95 → 0.98 |
 | media | rect | 16 | 0.6 | 10 | 6 | clear | effect | 0.55 → 0.80 |
+| dock | rect | 24 (scaled with the tile size) | 0.6 | 0.22·h | 0.12·h | regular | 0.52 → 0.90 | 0.84 → 0.95 |
+| platter | rect | 16 | 0.6 | 8 | 3 | regular | 0.58 → 0.86, white (light) / #66666E (dark) tint; accent when on | — (a quiet `fill` instead) |
+
+The Dock reads as a solid object of glass on any wallpaper: its own stronger tint (`dock`), the
+`KGlassRim` (a hairline of one device pixel — light on dark, dark on light — and a specular rim
+one logical pixel inside it, brightest along the top edge and fading towards the bottom) and the
+`ambient` shadow. Control Center modules are glass **platters** on the panel's glass (macOS 27):
+lighter tint, a weaker lens, the same rim; switched-on modules fill with the accent colour.
 
 Why menus and panels carry more tint than the bar: they hold many lines of small text over
 arbitrary content; at the effect's light blur (2–10 px) only tint keeps them legible. The bar
@@ -237,16 +257,24 @@ a focus ring (3 px, accent 55 %, outside the shape) and works with Space/Return/
 
 | Component | Key properties | Notes |
 |---|---|---|
-| `GlassSurface` | `key`, `layerNamespace`, `output`, `glassDrawn` | one per layer window; shapes register themselves |
+| `GlassSurface` | `key`, `layerNamespace`, `output`, `glassDrawn`, `frameSynced` (default true: `sync:"commit"`) | one per layer window; shapes register themselves |
 | `GlassShape` | `shapeId`, `surface`, `role`, `scheme`, `textColor`, `glassOpacity`, `glassEnabled`, `pressed`, `pointer*`, `group`/`merge`, `shadow` | fallback, shadow, increase-contrast border built in |
 | `KText` | `textStyle`, `emphasized`, `scheme`, `level`, `tabular` | colour cross-fades 300 ms |
 | `KIcon` | `name` (`"wifi-high"`, `"fill/…"`, `"bold/…"`, `"kristall/…"`), `size`, `color`, `scheme` | SVG at device resolution, any colour |
 | `KButton` | `text`, `icon`, `variant` fill/accent/plain/destructive/glass, `size` small/regular/large, `checkable`/`checked`, `showState` | icon-only = circle |
-| `KToggle` | `checked`, `toggled(bool)` | |
-| `KSlider` | `value`, `from`, `to`, `step`, `moved(v)` | |
-| `KCapsuleSlider` | `value` 0..1, `icon`, `moved(v)` | Control Center style |
-| `KSegmented` | `model`, `currentIndex`, `activated(i)` | |
-| `KTextField` | `text`, `placeholder`, `search`, `password`, `accepted()`, `escaped()` | needs keyboard focus on the surface |
+| `KToggle` | `checked`, `toggled(bool)`, `shownChecked` | binding-safe (below) |
+| `KSlider` | `value`, `from`, `to`, `step`, `moved(v)`, `shown` | binding-safe |
+| `KCapsuleSlider` | `value` 0..1, `icon`, `moved(v)`, `shown`, `interacting`, `setValue(v)` | Control Center style; binding-safe |
+| `KSegmented` | `model`, `currentIndex` (−1: none), `activated(i)`, `shownIndex` | binding-safe |
+| `KTextField` | `text`, `placeholder`, `search`, `password`, `focusRing` (false: search-style fields without a ring), `accepted()`, `escaped()` | needs keyboard focus on the surface |
+| `KGlassRim` | `radius`, `scheme`, `strength`, `specular` | hairline + top-lit specular rim of solid glass (Dock, platters) |
+| `Spinner` | `running`, `scheme` | eight fading spokes; turns only while `running` |
+| `ChoiceTile` | `selected`, `label`, `note`, preview children, `chosen()` | a choice shown as a picture (appearance, sizes) |
+| `Keycap` | `legend`, `glyph`, `role`, `lit` | a drawn key with its Mac role |
+| `RoundedImage` | `source`, `radius`, `status` | cropped to fill, rounded (Canvas: every backend) |
+| `AppIcon`, `AppsGlyph`, `IconShapes`, `IconProbe`, `AppCatalog` (singleton) | | app icons on plates, the app catalogue (manifest + desktop entries, window→app, launch/hide/quit, ranking); `fuzzy.js`, `squircle.js` |
+| `Markdown.js` | `toHtml(text, opts, streaming)`, `toPlain(text)`, `hasMarkup(text)` | the assistant's Markdown subset for `Text.StyledText` |
+| `PanelMetrics` (singleton) | §4 | Control Center / notification / HUD layout numbers |
 | `KListRow` | `title`, `subtitle`, `icon`, `detail`, `chevron`, `selected`, trailing children | |
 | `KSeparator` | `vertical`, `scheme` | one device pixel |
 | `KScrollArea` | children = content, `contentHeight` | overlay scroller |
@@ -256,6 +284,15 @@ a focus ring (3 px, accent 55 %, outside the shape) and works with Space/Return/
 | `Theme` (singleton) | tokens, `color()`, `glassRole()`, `glassTint()`, `duration()`, `curve()`, `shortcutText()` | |
 
 `showState` ("hover", "pressed", "focus") exists for the gallery only.
+
+**Binding-safe controls.** `KToggle`, `KSegmented`, `KSlider` and `KCapsuleSlider` never write
+their own public property (`checked`, `currentIndex`, `value`): bind it to the real state and act
+on the request signal (`toggled`, `activated`, `moved`). While the owner operates a control it
+shows the requested state at once (`shownChecked`/`shownIndex`/`shown`) and keeps showing it until
+the bound value follows — at most 1.5 s for toggles and segments (then the real state shows again:
+the change was refused), 600 ms after the last move for sliders (a service that reports back late
+never makes them jitter). Tested: a toggle bound to a setting, clicked, then the setting changed
+from outside — the toggle follows (`shell/tests/run.sh controls`).
 
 ## 12. Menus
 
@@ -270,6 +307,9 @@ context menus). API in `docs/contracts/shell.md` §4. Look and behaviour:
   highlighted and use the disabled colour.
 * Open: no motion. Choose: the item blinks once (70 ms off, 70 ms on), the menu fades out in
   150 ms, then the action runs. Submenus open after 120 ms of hover, at once from the keyboard.
+* Safe triangle: while the pointer moves from a row towards its open submenu — inside the
+  triangle between its previous position and the submenu's near corners (4 px slack) — rows it
+  crosses on the way do not take over; if it rests there 300 ms, the row under it does.
 * Keyboard: ↑↓ move (skipping separators/disabled), → opens a submenu or the next menu-bar menu,
   ← closes a submenu or opens the previous menu-bar menu, ↩/Space choose, ⎋ closes one level,
   Home/End, typing selects by label prefix.
@@ -290,6 +330,5 @@ differ only in opacity; monochrome; drawn by `shell/tools/gen-mark.py`), `contro
 * Typeface: Inter is not the system font; letterforms (a, g, t, digits) differ visibly.
 * The refraction and blur are the glass effect's model, not Apple's; menus need more tint than
   Apple's to stay legible over busy content because the effect's blur is lighter.
-* Menus do not reproduce Apple's "safe triangle" for diagonal moves into submenus (120-ms delay
-  instead) and have no scroll arrows for menus taller than the screen.
+* Menus have no scroll arrows for menus taller than the screen.
 * Exact menu metrics and springs are estimates (§2).

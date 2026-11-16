@@ -80,7 +80,7 @@ class SetupSession(A.AppsSession):
     def start_shell(self, extra_env=None, path=None):
         dropins = os.path.join(self.tmp, "settings.d")
         os.makedirs(dropins, exist_ok=True)
-        shutil.copy(os.path.join(SETUP, "data", "settings.json"), os.path.join(dropins, "50-setup.json"))
+        shutil.copy(os.path.join(SETUP, "data", "50-setup.json"), os.path.join(dropins, "50-setup.json"))
         shutil.copy(os.path.join(CORE, "data", "settings-assistant.json"), os.path.join(dropins, "50-assistant-core.json"))
         power = os.path.join(REPO, "power", "config", "50-power.json")
         if os.path.exists(power):

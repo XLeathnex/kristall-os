@@ -7,7 +7,6 @@ import QtQuick
 import Quickshell
 import qs.core
 import qs.services
-import "common"
 
 Scope {
     id: dockModule

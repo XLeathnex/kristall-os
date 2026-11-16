@@ -38,7 +38,8 @@ Malformed JSON, or JSON that is not an object with a string `type`, gets
 `ack` with `code: "unknown_type"` (and `re: <type>` when the request had no `id`).
 
 `ack.code` values: `bad_json`, `unknown_type`, `bad_request` (missing/invalid field),
-`unknown_request` (permission `request_id` not pending), `internal`.
+`unknown_request` (permission `request_id` not pending), `busy` *(addition: `transcribe` while a turn
+is active)*, `internal`.
 
 **Daemon → client (events):** every event has `type`, `seq` (integer, strictly increasing over the
 daemon's lifetime and shared by all clients — use it to order and to detect a restart: a smaller
@@ -145,6 +146,31 @@ From tool servers: a better human-readable status line than the daemon can deriv
 `{"type":"tool_activity","text":{"de":"Klicke auf „Senden“","en":"Clicking “Send”"},"status":"running","activity_id":"…"}`.
 `text` may also be a plain string (used for both languages). Relayed as `activity` with `source:"tool"`.
 
+### `transcribe` *(addition, 2026-11-16)*
+Transcribe only: open the microphone, run speech recognition, report levels and the text — and
+nothing else. No turn is started, nothing is sent to Claude, no account or sign-in is needed, the
+daemon's `state` does not change (stays `idle`), other audio is not ducked. For the Setup
+Assistant's microphone check and any "dictate into this field" use.
+
+| field | type | |
+|---|---|---|
+| `no_speech_timeout_seconds` | number 1–30 | optional; default setting `assistant.no_speech_timeout_seconds` |
+| `max_seconds` | number 1–45 | optional; default setting `assistant.max_utterance_seconds` |
+
+`ack` carries `transcription_id`. Refused with `ack.code: "busy"` while a turn is active; an `invoke`
+cancels a running transcription (it ends with outcome `cancelled`) before its turn starts; a second
+`transcribe` replaces the first (likewise). Events, in this order: `level` (source `mic`, 20 Hz,
+only to clients that subscribed to levels), `transcription` (`final:false`)\*, then on success one
+`transcription` with `final:true`, and always exactly one `transcription_finished`. End of speech is
+detected as in a voice turn (`end_of_speech_ms`).
+
+### `transcribe_stop` *(addition)*
+`{"type":"transcribe_stop","transcription_id"?}` — stop listening now and transcribe what was heard
+(push-to-talk released). Ignored when no transcription is running.
+
+### `transcribe_cancel` *(addition)*
+`{"type":"transcribe_cancel","transcription_id"?}` — throw the transcription away (outcome `cancelled`).
+
 ### `demo_error`
 Only when the daemon runs with `--demo`: `{"type":"demo_error","code":"<error code>"}` emits that
 `error` so every error state can be designed and screenshotted.
@@ -202,6 +228,16 @@ source stops. Never sent while idle.
 ### `transcript`
 `turn_id`, `text` (the whole utterance so far, not a delta), `final` (bool). Partial transcripts
 replace each other; exactly one `final:true` per voice turn that heard speech.
+
+### `transcription` *(addition)*
+`transcription_id`, `text` (the whole utterance so far), `final` (bool). Like `transcript`, but for
+`transcribe` (no turn); exactly one `final:true` when the outcome is `completed`.
+
+### `transcription_finished` *(addition)*
+`transcription_id`, `outcome` (`completed` \| `nothing_heard` \| `cancelled` \| `error`), `text` (the
+final text, `""` unless completed), `error_code` (`null`, or `speech_models_missing`,
+`mic_unavailable`, `internal` — §7.2), `audio_seconds` (number). Always the last event of a
+transcription.
 
 ### `reply_delta`
 `turn_id`, `text` (append to the reply; markup as §5.1 allows), `segment` (int, starts at 0, increments after each tool
@@ -277,7 +313,7 @@ assistant's cursor in its own overlay; never move the owner's pointer.
 ### 5.1 Reply markup *(addition, 2026-11-16)*
 
 What `reply_delta.text` / `reply_done.text` (and `snapshot.turn.reply`) may contain. The interface
-renders it with `shell/modules/assistant/Markdown.js`; the daemon normalises the model's text so
+renders it with `shell/core/Markdown.js`; the daemon normalises the model's text so
 that nothing outside this list arrives (`assistant/core/kristall_assistant/replytext.py`, tested in
 `tests/test_replytext.py`).
 

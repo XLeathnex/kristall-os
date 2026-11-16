@@ -3,9 +3,9 @@
   "rapid": {
    "messages": 3000,
    "shapes_per_message": 12,
-   "send_s": 0.541,
-   "drained_s": 0.544,
-   "kwin_cpu_s": 0.52,
+   "send_s": 0.327,
+   "drained_s": 0.332,
+   "kwin_cpu_s": 0.37,
    "frames": 21
   }
  },
@@ -260,19 +260,19 @@
  "timing_llvmpipe": {
   "high": {
    "frames": 25,
-   "captureMs": 0.624,
-   "blurMs": 0.455,
-   "compositeMs": 2.388,
-   "lumaMs": 0.181,
-   "totalMs": 3.648
+   "captureMs": 0.718,
+   "blurMs": 0.484,
+   "compositeMs": 2.777,
+   "lumaMs": 0.134,
+   "totalMs": 4.113
   },
   "efficient": {
    "frames": 25,
-   "captureMs": 0.633,
-   "blurMs": 0.39,
-   "compositeMs": 2.039,
-   "lumaMs": 0.098,
-   "totalMs": 3.161
+   "captureMs": 0.68,
+   "blurMs": 0.556,
+   "compositeMs": 2.309,
+   "lumaMs": 0.041,
+   "totalMs": 3.586
   }
  },
  "multioutput": {

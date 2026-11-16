@@ -7,7 +7,6 @@ import Quickshell
 import Quickshell.Wayland
 import qs.core
 import qs.services
-import "common"
 
 PanelWindow {
     id: dialog

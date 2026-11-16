@@ -32,7 +32,10 @@ docker run --rm -v "$PWD":/work kristall-devenv:latest shell/tests/run.sh       
 docker run --rm -v "$PWD":/work kristall-devenv:latest shell/tests/run.sh core appmenu
 ```
 
-Sections: `static` (syntax, shellcheck, strings parity, settings defaults, unit files, launcher
+Sections: `shortcuts` (kglobalaccel files register with their default keys), `ctl` (arguments of
+`kristall-shellctl`), `reconnect` (bridge/glass appearing late, crash-guard notice), `controls`
+(binding-safe toggle), `menus` (submenu safe triangle), `reveal` (menu bar over full screen),
+`static` (syntax, shellcheck, strings parity, settings defaults, unit files, launcher
 ladder), `core` (services react to change, bar states, mark/window menus, idle), `appmenu` (a real
 Qt Widgets app's DBusMenu end to end, a real StatusNotifierItem), `scale` (1.6× on 2880×1800),
 `fallback` (no glass effect), `modules` (broken/throwing module isolated, safe mode), `restart`

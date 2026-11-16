@@ -17,7 +17,7 @@ Item {
     implicitHeight: 28
     Accessible.role: Accessible.Indicator
     Accessible.name: Strings.t("assistant.micLive")
-    readonly property color orange: scheme === "dark" ? "#FF9F0A" : "#FF9500"
+    readonly property color orange: Theme.color(scheme, "micOrange")
 
     Rectangle {
         anchors.centerIn: parent

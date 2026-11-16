@@ -1,20 +1,15 @@
 {
  "last_run": {
   "sections": [
-   "static",
-   "cc",
-   "wifi",
-   "notifications",
-   "hud",
-   "absent",
-   "looks",
-   "idle"
+   "looks"
   ],
   "failures": [
-   "Night Light button \u2192 KWin night light enabled (kwinrc + reloadConfig)",
-   "Night Light button again \u2192 inhibited (as Plasma's applet does)"
+   "light: zero warnings while drawing everything",
+   "dark: zero warnings while drawing everything",
+   "1.6\u00d7: zero warnings",
+   "no glass effect: everything still draws (fallback), zero warnings"
   ],
-  "time": "2026-11-16T19:02:13"
+  "time": "2026-11-16T19:57:44"
  },
  "notifications_groups": 6,
  "idle_panels_closed": {

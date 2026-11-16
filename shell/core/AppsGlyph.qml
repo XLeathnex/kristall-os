@@ -2,7 +2,6 @@
 // Our own icon for "Apps" (the grid of all apps): a light plate with a 3×3 grid of small
 // coloured tiles in the accent palette of design.md §6. Drawn, no external artwork.
 import QtQuick
-import qs.core
 import "squircle.js" as Squircle
 
 Item {

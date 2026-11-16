@@ -9,7 +9,8 @@
 #   shell/modules/dock (the switcher uses the Dock's merge-ini from the source tree);
 # - theme extends shell-core's look-and-feel package org.kristall.desktop: after shell;
 # - setup last (its Setup Assistant uses everything above).
-# shell/modules/setup has no installer of its own (2026-11-16); add it here if it gets one.
+# shell/modules/setup/image/install.sh is not a component of its own: setup/image/install.sh runs
+# it (the checker accepts an installer that a listed component's installer calls).
 image
 power
 kwin/glass

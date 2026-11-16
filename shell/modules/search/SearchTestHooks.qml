@@ -2,10 +2,10 @@
 // Test-only IPC target "searchtest" (KRISTALL_SHELL_TEST=1): state, timing of the synchronous
 // search per keystroke, and what the last chosen row did.
 import QtQuick
+import qs.core
 import Quickshell
 import Quickshell.Io
 import qs.services
-import "../dock/common"
 
 Scope {
     id: hooks
@@ -54,6 +54,10 @@ Scope {
                 parts[k] = parts[k] * 1000 / n;
             return JSON.stringify(parts);
         }
+        function frameLog(): string {
+            return JSON.stringify(hooks.window ? hooks.window.frameLog : []);
+        }
+        // the synchronous app matching alone, one call, in µs (performance clock not in QML: n runs)
         function setQuery(q: string): string {
             hooks.module.show(hooks.module.output, q);
             return "ok";

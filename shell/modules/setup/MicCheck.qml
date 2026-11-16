@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The microphone check: a short connection to the assistant daemon (assistant.sock) while the
-// step is on screen. "Start listening" sends a voice `invoke` that is not spoken; the live
-// transcript is shown; as soon as the final transcript arrives the turn is cancelled, so the
-// owner's words are only recognised (on the laptop), not answered. Connected only while active.
+// step is on screen. "Start listening" sends `transcribe` (assistant-ipc.md §4): the microphone
+// opens, speech recognition runs on the laptop, the live level and the words are shown — no turn,
+// nothing is sent to Claude, so it works before the owner has signed in. A daemon that does not
+// know `transcribe` (older) gets the earlier way: a voice turn that is cancelled as soon as the
+// words are known (needs the sign-in). Connected only while active.
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -23,9 +25,12 @@ Scope {
     property string transcript: ""
     property real level: 0
     property string turnId: ""
+    property string transcriptionId: ""
     property string errorCode: ""
+    property bool transcribeSupported: true   // false once the daemon refused `transcribe` as unknown
 
-    readonly property bool ready: connected && haveSnapshot && (account === "ready" || account === "unknown" || demo) && voiceInput
+    readonly property bool accountReady: account === "ready" || account === "unknown" || demo
+    readonly property bool ready: connected && haveSnapshot && voiceInput && (transcribeSupported || accountReady)
 
     onActiveChanged: {
         if (active) {
@@ -34,7 +39,7 @@ Scope {
             sock.connected = true;
         } else {
             if (phase === "listening")
-                send({ type: "cancel" });
+                send(transcriptionId !== "" || transcribeSupported ? { type: "transcribe_cancel" } : { type: "cancel" });
             sock.connected = false;
             connected = false;
             haveSnapshot = false;
@@ -48,8 +53,17 @@ Scope {
     function listen() {
         transcript = "";
         errorCode = "";
+        level = 0;
         phase = "listening";
-        send({ type: "invoke", id: "setup-mic", mode: "voice", source: "setup", speak: false, new_conversation: true });
+        transcriptionId = "";
+        turnId = "";
+        if (transcribeSupported)
+            send({ type: "transcribe", id: "setup-mic", no_speech_timeout_seconds: 8, max_seconds: 20 });
+        else
+            _listenTurn();
+    }
+    function _listenTurn() {
+        send({ type: "invoke", id: "setup-mic-turn", mode: "voice", source: "setup", speak: false, new_conversation: true });
     }
     function _done() {
         send({ type: "cancel" });
@@ -78,14 +92,51 @@ Scope {
             account = String(m.status || "");
             break;
         case "ack":
-            if (m.id === "setup-mic" && m.ok)
+            if (m.id === "setup-mic") {
+                if (m.ok) {
+                    transcriptionId = m.transcription_id || "";
+                } else if (m.code === "unknown_type") {
+                    transcribeSupported = false;        // an older daemon: the voice-turn way
+                    if (phase === "listening") {
+                        if (accountReady)
+                            _listenTurn();
+                        else
+                            phase = "idle";
+                    }
+                } else if (phase === "listening") {
+                    errorCode = m.code || "";           // busy: the assistant is in a turn right now
+                    phase = "error";
+                }
+            } else if (m.id === "setup-mic-turn" && m.ok) {
                 turnId = m.turn_id || "";
+            }
             break;
         case "level":
-            level = m.value || 0;
+            if (phase === "listening" && (m.source === undefined || m.source === "mic"))
+                level = m.value || 0;
             break;
-        case "transcript":
-            if (phase === "listening" && (turnId === "" || m.turn_id === turnId)) {
+        case "transcription":
+            if (phase === "listening" && (transcriptionId === "" || m.transcription_id === transcriptionId))
+                transcript = m.text || "";
+            break;
+        case "transcription_finished":
+            if (phase === "listening" && (transcriptionId === "" || m.transcription_id === transcriptionId)) {
+                level = 0;
+                if (m.outcome === "completed") {
+                    transcript = m.text || transcript;
+                    phase = transcript.trim() !== "" ? "heard" : "nothing";
+                } else if (m.outcome === "nothing_heard") {
+                    phase = "nothing";
+                } else if (m.outcome === "cancelled") {
+                    phase = "idle";
+                } else {
+                    errorCode = m.error_code || "internal";
+                    phase = "error";
+                }
+            }
+            break;
+        case "transcript":           // the voice-turn way (older daemon)
+            if (phase === "listening" && transcriptionId === "" && !transcribeSupported && (turnId === "" || m.turn_id === turnId)) {
                 transcript = m.text || "";
                 if (m.final) {
                     phase = transcript.trim() !== "" ? "heard" : "nothing";
@@ -94,14 +145,14 @@ Scope {
             }
             break;
         case "error":
-            if (phase === "listening" && (m.turn_id === turnId || m.turn_id === null)) {
+            if (phase === "listening" && !transcribeSupported && (m.turn_id === turnId || m.turn_id === null)) {
                 errorCode = m.code || "";
                 phase = m.code === "nothing_heard" ? "nothing" : "error";
                 _done();
             }
             break;
         case "turn_finished":
-            if (phase === "listening" && m.turn_id === turnId) {
+            if (phase === "listening" && !transcribeSupported && m.turn_id === turnId) {
                 phase = transcript.trim() !== "" ? "heard" : "nothing";
                 _done();
             }

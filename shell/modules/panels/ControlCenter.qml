@@ -110,6 +110,10 @@ PanelWindow {
         glassOpacity: ccWindow.fade
         shadow: ccWindow.t > 0.98
         clip: true
+        // for the module platters (CcTile): their glass goes to this window's surface and fades
+        // with the content
+        readonly property var ccGlassSurface: glassSurface
+        readonly property real ccContentOpacity: keys.opacity * Math.max(0, Math.min(1, (ccWindow.t - 0.7) / 0.3))
 
         // presses inside the panel never reach the "outside" area
         MouseArea {

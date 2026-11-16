@@ -189,7 +189,7 @@ def icon_geometry(s):
 def test_static():
     print("== static", flush=True)
     mods = os.path.join(A.SHELL, "modules")
-    for m in ("dock", "dock/common", "search", "apps", "switcher"):
+    for m in ("dock", "search", "apps", "switcher"):
         d = os.path.join(mods, m)
         qd = os.path.join(d, "qmldir")
         if not os.path.exists(qd):
@@ -549,6 +549,30 @@ def test_contrast():
     sheet.save(os.path.join(EVIDENCE, f"{pre}dock-contrast.png"), optimize=True)
 
 
+def test_settingsapp():
+    print("== System Settings opened on a page is one app in the Dock (kept tile, no second icon)", flush=True)
+    s = new_session("dock-settingsapp", settings={"appearance": {"theme": "dark", "glass": 0.3}})
+    try:
+        s.start_shell()
+        st = dock_state(s, lambda st: st["catalog"] > 0 and len(st["tiles"]) >= 9, 20)
+        before = [t["key"] for t in st["tiles"] if t["kind"] == "app"]
+        p = subprocess.Popen(["systemsettings", "kcm_kristall_energy"], env=s.app_env(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        s.procs.append(p)
+        wait_until(lambda: [w for w in s.windows() if w.get("normal") and "systemsettings" in (w.get("appId") or "")], 20, 0.3)
+        time.sleep(2.0)
+        wins = [(w.get("appId"), w.get("title"), w.get("type"), w.get("skipTaskbar"), w.get("normal")) for w in s.windows()]
+        info("windows: " + json.dumps(wins))
+        st = dock_state(s)
+        keys = [t["key"] for t in st["tiles"] if t["kind"] == "app"]
+        info("dock app keys: " + json.dumps(keys))
+        settings_keys = [k for k in keys if "settings" in k.lower()]
+        check("one System Settings tile while one System Settings window is open", len(settings_keys) == 1, json.dumps(settings_keys))
+        t = next((t for t in st["tiles"] if t["key"] in settings_keys), None)
+        check("…and it is the kept tile, shown as running", bool(t) and t.get("running") is True, json.dumps(t))
+    finally:
+        s.stop()
+
+
 # ---------------------------------------------------------------------------------------------------
 def test_autohide():
     print("== auto-hide", flush=True)
@@ -587,8 +611,8 @@ def test_kwinconfig():
     os.makedirs(os.path.dirname(target))
     with open(target, "w") as f:
         f.write("[Plugins]\nsomeOtherEffectEnabled=true\n[Windows]\nFocusPolicy=ClickToFocus\n")
-    subprocess.run([sys.executable, os.path.join(A.DOCK, "image", "merge-ini"), target, os.path.join(A.DOCK, "kwin", "kwinrc")], check=True)
-    subprocess.run([sys.executable, os.path.join(A.DOCK, "image", "merge-ini"), target, os.path.join(A.DOCK, "kwin", "kwinrc")], check=True)
+    subprocess.run([sys.executable, os.path.join(A.DOCK, "..", "..", "image", "merge-ini"), target, os.path.join(A.DOCK, "kwin", "kwinrc")], check=True)
+    subprocess.run([sys.executable, os.path.join(A.DOCK, "..", "..", "image", "merge-ini"), target, os.path.join(A.DOCK, "kwin", "kwinrc")], check=True)
     merged = open(target).read()
     check("merge keeps other components' keys and is idempotent", "someOtherEffectEnabled=true" in merged and "FocusPolicy=ClickToFocus" in merged
           and merged.count("magiclampEnabled=true") == 1, merged)
@@ -615,7 +639,7 @@ def test_kwinconfig():
         s.stop()
 
 
-SECTIONS = {"static": test_static, "kwinconfig": test_kwinconfig, "behaviour": test_behaviour, "perf": test_perf, "looks": test_looks, "contrast": test_contrast, "autohide": test_autohide}
+SECTIONS = {"static": test_static, "kwinconfig": test_kwinconfig, "behaviour": test_behaviour, "perf": test_perf, "looks": test_looks, "contrast": test_contrast, "settingsapp": test_settingsapp, "autohide": test_autohide}
 
 if __name__ == "__main__":
     wanted = sys.argv[1:] or list(SECTIONS)

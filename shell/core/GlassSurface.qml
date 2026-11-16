@@ -3,7 +3,12 @@
 // kwin/glass/demo/GlassSurface.qml; shell-core owns this copy. Put one inside a PanelWindow;
 // GlassShape items register themselves by setting `surface` (or list them in `shapes`).
 // Geometry is sent in surface-local logical pixels, re-evaluated whenever the window renders an
-// animation frame (sync "commit") or a shape changes (sync "immediate"), and only when it changed.
+// animation frame or a shape changes, and only when it changed. Frame-synced by default
+// (`frameSynced: true` → sync "commit", glass.md §4): the effect applies the new shapes with the
+// window's next committed frame, so glass that moves with content (Dock magnification, panels
+// growing, Control Center pages, Search results) never runs a frame ahead of or behind it. A
+// change without a new frame is applied at the latest 100 ms later (the contract's cap).
+// `frameSynced: false` sends "immediate" (static chrome that never moves with content).
 import QtQuick
 import QtQuick.Window
 import qs.services
@@ -15,6 +20,7 @@ Item {
     required property string layerNamespace // WlrLayershell.namespace of the window
     property string output: ""              // screen name when the namespace exists per output
     property list<Item> shapes              // optional static list; GlassShape.surface also registers
+    property bool frameSynced: true
 
     // false when the glass is not drawn for this window: effect absent/not active, or the
     // binding currently matches no window (contract §7). Shapes draw their fallback then.
@@ -39,7 +45,7 @@ Item {
     }
 
     function requestUpdate() {
-        Qt.callLater(update, "immediate");
+        Qt.callLater(update, frameSynced ? "commit" : "immediate");
     }
 
     function update(sync) {
@@ -77,6 +83,6 @@ Item {
     }
     Connections {
         target: GlassClient
-        function onActiveChanged() { surface._last = ""; surface.update("immediate"); }
+        function onActiveChanged() { surface._last = ""; surface.update("immediate"); }   // (re)connect: no frame to wait for
     }
 }

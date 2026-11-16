@@ -1185,6 +1185,9 @@ void GlassEffect::applyLuma(GlassWindow &gw, const std::vector<GlassRenderer::Lu
 QJsonObject GlassEffect::status() const
 {
     QJsonObject o;
+    if (m_guard) {
+        o[QStringLiteral("guard")] = m_guard->status();
+    }
     o[QStringLiteral("frames")] = qint64(m_frames);
     o[QStringLiteral("glassDraws")] = qint64(m_glassDraws);
     if (m_renderer) {

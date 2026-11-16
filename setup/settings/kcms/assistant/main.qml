@@ -49,7 +49,21 @@ KCM.SimpleKCM {
         perms.write(d);
     }
 
+    readonly property bool enabledAssistant: Lang.setting("assistant.enabled", true) === true
+
     Kirigami.FormLayout {
+        QQC2.Switch {
+            objectName: "assistant.enabled"
+            Kirigami.FormData.label: Lang.t("Assistent:", "Assistant:")
+            text: page.enabledAssistant ? Lang.t("An", "On") : Lang.t("Aus", "Off")
+            checked: page.enabledAssistant
+            onToggled: Settings.set("assistant.enabled", checked)
+        }
+        Note {
+            visible: !page.enabledAssistant
+            text: Lang.t("Aus: Apps starten ab der nächsten Anmeldung ohne die Bedienungshilfe-Schnittstelle, die der Assistent zum Lesen und Klicken braucht.",
+                         "Off: from the next login, apps start without the accessibility interface the assistant needs to read and click.")
+        }
         RowLayout {
             Kirigami.FormData.label: Lang.t("Claude-Konto:", "Claude account:")
             QQC2.Label {
@@ -168,18 +182,28 @@ KCM.SimpleKCM {
                 }
             }
         }
+        Kirigami.Separator { Kirigami.FormData.isSection: true }
+        QQC2.CheckBox {
+            id: advanced
+            objectName: "assistant.advanced"
+            Kirigami.FormData.label: ""
+            text: Lang.t("Erweitert", "Advanced")
+            checked: false
+        }
         QQC2.ComboBox {
             implicitContentWidthPolicy: QQC2.ComboBox.WidestText
             objectName: "assistant.accessibility"
-            Kirigami.FormData.label: Lang.t("Inhalte von Apps lesen:", "Read app contents:")
-            readonly property var values: ["on_demand", "always", "off"]
-            model: [Lang.t("Nur wenn nötig (empfohlen)", "Only when needed (recommended)"), Lang.t("Immer bereit", "Always ready"), Lang.t("Nie", "Never")]
-            currentIndex: Math.max(0, values.indexOf(String(Lang.setting("assistant.hands.accessibility", "on_demand"))))
+            visible: advanced.checked
+            Kirigami.FormData.label: Lang.t("Bedienungshilfe-Schnittstelle:", "Accessibility interface:")
+            readonly property var values: ["always", "on_demand"]
+            model: [Lang.t("Immer an (empfohlen)", "Always on (recommended)"), Lang.t("Nur wenn nötig", "Only when needed")]
+            currentIndex: String(Lang.setting("assistant.hands.accessibility", "always")) === "on_demand" ? 1 : 0
             onActivated: i => Settings.set("assistant.hands.accessibility", values[i])
         }
         Note {
-            text: Lang.t("So kann " + page.name + " Knöpfe und Texte in Apps direkt erkennen, statt nur auf den Bildschirm zu schauen. „Nie“ macht manche Aufgaben langsamer oder unmöglich.",
-                         "This lets " + page.name + " recognise buttons and text in apps directly instead of only looking at the screen. “Never” makes some tasks slower or impossible.")
+            visible: advanced.checked
+            text: Lang.t("Damit der Assistent in allen Apps lesen und klicken kann, ist die Bedienungshilfe-Schnittstelle immer an. Das kostet keinen messbaren Strom.",
+                         "So that the assistant can read and click in every app, the accessibility interface is always on. It costs no measurable power.")
         }
     }
 }

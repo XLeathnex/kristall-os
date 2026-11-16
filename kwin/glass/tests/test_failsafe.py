@@ -85,6 +85,83 @@ def main():
     finally:
         s.stop()
 
+    # 3. crashes later in the session ---------------------------------------------------------------
+    # KWin running normally with the effect active is killed with SIGSEGV twice (KWin's wrapper
+    # restarts it each time); the third KWin starts with glass disabled. A new boot (fresh runtime
+    # directory) starts with glass on again.
+    import json
+    import signal as _signal
+    s = harness.Session(800, 600)
+    runs = []
+
+    def start_kwin(n):
+        env = s.env()
+        env["LD_PRELOAD"] = harness.SHIM
+        env["KWIN_RESTART_COUNT"] = str(n)
+        log = open(os.path.join(s.tmp, f"kwin-later{n}.log"), "w")
+        p = subprocess.Popen([harness.KWIN, "--virtual", "--width", "800", "--height", "600", "--no-lockscreen", "--socket", s.wayland],
+                             env=env, stdout=log, stderr=subprocess.STDOUT)
+        harness.wait_until(lambda: os.path.exists(s.glass_socket), 20)
+        time.sleep(1.5)
+        return p, log
+
+    try:
+        for n in range(2):
+            p, log = start_kwin(n)
+            r = ctl(s, "check")
+            runs.append(r.stdout.strip())
+            p.send_signal(_signal.SIGSEGV)
+            try:
+                p.wait(10)
+            except subprocess.TimeoutExpired:
+                p.kill()
+                p.wait()
+            log.close()
+            if os.path.exists(s.glass_socket):
+                os.unlink(s.glass_socket)
+        p, log = start_kwin(2)
+        s.kwin, s.kwin_log = p, log
+        state = ctl(s, "check").stdout.strip()
+        st = ctl(s, "status")
+        try:
+            guard = json.loads(st.stdout).get("guard", {})
+        except ValueError:
+            guard = {}
+        check("crash later in the session: two SIGSEGVs within 10 minutes → the third KWin runs with glass off",
+              runs == ["active", "active"] and state == "disabled" and guard.get("disabled") is True and len(guard.get("crashes", [])) == 2,
+              f"before the crashes: {runs}, now '{state}', status guard {json.dumps(guard)}")
+        check("kristall-glass-ctl status shows the guard record", "crashes" in guard and "windowSeconds" in guard, json.dumps(guard))
+        s.stop_proc(p)
+        s.kwin = None
+        # a clean stop is not a crash, but a disabled session stays disabled until the next boot
+        p, log = start_kwin(3)
+        s.kwin, s.kwin_log = p, log
+        st4 = ctl(s, "check").stdout.strip()
+        check("…and stays off for the rest of the session (even after a clean restart)", st4 == "disabled", st4)
+        s.stop_proc(p)
+        s.kwin = None
+        # next boot: the runtime directory is new
+        os.unlink(os.path.join(s.runtime, "kristall", "glass.guard"))
+        p, log = start_kwin(0)
+        s.kwin, s.kwin_log = p, log
+        st5 = ctl(s, "check").stdout.strip()
+        check("next boot (fresh runtime directory): glass is tried again", st5 == "active", st5)
+        s.stop_proc(p)
+        s.kwin = None
+        # one crash alone does not disable anything
+        p, log = start_kwin(0)
+        p.send_signal(_signal.SIGSEGV)
+        p.wait(10)
+        log.close()
+        if os.path.exists(s.glass_socket):
+            os.unlink(s.glass_socket)
+        p, log = start_kwin(1)
+        s.kwin, s.kwin_log = p, log
+        st6 = ctl(s, "check").stdout.strip()
+        check("a single crash: glass stays on (one crash is remembered for 10 minutes)", st6 == "active", st6)
+    finally:
+        s.stop()
+
     if FAILURES:
         print(f"{len(FAILURES)} fail-safe check(s) failed: {FAILURES}")
         return 1

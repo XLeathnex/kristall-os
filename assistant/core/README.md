@@ -18,7 +18,7 @@ sign-in commands and settings are specified in [`docs/contracts/assistant-ipc.md
 | `kristall_assistant/replytext.py` | reply markup: normalises the model's Markdown into the subset the interface renders (typed) or plain text (spoken), while streaming (assistant-ipc §5.1) |
 | `kristall_assistant/demo.py` | demo mode (scripted session, no Claude, no audio); the demo's agent cursor follows the primary output's real size (asked from the bridge's `outputs` topic; 1280×800 without a bridge) |
 | `kristall_assistant/ctl.py`, `account.py` | `kristall-assistant-ctl`, `kristall-assistant-account` |
-| `image/install.sh` | image build: venv (hash-pinned), commands, user unit + preset, defaults, verified models |
+| `image/install.sh` | image build: venv on Fedora's `python3.14` (hash-pinned; sherpa-onnx 1.13.8 has no Python 3.15 build), commands, user unit + preset, defaults, verified models |
 | `systemd/` | `kristall-assistant.service`, preset |
 | `data/settings-assistant.json` | defaults for the shared settings key `assistant` |
 | `tests/` | `run.sh`, pytest suite, `fake_claude.py` + recorded `fixtures/`, `ipc_schema.py` |
@@ -57,7 +57,8 @@ interrupt acknowledged in ~6 ms.
 In the dev container or on any Linux with Python ≥ 3.11:
 
 ```
-assistant/core/tests/run.sh                         # creates a test venv once (needs network)
+assistant/core/tests/run.sh                         # creates a test venv once (needs network; python3.14 if present)
+# kristall-devenv already has that environment (KRISTALL_TEST_PYTHON, Python 3.14): no network needed
 KRISTALL_TEST_MODELS=/path/to/models tests/run.sh   # include the voice tests
 ```
 

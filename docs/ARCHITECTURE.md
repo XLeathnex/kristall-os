@@ -35,7 +35,9 @@ receives finished, tested images.
 
 Verified facts about the base (image component, 2026-11-15, from the published `kinoite-main:45`
 manifest and rpmdb): the `:45` tag is the Fedora 45 stream (same digest as `:latest`), kernel
-`7.3.3-300.fc45`, Python **3.15** (`/usr/bin/python3`), Firefox is an RPM, `plasma-setup` (KDE's
+`7.3.3-300.fc45`, Python **3.15** (`/usr/bin/python3`; the assistant daemon's private environment
+runs on Fedora's `python3.14` instead, because its pinned, tested speech library sherpa-onnx 1.13.8
+has no build for 3.15 — decided 2026-11-16, revisit with sherpa-onnx 2.x), Firefox is an RPM, `plasma-setup` (KDE's
 first-boot account wizard) is included, the negativo17 `fedora-multimedia` repo is enabled (full
 ffmpeg, Intel `iHD` VA-API driver), `plasma-discover` is present. Plasma 6.8.3 is already in
 Fedora's updates repo and arrives with the next base rebuild. Universal Blue **re-packages**
@@ -95,7 +97,8 @@ editing someone else's code.
   kwin/bridge, shell, shell/modules/panels, shell/modules/dock, shell/modules/search,
   shell/modules/apps, shell/modules/switcher, shell/modules/assistant, assistant/core,
   assistant/hands, theme, setup — the list's header states the ordering needs; a shell module with
-  its own `image/install.sh` is a component directory of its own and gets a line there) with cwd = `X/` and
+  its own `image/install.sh` is a component directory of its own and gets a line there, unless the
+  installer of a listed component runs it, as `setup` does for `shell/modules/setup`) with cwd = `X/` and
   `KRISTALL_CTX`, `KRISTALL_PREFIX`, `KRISTALL_COMPONENT`, `KRISTALL_STRICT` set. A non-zero exit
   fails the build naming `X`. Writing `/usr/local` or `/opt` is reported (fatal in strict builds);
   `/var` and `/tmp` are emptied afterwards. Never install a kernel, kernel module or `kmod-*`

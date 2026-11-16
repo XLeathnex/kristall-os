@@ -73,7 +73,7 @@ class KeySession(bh.Session):
         self.sysconf = os.path.join(self.tmp, "sysconf")
         dropins = os.path.join(self.tmp, "settings.d")
         os.makedirs(dropins)
-        shutil.copy(os.path.join(SETUP, "data", "settings.json"), os.path.join(dropins, "50-setup.json"))
+        shutil.copy(os.path.join(SETUP, "data", "50-setup.json"), os.path.join(dropins, "50-setup.json"))
         with open(os.path.join(self.tmp, "defaults.json"), "w") as f:
             f.write("{}")
         self.settings_file = os.path.join(self.config, "kristall", "settings.json")

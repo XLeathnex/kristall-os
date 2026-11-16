@@ -72,6 +72,12 @@ Singleton {
         }
         return "";
     }
+    // automatic mode holding Leise because the laptop runs on battery (power contract: auto-battery)
+    readonly property bool autoBattery: automatic && daemon !== null && daemon !== undefined && daemon.reason === "auto-battery"
+    // the line that names the chosen mode: "Automatisch · leise im Akkubetrieb" for auto-battery
+    function chosenModeText() {
+        return selectedMode === "auto" && autoBattery ? Strings.t("panels.energy.autoBattery") : modeName(selectedMode);
+    }
 
     // ---- kristall-power status --json, on demand ----------------------------------------------
     property var status: null
@@ -125,7 +131,7 @@ Singleton {
         return Power.timeToEmpty > 0 ? Strings.t("panels.battery.remaining", { time: Fmt.duration(Power.timeToEmpty) }) : Strings.t("panels.battery.onBattery");
     }
     function energySummary() {
-        const parts = [modeName(selectedMode)];
+        const parts = [chosenModeText()];
         const s = batteryState();
         if (s !== "")
             parts.push(s);

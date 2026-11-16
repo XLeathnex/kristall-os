@@ -187,6 +187,40 @@ def test_behaviour():
             st = type_query(s, q)
             its = items(st)
             check(f"“{q}” → top hit {want}", bool(its) and its[0]["id"] == want, json.dumps([i["id"] for i in its[:4]]))
+        # ---- keystroke → the frame that shows the new results (real key events, 50 000-file index)
+        s.tap("leftctrl", "a")
+        s.tap("backspace")
+        time.sleep(0.6)
+        sent = []
+        word = "beispielstudiorechnungfahrrad"
+        for ch in word:
+            t = time.time() * 1000.0
+            s.tap(ch)
+            sent.append(t)
+            time.sleep(0.15)                  # a brisk typist: ~7 keys a second
+        time.sleep(0.6)
+        log = json.loads(s.ipc("searchtest", "frameLog"))
+        stq = state(s)
+        if stq["query"] != word:
+            info(f"after typing: query={stq['query']!r} ({len(log)} frames logged)")
+        lat = []
+        for k, ch in enumerate(word):
+            q = word[:k + 1]
+            f = next((x for x in log if x["q"] == q), None)
+            if f:
+                lat.append(f["frameAt"] - sent[k])
+        lat.sort()
+        p50 = lat[len(lat) // 2] if lat else None
+        p95 = lat[min(len(lat) - 1, int(round(len(lat) * 0.95)) - 1)] if lat else None
+        proc = sorted(x["frameAt"] - x["keyAt"] for x in log[-len(word):])
+        results["search_key_to_frame_ms"] = {"n": len(lat), "p50": p50, "p95": p95, "max": lat[-1] if lat else None,
+                                             "shell_text_to_frame_p50": proc[len(proc) // 2] if proc else None,
+                                             "shell_text_to_frame_p95": proc[min(len(proc) - 1, int(round(len(proc) * 0.95)) - 1)] if proc else None,
+                                             "renderer": "Qt Quick software (headless llvmpipe session)"}
+        info("keystroke → frame (ms): " + json.dumps(results["search_key_to_frame_ms"]))
+        check("every keystroke produced a frame with its results", len(lat) == len(word), f"{len(lat)}/{len(word)}")
+        check("keystroke → frame p95 within one 120 Hz frame of work in the shell (text change → frame ≤ 8.3 ms)",
+              bool(proc) and results["search_key_to_frame_ms"]["shell_text_to_frame_p95"] <= 8.3, json.dumps(results["search_key_to_frame_ms"]))
         for q, want in (("wlan", "set:kcm_networkmanagement"), ("maus", "set:kcm_mouse"), ("bildschirm", "set:kcm_kscreen"),
                         ("tastatur", "set:kcm_keyboard"), ("lautstarke", "set:kcm_pulseaudio")):
             st = type_query(s, q)
@@ -284,6 +318,12 @@ def test_behaviour():
         s.tap("return")
         st = wait_state(s, lambda st: not st["open"], 3)
         check("the last row searches the web", st["lastActivated"].startswith("web:"), st["lastActivated"])
+        # the browser it started (Firefox is in the dev image) would take the keyboard from Search
+        # when its window maps: close it before going on
+        time.sleep(1.5)
+        subprocess.run(["pkill", "-f", "firefox"], capture_output=True)
+        wait_until(lambda: not [w for w in s.windows() if w["normal"] and "firefox" in (w["appId"] or "").lower()], 8)
+        time.sleep(0.5)
         # ---- latency per keystroke (synchronous part), a few hundred apps
         open_with_shortcut(s)
         type_query(s, "beispiel")
@@ -293,6 +333,7 @@ def test_behaviour():
         b = json.loads(s.ipc("searchtest", "bench", "beispiel studio 42", 200))
         results["search_sync_us_per_keystroke"] = round(b["usPerKeystroke"], 1)
         check("apps + settings + actions + calculator per keystroke < 8 ms (well inside a frame)", b["usPerKeystroke"] < 8000, json.dumps(b))
+        check("app matching stays synchronous and under 2 ms per keystroke (300+ apps)", e["apps"] < 2000, json.dumps(e))
         # ---- escape: clears, then closes
         s.tap("esc")
         st = wait_state(s, lambda st: st["query"] == "", 2)

@@ -5,8 +5,9 @@
 #   kristall-shellctl status
 # Examples: panels toggle-control-center · search toggle · assistant invoke · bar focus ·
 #           gallery toggle · apps toggle · shell close-menus · panels focus -1
-# The argument is passed verbatim (it may be empty, start with "-", contain spaces or any UTF-8);
-# "--" ends this tool's own options (`kristall-shellctl panels focus -- --output` sends "--output").
+# The argument is passed verbatim (it may be empty, start with "-", contain spaces, brackets or
+# any UTF-8); "--" ends this tool's own options (`kristall-shellctl panels focus -- --output`
+# sends "--output"; it is never needed for "-1" or "show").
 # Exit status: 0 delivered, 1 shell not running, 2 usage.
 set -u
 shell_dir="${KRISTALL_SHELL_DIR:-/usr/share/kristall/shell}"
@@ -27,9 +28,29 @@ if [[ ${args[0]} == status ]]; then
 fi
 (( ${#args[@]} >= 2 && ${#args[@]} <= 3 )) || usage
 [[ ${args[0]} =~ ^[a-z][a-z0-9-]*$ && ${args[1]} =~ ^[a-z][a-z0-9-]*$ ]] || usage
-# "--" before the positional arguments: quickshell's parser must not read an argument such as
-# "-1" as an option (empty arguments are passed as empty strings)
-if ! quickshell ipc -p "$shell_dir" call -- shell request "${args[0]}" "${args[1]}" "${args[2]:-}" "$output" >/dev/null 2>&1; then
-    echo "kristall-shellctl: the shell is not running" >&2
+# The argument and output go percent-encoded (UTF-8 bytes; only letters and digits stay as they
+# are) to the shell's requestEncoded(), which decodes them: quickshell's command-line parser would
+# otherwise read some arguments itself ("-x" as an option, "[1, 2]" as a list). "--" ends its options.
+enc() {
+    local LC_ALL=C s="$1" out="" c i
+    for (( i = 0; i < ${#s}; i++ )); do
+        c=${s:i:1}
+        case $c in
+            [a-zA-Z0-9]) out+=$c ;;
+            *) printf -v c '%%%02X' "'$c"; out+=$c ;;
+        esac
+    done
+    printf '%s' "$out"
+}
+reply="$(quickshell ipc -p "$shell_dir" call -- shell requestEncoded "${args[0]}" "${args[1]}" "$(enc "${args[2]:-}")" "$(enc "$output")" 2>/dev/null)"
+status=$?
+# quickshell exits 0 even when it rejects the call (e.g. an argument it read as an option):
+# only the shell's own "ok" means delivered
+if [[ $status -ne 0 || $reply != ok ]]; then
+    if [[ -z $reply ]]; then
+        echo "kristall-shellctl: the shell is not running or did not take the request" >&2
+    else
+        echo "kristall-shellctl: the shell did not take the request: ${reply//$'\n'/ }" >&2
+    fi
     exit 1
 fi

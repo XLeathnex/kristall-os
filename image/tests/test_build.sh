@@ -122,7 +122,15 @@ missing_from_list=()
 while IFS= read -r inst; do
   c=${inst#"$REPO/"}
   c=${c%/image/install.sh}
-  [[ $(idx "$c") -ge 0 ]] || missing_from_list+=("$c")
+  [[ $(idx "$c") -ge 0 ]] && continue
+  # an installer that a listed component's installer calls is part of that component
+  # (shell/modules/setup/image/install.sh is run by setup/image/install.sh)
+  owner=""
+  for l in "${listed[@]}"; do
+    [[ -f $REPO/$l/image/install.sh ]] && grep -q "$c/image/install.sh" "$REPO/$l/image/install.sh" && owner=$l
+  done
+  [[ -n $owner ]] && { echo "      ($c/image/install.sh is run by $owner)"; continue; }
+  missing_from_list+=("$c")
 done < <(find "$REPO" -path "$REPO/.git" -prune -o -path '*/tests' -prune -o -path '*/image/install.sh' -print | sort)
 ((${#missing_from_list[@]} == 0)) && pass "every component installer in the tree is listed" ||
   fail "installers not in components.list: ${missing_from_list[*]}"

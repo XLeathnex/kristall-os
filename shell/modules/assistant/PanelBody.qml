@@ -5,7 +5,7 @@ import QtQuick
 import Quickshell
 import qs.core
 import qs.services
-import "Markdown.js" as Md
+import "../../core/Markdown.js" as Md
 
 FocusScope {
     id: body

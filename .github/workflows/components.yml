@@ -20,14 +20,14 @@ concurrency:
   group: components-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  DEVENV_TAR: ${{ github.workspace }}/../devenv.tar.zst
-
 jobs:
   devenv:
     name: Dev container
     runs-on: ubuntu-26.04
     timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: write   # to delete superseded dev-container cache entries
     outputs:
       key: ${{ steps.key.outputs.key }}
     steps:
@@ -44,7 +44,7 @@ jobs:
         id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ${{ env.DEVENV_TAR }}
+          path: ${{ runner.temp }}/devenv.tar.zst
           key: ${{ steps.key.outputs.key }}
           lookup-only: true
 
@@ -58,15 +58,32 @@ jobs:
           set -euo pipefail
           bash tools/devenv/build.sh
           docker run --rm kristall-devenv:latest bash -c 'echo "missing packages: $(cat /devenv-missing.txt 2>/dev/null | tr "\n" " ")"; rpm -q kwin quickshell plasma-milou kf6-baloo-file firefox'
-          docker save kristall-devenv:latest | zstd -T0 -10 -o "$DEVENV_TAR"
-          ls -lh "$DEVENV_TAR"
+          docker save kristall-devenv:latest | zstd -T0 -10 -o "$RUNNER_TEMP/devenv.tar.zst"
+          ls -lh "$RUNNER_TEMP/devenv.tar.zst"
 
       - name: Store the dev container
         if: steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ${{ env.DEVENV_TAR }}
+          path: ${{ runner.temp }}/devenv.tar.zst
           key: ${{ steps.key.outputs.key }}
+
+      # One dev container (~1.3 GB compressed) at a time in the repository's 10 GB Actions cache:
+      # entries for older Dockerfiles are deleted once the new one is stored.
+      - name: Delete superseded dev containers from the cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEP: ${{ steps.key.outputs.key }}
+        run: |
+          set -euo pipefail
+          gh cache list -R "$GITHUB_REPOSITORY" --key devenv- --limit 100 --json key --jq '.[].key' |
+            while read -r key; do
+              if [ "$key" != "$KEEP" ]; then
+                echo "deleting $key"
+                gh cache delete -R "$GITHUB_REPOSITORY" "$key" || true
+              fi
+            done
 
   test:
     name: ${{ matrix.component }}
@@ -101,15 +118,15 @@ jobs:
       - name: Fetch the dev container
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ${{ env.DEVENV_TAR }}
+          path: ${{ runner.temp }}/devenv.tar.zst
           key: ${{ needs.devenv.outputs.key }}
           fail-on-cache-miss: true
 
       - name: Load the dev container
         run: |
           set -euo pipefail
-          zstd -d -c "$DEVENV_TAR" | docker load
-          rm -f "$DEVENV_TAR"
+          zstd -d -c "$RUNNER_TEMP/devenv.tar.zst" | docker load
+          rm -f "$RUNNER_TEMP/devenv.tar.zst"
 
       - name: Run ${{ matrix.component }}/tests/run.sh
         env:

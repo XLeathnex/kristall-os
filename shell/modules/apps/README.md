@@ -4,7 +4,7 @@ The grid of every installed app (macOS 26/27 "Apps"): opened by the Dock's Apps 
 (`kglobalaccel/org.kristall.apps.desktop`) or `kristall-shellctl apps toggle`. Full-output Overlay
 surface `kristall-apps`, exclusive keyboard while open (released while its context menu is open).
 
-* Content: `AppCatalog` (dock/common) — desktop entries joined with the app manifest (our German
+* Content: `AppCatalog` (shell-core) — desktop entries joined with the app manifest (our German
   and English names, categories, `show_in_apps: false` hidden). `DesktopEntries.applicationsChanged`
   rebuilds it, so installs and removals show up live.
 * Search field (typing filters with the same matching as Search), category buttons, the grid;

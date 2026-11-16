@@ -7,7 +7,6 @@ import Quickshell
 import Quickshell.Io
 import qs.core
 import qs.services
-import "common"
 
 Scope {
     id: hooks

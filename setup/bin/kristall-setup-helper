@@ -53,23 +53,37 @@ def kscreen():
 
 
 def round_scale(s):
-    return round(round(s * 20) / 20, 2)     # KWin/kscreen accept 0.05 steps
+    return round(round(s * 20) / 20, 2)     # what display-scale accepts (KWin/kscreen: 0.05 steps)
 
 
-def display_choices(width_px, width_mm, current):
-    """five sizes from "Larger Text" to "More Space" around the size Apple would choose for a panel
-    of this density; without a physical size, around the current scale"""
+def eighth(s):
+    return round(round(s * 8) / 8, 3)
+
+
+def whole(s, w, h):
+    return w > 0 and h > 0 and abs(w / s - round(w / s)) < 1e-6 and abs(h / s - round(h / s)) < 1e-6
+
+
+def display_choices(width_px, width_mm, current, height_px=0):
+    """The display sizes, "Larger Text … More Space" (docs/contracts/theme.md §7 gives the values
+    for the 2880×1800 panel; this is the rule that produces them, setup.md §5):
+    • default: the scale for ~127 logical px per inch (a Mac's default density), snapped to the
+      nearest scale at which the panel's logical size is whole (2880×1800 at 345 mm → 1.6);
+      without a physical size, the current scale;
+    • the others: default × 1.25, × 1.1 (larger text) and × 0.9 (more space), in 1/8 steps,
+      never below 1.0 or above 3.0 (2880×1800 → 2.0, 1.75, 1.6, 1.5)."""
+    h = height_px or 0
     if width_mm and width_mm > 0:
-        ppi = width_px / (width_mm / 25.4)
-        rec = max(1.0, min(3.0, round_scale(ppi / APPLE_DENSITY)))
+        raw = (width_px / (width_mm / 25.4)) / APPLE_DENSITY
+        cands = [k / 40 for k in range(40, 121) if whole(k / 40, width_px, h)] if h else []
+        rec = min(cands, key=lambda c: abs(c - raw)) if cands else eighth(raw)
     else:
-        rec = max(1.0, round_scale(current or 1.0))
+        rec = current or 1.0
+    rec = round(max(1.0, min(3.0, rec)), 3)
     out_ = []
-    for f in (1.25, 1.12, 1.0, 0.9, 0.8):
-        s = round_scale(rec * f)
-        if s < 1.0 or s > 3.0 or width_px / s < 1024 and f > 1.0 and s != rec:
-            continue
-        if s not in [c["scale"] for c in out_]:
+    for f in (1.25, 1.1, 1.0, 0.9):
+        s = rec if f == 1.0 else eighth(rec * f)
+        if 1.0 <= s <= 3.0 and s not in [c["scale"] for c in out_]:
             out_.append({"scale": s, "looksLike": [int(width_px / s), None]})
     return rec, out_
 
@@ -93,7 +107,7 @@ def cmd_displays():
         name = o.get("name", "")
         internal = o.get("type") in (7, "Panel", "eDP") or name.startswith(("eDP", "LVDS", "DSI"))
         scale = float(o.get("scale", 1.0))
-        rec, choices = display_choices(w, int(mm.get("width", 0) or 0), scale)
+        rec, choices = display_choices(w, int(mm.get("width", 0) or 0), scale, h)
         for c in choices:
             c["looksLike"][1] = int(h / c["scale"]) if h else None
         outs.append({"name": name, "internal": internal, "widthPx": w, "heightPx": h, "widthMm": mm.get("width"),
@@ -109,8 +123,8 @@ def cmd_display_scale(name, scale):
     if not (0.5 <= s <= 4.0):
         return result(False, error="scale out of range")
     tool = os.environ.get("KRISTALL_KSCREEN_DOCTOR", "kscreen-doctor")
-    r = subprocess.run([tool, f"output.{name}.scale.{round_scale(s)}"], capture_output=True, text=True, timeout=30)
-    return result(r.returncode == 0, scale=round_scale(s), error=(r.stderr.strip()[:300] or None) if r.returncode else None)
+    r = subprocess.run([tool, f"output.{name}.scale.{round(s, 3)}"], capture_output=True, text=True, timeout=30)
+    return result(r.returncode == 0, scale=round(s, 3), error=(r.stderr.strip()[:300] or None) if r.returncode else None)
 
 
 # ---------------------------------------------------------------------------------------- D-Bus helpers

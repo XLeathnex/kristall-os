@@ -4,7 +4,9 @@
 // keyboard focus; a press outside the menus closes them (and is not passed on, as on the Mac).
 // Implements: hover/press-drag-release selection, submenus, keyboard navigation (↑↓ ←→ ↩ ⎋,
 // type to select), menu-bar tracking (moving over another title switches menus), the selection
-// blink and fade-out.
+// blink and fade-out, and the submenu "safe triangle": while the pointer moves from a row towards
+// its open submenu (inside the triangle between its previous position and the submenu's near
+// corners), rows it crosses on the way do not take over; if it rests there for 300 ms, they do.
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
@@ -47,6 +49,8 @@ Scope {
         activeLevel = 0;
         _dragged = false;
         _typed = "";
+        _lastPointer = Qt.point(-1, -1);
+        safeTimer.stop();
         Qt.callLater(function () {
             const p = panelAt(0);
             if (p && menuHost.menu && menuHost.menu.keyboard)
@@ -146,17 +150,56 @@ Scope {
         }
         return null;
     }
+    property point _lastPointer: Qt.point(-1, -1)
+    function _inTriangle(px, py, ax, ay, bx, by, cx, cy) {
+        const s1 = (px - bx) * (ay - by) - (ax - bx) * (py - by);
+        const s2 = (px - cx) * (by - cy) - (bx - cx) * (py - cy);
+        const s3 = (px - ax) * (cy - ay) - (cx - ax) * (py - ay);
+        const neg = s1 < 0 || s2 < 0 || s3 < 0, pos = s1 > 0 || s2 > 0 || s3 > 0;
+        return !(neg && pos);
+    }
+    // true while (x, y) moves from the previous pointer position towards the submenu open from `level`
+    function inSafeTriangle(level, x, y) {
+        if (levelModel.count <= level + 1 || _lastPointer.x < 0)
+            return false;
+        const sub = panelAt(level + 1), par = panelAt(level);
+        if (!sub || !par)
+            return false;
+        const right = sub.x >= par.x + par.width / 2;
+        const ex = right ? sub.x : sub.x + sub.width;          // the submenu's near edge
+        const slack = 4;
+        return _inTriangle(x, y, _lastPointer.x + (right ? -slack : slack), _lastPointer.y,
+                           ex, sub.y - slack, ex, sub.y + sub.height + slack);
+    }
     function pointerMove(x, y, dragging) {
         if (!open)
             return;
         const h = hit(x, y);
+        const prev = _lastPointer;
+        _lastPointer = Qt.point(x, y);
         if (h) {
             if (dragging)
                 _dragged = true;
-            if (h.row >= 0)
+            if (h.row >= 0) {
+                const subOpen = levelModel.count > h.level + 1 && _levels[h.level + 1].anchorRow !== h.row;
+                if (subOpen && prev.x >= 0) {
+                    _lastPointer = prev;
+                    const safe = inSafeTriangle(h.level, x, y);
+                    _lastPointer = Qt.point(x, y);
+                    if (safe) {
+                        safeTimer.level = h.level;
+                        safeTimer.row = h.row;
+                        safeTimer.restart();
+                        subTimer.stop();
+                        return;
+                    }
+                }
+                safeTimer.stop();
                 hoverRow(h.level, h.row);
+            }
             return;
         }
+        safeTimer.stop();
         // outside the menus: deselect the deepest level's row (not the ones leading to submenus)
         const p = panelAt(activeLevel);
         if (p && levelModel.count - 1 === activeLevel)
@@ -258,6 +301,14 @@ Scope {
             else if (menuHost.levelModel.count > level + 1)
                 menuHost.closeFrom(level + 1);
         }
+    }
+    Timer {
+        // the pointer stopped inside the safe triangle over another row: that row takes over
+        id: safeTimer
+        property int level: 0
+        property int row: -1
+        interval: 300
+        onTriggered: menuHost.hoverRow(level, row)
     }
     Timer {
         id: typeReset

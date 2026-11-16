@@ -169,6 +169,7 @@ Singleton {
         case "destructive": return d ? "#FF453A" : "#FF3B30";
         case "success": return d ? "#32D74B" : "#28CD41";
         case "warning": return d ? "#FFD60A" : "#FFCC00";
+        case "micOrange": return d ? "#FF9F0A" : "#FF9500";     // the microphone-in-use sign (privacy dot, mic badge)
         }
         console.warn("Theme.color: unknown role", role);
         return "magenta";
@@ -187,7 +188,7 @@ Singleton {
         tooltip: { kind: "rect", radius: 8, smoothing: 0.6, bezel: 4, depth: 2, variant: "regular", tint: [0.82, 0.94], fallback: [0.95, 0.98] },
         media:   { kind: "rect", radius: 16, smoothing: 0.6, bezel: 10, depth: 6, variant: "clear", tint: null, fallback: [0.55, 0.80] },
         dock:    { kind: "rect", radius: 24, smoothing: 0.6, bezel: -1, depth: -1, variant: "regular", tint: [0.52, 0.9], fallback: [0.84, 0.95] },
-        platter: { kind: "rect", radius: 16, smoothing: 0.6, bezel: 8, depth: 3, variant: "regular", tint: [0.22, 0.55], fallback: [0.0, 0.0] }
+        platter: { kind: "rect", radius: 16, smoothing: 0.6, bezel: 8, depth: 3, variant: "regular", tint: [0.58, 0.86], fallback: [0.0, 0.0] }
     })
     function glassRole(role) {
         return glassRoles[role] || glassRoles.panel;

@@ -1,33 +1,8 @@
 #!/usr/bin/python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-# merge-ini TARGET FRAGMENT… — merge KDE-style INI fragments into a system-wide config file
-# (/etc/xdg/kwinrc, /etc/xdg/kglobalshortcutsrc …): keys from the fragments are set, every other
-# group and key already in TARGET is kept (other components write these files too). Comments
-# in fragments are ignored. Written atomically. Idempotent.
-import configparser
+# Moved to shell-core: shell/image/merge-ini. This forwarder only keeps old callers working
+# (setup/tests/test_keyboard.py); new code calls the core one.
 import os
 import sys
-
-
-def load(path):
-    cp = configparser.RawConfigParser(strict=False, interpolation=None, delimiters=("=",), comment_prefixes=("#", ";"))
-    cp.optionxform = str
-    if os.path.exists(path):
-        cp.read(path, encoding="utf-8")
-    return cp
-
-
-target = sys.argv[1]
-cp = load(target)
-for frag in sys.argv[2:]:
-    f = load(frag)
-    for sec in f.sections():
-        if not cp.has_section(sec):
-            cp.add_section(sec)
-        for k, v in f.items(sec):
-            cp.set(sec, k, v)
-os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
-tmp = target + ".kristall-tmp"
-with open(tmp, "w", encoding="utf-8") as out:
-    cp.write(out, space_around_delimiters=False)
-os.replace(tmp, target)
+core = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "image", "merge-ini")
+os.execv(sys.executable, [sys.executable, core] + sys.argv[1:])

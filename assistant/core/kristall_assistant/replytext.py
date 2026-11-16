@@ -3,7 +3,7 @@
 it streams.
 
 The assistant interface renders typed replies with a small Markdown subset
-(shell/modules/assistant/Markdown.js). The model writes CommonMark/GFM freely, so everything outside
+(shell/core/Markdown.js). The model writes CommonMark/GFM freely, so everything outside
 that subset is rewritten here into something inside it, and the interface always shows what the
 model meant. Spoken replies are made plain (no markup at all): they are read aloud and shown as
 spoken text.

@@ -46,7 +46,8 @@ Column {
             checked: PanelsUtil.selectedMode === modelData
             title: PanelsUtil.modeName(modelData)
             subtitle: modelData === "auto" && PanelsUtil.selectedMode === "auto"
-                      ? [Strings.t("panels.energy.now", { mode: PanelsUtil.modeName(Power.mode) }), PanelsUtil.autoReason].filter(s => s !== "").join(" · ")
+                      ? (PanelsUtil.autoBattery ? PanelsUtil.chosenModeText()
+                         : [Strings.t("panels.energy.now", { mode: PanelsUtil.modeName(Power.mode) }), PanelsUtil.autoReason].filter(s => s !== "").join(" · "))
                       : Strings.t("panels.energy." + modelData + ".hint")
             scheme: ep.scheme
             onActivated: PanelsUtil.chooseMode(modelData)

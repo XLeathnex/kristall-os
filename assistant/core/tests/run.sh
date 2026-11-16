@@ -18,7 +18,8 @@ if [ -z "$PY" ]; then
   VENV="${KRISTALL_TEST_VENV:-${XDG_CACHE_HOME:-$HOME/.cache}/kristall/assistant-test-venv}"
   if ! "$VENV/bin/python" -c 'import claude_agent_sdk, sherpa_onnx, numpy, pytest' 2>/dev/null; then
     echo "== preparing test environment in $VENV"
-    python3 -m venv "$VENV"
+    # the interpreter the image uses for the daemon (install.sh): python3.14 where available
+    "${KRISTALL_TEST_BASE_PYTHON:-$(command -v python3.14 || command -v python3)}" -m venv "$VENV"
     "$VENV/bin/pip" install -q --require-hashes -r "$ROOT/image/build-requirements.txt"
     "$VENV/bin/pip" install -q --require-hashes --no-build-isolation --no-binary claude-agent-sdk \
       -r "$ROOT/image/requirements.txt"

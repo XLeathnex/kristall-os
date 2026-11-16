@@ -15,7 +15,7 @@ anyone who needs to know whether first-run setup is finished. Normative.
 | Settings pages | System Settings modules `kcm_kristall_{about,update,assistant,appearance,dock,notifications,energy,keyboard}` (`/usr/lib64/qt6/plugins/plasma/kcms/systemsettings/`), category `kristall` (`/usr/share/systemsettings/categories/settings-kristall-general.desktop`), QML backend `org.kristall.settings` |
 | Hidden System Settings pages | `/etc/xdg/kdeglobals` `[KDE Control Module Restrictions]` (merged): look-and-feel, Plasma style, splash, decorations, application style, effects, KWin scripts/rules/options, Xwayland, background services, activities, feedback, KRunner plugins, Plasma notifications, session, Qt Quick settings, Quick Settings landing page |
 | KInfoCenter's own About | `/etc/xdg/kcm-about-distrorc` (merged): our mark, variant "Kristall OS" |
-| Defaults | `/usr/share/kristall/defaults/settings.d/50-setup.json` (keys `keyboard`, `setup`) |
+| Defaults | `/usr/share/kristall/defaults/settings.d/50-setup.json` (keys `keyboard`, `setup`; source `setup/data/50-setup.json`) |
 
 Open a page directly: `systemsettings kcm_kristall_<page>`.
 
@@ -33,10 +33,12 @@ Open a page directly: `systemsettings kcm_kristall_<page>`.
 | `keyboard.passthroughApps` | array of app ids (lower case, `*` wildcards) | `[]` | apps that get ordinary PC keys, in addition to the built-in list (§4.3) |
 | `keyboard.terminalApps` | array | `[]` | additional terminals (§4.3) |
 
+Drop-in: `/usr/share/kristall/defaults/settings.d/50-setup.json` (source `setup/data/50-setup.json`), owner `setup` in `kristall-settings owners`.
+
 Written by the Setup Assistant and the pages but owned by others: `appearance.{theme,accent,glass,reduceTransparency}`,
 `accessibility.*`, `bar.*` (shell-core), `dock.*` (dock), `panels.focus.until`, `panels.mutedApps` (panels),
 `assistant.{name,language,speak_replies,speaking_rate}`, `assistant.ui.light.*`, `assistant.hands.accessibility`,
-`power.{automatic,chargeLimit,dimOnBattery,batteryRefreshRate}`.
+`power.{automatic,batteryBase,chargeLimit,dimOnBattery,batteryRefreshRate}`, `assistant.enabled`.
 
 ## 3. Setup Assistant
 
@@ -129,8 +131,8 @@ JSON lines on stdout, the last `{"event":"result","ok":…}`; exit 0 iff ok.
 
 | Command | Result |
 |---|---|
-| `displays` | `outputs: [{name, internal, widthPx, heightPx, widthMm, scale, recommended, choices:[{scale, looksLike:[w,h]}]}]` — five sizes "Larger Text … More Space" around the scale that gives ~127 logical px per inch (a Mac's default density); around the current scale without a physical size |
-| `display-scale OUTPUT SCALE` | sets the scale (kscreen-doctor, 0.05 steps) |
+| `displays` | `outputs: [{name, internal, widthPx, heightPx, widthMm, scale, recommended, choices:[{scale, looksLike:[w,h]}]}]` — the display sizes "Larger Text … More Space" of `docs/contracts/theme.md` §7 (the source of the values; for the 2880×1800 panel: 2.0, 1.75, **1.6**, 1.5). Rule that produces them for any panel: the default is the scale for ~127 logical px per inch (a Mac's default density) snapped to the nearest scale at which the logical size is whole; the others are default × 1.25, × 1.1 and × 0.9 in 1/8 steps, within 1.0–3.0. Without a physical size: around the current scale |
+| `display-scale OUTPUT SCALE` | sets the scale (kscreen-doctor) |
 | `touchpads` / `touchpad-set [--natural on\|off] [--tap on\|off]` | KWin `org.kde.KWin.InputDevice` (KWin persists them) |
 | `wifi-connect SSID SECURITY` | password as one line on stdin; NetworkManager `AddAndActivateConnection`, owned by the user; a refused key deletes the profile; events `{"event":"wifi","state":"connecting"|"connected"|"failed","reason"}` |
 | `wallpapers` | `wallpapers: [{name, path, preview, kristall}]` (Plasma wallpaper packages and pictures; ours first). Applied with `plasma-apply-wallpaperimage` |

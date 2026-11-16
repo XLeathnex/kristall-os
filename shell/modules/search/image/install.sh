@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
 # shell-apps / search: installs the Search module, its global shortcut (Meta+Space, for every
-# user) and the system-wide file-index setting it relies on. Needs modules/dock/common (installed
-# by shell/modules/dock, listed before this one). Contract: docs/ARCHITECTURE.md §3.
+# user) and the system-wide file-index setting it relies on. Needs shell-core's AppCatalog (installed
+# by shell, listed before this one). Contract: docs/ARCHITECTURE.md §3.
 set -euo pipefail
 PREFIX="${KRISTALL_PREFIX:-/usr}"
 here="$(cd "$(dirname "$0")/.." && pwd)"
@@ -21,8 +21,8 @@ install -Dm0644 "$here/kglobalaccel/org.kristall.search.desktop" "$PREFIX/share/
 # (Baloo's default). Merged into /etc/xdg/baloofilerc, other keys kept.
 tmp="$(mktemp)"
 printf '[General]\nonly basic indexing=true\nindex hidden folders=false\n' >"$tmp"
-python3 "$here/../dock/image/merge-ini" /etc/xdg/baloofilerc "$tmp"
+python3 "$here/../../image/merge-ini" /etc/xdg/baloofilerc "$tmp"
 rm -f "$tmp"
 
-test -f "$PREFIX/share/kristall/shell/modules/dock/common/AppCatalog.qml" || echo "search: WARNING modules/dock/common is not installed (install shell/modules/dock first)" >&2
+test -f "$PREFIX/share/kristall/shell/core/AppCatalog.qml" || echo "search: WARNING shell-core (core/AppCatalog.qml) is not installed (install shell first)" >&2
 echo "search: installed to $dest"

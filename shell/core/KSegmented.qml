@@ -18,11 +18,19 @@ Item {
     readonly property real inset: Theme.size.segmentInset
     readonly property real segW: model.length > 0 ? (width - 2 * inset) / model.length : 0
     implicitHeight: Theme.size.segmented
+    // natural width from the font (the labels' own implicit widths would depend on their width)
+    FontMetrics {
+        id: fm
+        font.family: Theme.type.control.family
+        font.pixelSize: Theme.type.control.size
+        font.weight: Theme.type.control.emphasized
+        font.letterSpacing: Theme.type.control.tracking
+    }
     implicitWidth: {
         let w = 0;
-        for (let i = 0; i < labels.count; ++i)
-            w = Math.max(w, labels.itemAt(i) ? labels.itemAt(i).implicitWidth : 0);
-        return (w + 28) * Math.max(1, model.length) + 2 * inset;
+        for (const m of model)
+            w = Math.max(w, fm.advanceWidth(String(m)));
+        return (Math.ceil(w) + 28) * Math.max(1, model.length) + 2 * inset;
     }
     activeFocusOnTab: true
     opacity: enabled ? 1 : 0.45
@@ -74,7 +82,6 @@ Item {
             width: seg.segW
             height: seg.height
             horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
             text: modelData
             textStyle: "control"
             emphasized: index === seg.shownIndex

@@ -39,7 +39,7 @@ done
 install -Dm0755 "$here/bin/kristall-setup-helper" "$PREFIX/bin/kristall-setup-helper"
 install -Dm0755 "$here/bin/kristall-setup-start" "$libexec/kristall-setup-start"
 install -Dm0644 "$here/data/kristall-mark.svg" "$share/kristall-mark.svg"
-install -Dm0644 "$here/data/settings.json" "$PREFIX/share/kristall/defaults/settings.d/50-setup.json"
+install -Dm0644 "$here/data/50-setup.json" "$PREFIX/share/kristall/defaults/settings.d/50-setup.json"
 python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$PREFIX/share/kristall/defaults/settings.d/50-setup.json"
 
 # first-login unit, enabled for every user through our preset

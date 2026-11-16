@@ -55,9 +55,8 @@ RUN for p in plasma-milou kf6-baloo-file firefox pipewire-utils; do \
 # assistant/core/tests/run.sh and the daemon's demo mode (`python -m kristall_assistant.daemon
 # --demo` with PYTHONPATH=assistant/core) run inside the container without network. pip is pointed
 # at the system CA bundle, which includes the sandbox proxy's CA when one was given.
-# Python 3.14, not the system 3.15: the pinned sherpa-onnx 1.13.8 publishes no cp315 wheel (its
-# sdist needs a CMake/onnxruntime build), so the venv cannot be built on 3.15 — the same defect
-# breaks assistant/core/image/install.sh on the OS image (reported 2026-11-16).
+# Python 3.14, not the system 3.15, exactly as assistant/core/image/install.sh does in the OS image:
+# the pinned sherpa-onnx 1.13.8 (tested API and models) publishes no cp315 wheel.
 COPY assistant-requirements.txt assistant-build-requirements.txt /tmp/assistant/
 RUN dnf5 install -y python3.14 >/dev/null && dnf5 clean all >/dev/null \
  && python3.14 -m venv /opt/kristall-assistant-venv \

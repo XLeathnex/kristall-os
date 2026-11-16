@@ -29,7 +29,7 @@ Column {
             width: 8; height: 8; radius: 4
             x: 6
             anchors.verticalCenter: parent.verticalCenter
-            color: Theme.color(mp.scheme, "warning")
+            color: Theme.color(mp.scheme, "micOrange")       // the microphone privacy dot
         }
         KText {
             x: dot.x + 14

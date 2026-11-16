@@ -112,6 +112,39 @@ class DemoListener:
         return ListenResult(VOICE_QUESTION, "final", 4.5)
 
 
+MIC_CHECK = "Hallo Kristall, kannst du mich hören?"
+
+
+class DemoTranscriber:
+    """Transcribe-only in demo mode: levels, partial text, a final text; no turn, no state change."""
+
+    def __init__(self, a, on_partial):
+        self.a, self.on_partial = a, on_partial
+        self._cancel = self._finish = False
+
+    def finish(self) -> None:
+        self._finish = True
+
+    def cancel(self) -> None:
+        self._cancel = True
+
+    async def run(self) -> ListenResult:
+        words = MIC_CHECK.split()
+        t, total = 0.0, 2.0
+        await pause(0.2)
+        while t < total and not self._cancel and not self._finish:
+            v = 0.3 + 0.4 * abs(math.sin(t * 7.3))
+            self.a.emit({"type": "level", "source": "mic", "value": round(min(v, 1.0), 3)}, levels=True)
+            if int(t * 20) % 8 == 0:
+                self.on_partial(" ".join(words[:max(1, int(len(words) * t / total) + 1)]))
+            await pause(0.05)
+            t += 0.05
+        self.a.emit({"type": "level", "source": "mic", "value": 0.0}, levels=True)
+        if self._cancel:
+            return ListenResult("", "cancelled")
+        return ListenResult(MIC_CHECK, "final", t)
+
+
 class DemoSpeaker:
     """Pretends to speak: sentence events and a speech-level envelope in real time."""
 

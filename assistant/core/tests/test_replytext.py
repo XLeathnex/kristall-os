@@ -83,7 +83,10 @@ def test_streaming_equals_whole_and_prose_is_not_delayed(plain):
 
 def test_markdown_js_supports_what_the_contract_says():
     """The contract's list is checked against the renderer's own header comment."""
-    js = (ROOT.parent.parent / "shell/modules/assistant/Markdown.js").read_text()
+    repo = ROOT.parent.parent
+    # shell-core owns the renderer since the integration round (it was shell/modules/assistant/)
+    js_path = next(p for p in (repo / "shell/core/Markdown.js", repo / "shell/modules/assistant/Markdown.js") if p.exists())
+    js = js_path.read_text()
     doc = (ROOT.parent.parent / "docs/contracts/assistant-ipc.md").read_text()
     for word in ("headings", "bullet and numbered lists", "block quotes", "fenced", "horizontal rules",
                  "**bold**", "*italic*", "`code`", "~~strike~~", "[text](url)", "http/https/mailto"):

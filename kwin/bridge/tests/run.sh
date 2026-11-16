@@ -29,7 +29,8 @@ for t in test_pointer test_keyboard test_windows test_screenshot test_security; 
     grep -v -e "Failed to set fd limit" -e "^dbus-daemon\[" -e "SpiRegistry daemon" | tee -a "$log" || true
 done
 passed=$(grep -cE '^PASS test_.*s\)$' "$log" || true)
-failed=$(grep -cE '^FAIL test_[a-z0-9_]+: ' "$log" | awk '{print int($1/2)}')
+# (grep -c exits 1 when it counts nothing: with pipefail that would end the script right here)
+failed=$({ grep -cE '^FAIL test_[a-z0-9_]+: ' "$log" || true; } | awk '{print int($1/2)}')
 echo
 echo "== overall: $passed tests passed, $failed failed"
 [ "$failed" -eq 0 ]

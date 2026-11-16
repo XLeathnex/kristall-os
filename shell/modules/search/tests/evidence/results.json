@@ -1,20 +1,30 @@
 {
  "last_run": {
   "sections": [
-   "static",
-   "behaviour",
-   "looks"
+   "behaviour"
   ],
   "failures": [
+   "keystroke \u2192 frame p95 within one 120 Hz frame of work in the shell (text change \u2192 frame \u2264 8.3 ms)",
+   "app matching stays synchronous and under 2 ms per keystroke (300+ apps)",
+   "app matching stays synchronous and under 2 ms per keystroke (300+ apps)",
    "\u238b clears the text, a second \u238b closes"
   ],
-  "time": "2026-11-16T19:08:05"
+  "time": "2026-11-16T20:09:36"
  },
- "search_files_latency_s": 0.052,
- "search_sync_us_per_keystroke": 4595,
+ "search_files_latency_s": 0.075,
+ "search_sync_us_per_keystroke": 5350,
  "search_engine_us": {
-  "apps": 4545,
-  "settings": 385,
-  "actions": 195
+  "apps": 4100,
+  "settings": 420,
+  "actions": 200
+ },
+ "search_key_to_frame_ms": {
+  "n": 29,
+  "p50": 10.681884765625,
+  "p95": 17.2099609375,
+  "max": 17.837158203125,
+  "shell_text_to_frame_p50": 9,
+  "shell_text_to_frame_p95": 16,
+  "renderer": "Qt Quick software (headless llvmpipe session)"
  }
 }

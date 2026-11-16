@@ -91,12 +91,13 @@ Manual: `quickshell -p kwin/glass/demo` in a session; `kristall-glass-ctl status
   KPluginFactory" and composites without the effect; the socket does not exist and clients fall
   back. Tested (`test_failsafe.py`, plugin built with `-DKRISTALL_GLASS_TEST_BROKEN=ON`).
 * **Caveat found while testing**: Qt loads plugins with lazy binding, so a missing *function*
-  is not a load failure — KWin crashes when it is first called. That and any other crash during
-  start-up is caught by the crash guard: after two consecutive crashes within 30 s of start the
-  effect stays inert (`state:"disabled"`) for the session, so `kwin_wayland_wrapper`'s restart
-  loop (up to 10 restarts, then the session dies) never runs out. Tested by aborting in the
-  constructor (`KRISTALL_GLASS_TEST_CRASH=1`) across emulated wrapper restarts: crash, crash,
-  then KWin runs with glass disabled.
+  is not a load failure — KWin crashes when it is first called. That and any other crash while
+  the effect is active — at start-up or hours later — is caught by the crash guard: two crashes
+  within 10 minutes and the effect stays inert (`state:"disabled"`, `reason:"crash-guard"`) for
+  the rest of the login session, so `kwin_wayland_wrapper`'s restart loop (up to 10 restarts,
+  then the session dies) never runs out; the next boot tries again (glass.md §7). Tested by
+  aborting in the constructor (`KRISTALL_GLASS_TEST_CRASH=1`) across emulated wrapper restarts,
+  and by killing a running KWin with SIGSEGV twice: the third KWin runs with glass disabled.
 * **No OpenGL / shader failure**: the effect is unsupported or reports `state:"failed"`; KWin
   draws normally.
 

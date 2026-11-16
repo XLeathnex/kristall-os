@@ -3,7 +3,7 @@
 # assistant-core: install the assistant daemon into the OS image.
 #
 # Runs as root at image build time with the repository at /ctx (read-only) and network.
-# Installs: a private Python environment (pinned, hash-checked) under $PREFIX/lib/kristall/assistant,
+# Installs: a private Python 3.14 environment (pinned, hash-checked) under $PREFIX/lib/kristall/assistant,
 # the commands kristall-assistant{,-ctl,-account}, a systemd user service (preset-enabled),
 # default settings for the "assistant" key (settings.d drop-in), and the verified speech models.
 # The Claude Code CLI is NOT installed here: the owner installs it with Anthropic's installer.
@@ -15,6 +15,7 @@
 #                                  the first column of models.tsv (still checksum-verified)
 #   KRISTALL_SKIP_MODELS=1         do not install speech models (development only)
 #   KRISTALL_SKIP_SYSTEM_PACKAGES=1  do not call dnf5 (development only)
+#   KRISTALL_ASSISTANT_PYTHON      interpreter for the private environment (default: python3.14)
 set -euo pipefail
 
 PREFIX="${KRISTALL_PREFIX:-/usr}"
@@ -36,7 +37,9 @@ esac
 # --- system packages (runtime only: Python, PipeWire command-line tools, pactl for ducking)
 if [ "${KRISTALL_SKIP_SYSTEM_PACKAGES:-0}" != 1 ]; then
   need=()
-  for p in python3 pipewire-utils pulseaudio-utils bzip2; do
+  # python3.14, not the base's python3 (3.15): the pinned sherpa-onnx 1.13.8 (the tested speech
+  # API and models) publishes no cp315 wheel; its sdist needs a CMake/onnxruntime build.
+  for p in python3.14 pipewire-utils pulseaudio-utils bzip2; do
     rpm -q "$p" >/dev/null 2>&1 || need+=("$p")
   done
   if [ "${#need[@]}" -gt 0 ]; then
@@ -45,7 +48,8 @@ if [ "${KRISTALL_SKIP_SYSTEM_PACKAGES:-0}" != 1 ]; then
     dnf5 clean all >/dev/null 2>&1 || true
   fi
 fi
-PYTHON="$(command -v python3)"
+PYTHON="${KRISTALL_ASSISTANT_PYTHON:-$(command -v python3.14 || true)}"
+[ -x "$PYTHON" ] || { echo "python3.14 is not installed" >&2; exit 1; }
 
 # --- private Python environment (rebuilt from scratch: idempotent)
 log "creating Python environment in $LIB/venv"

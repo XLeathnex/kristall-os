@@ -664,18 +664,30 @@ def test_timing():
         time.sleep(0.5)
         arr = json.loads(sess.ipc("assistant-test", "arrivals", ""))
         glides = [a for a in arr if a["target"] > 0]
-        errs, leads = [], []
+        errs, leads, late_frames, frame_gaps = [], [], [], []
         for s_ in sent:
             a = next((g for g in glides if abs(g["x"] - s_["x"]) < 0.5 and abs(g["y"] - s_["y"]) < 0.5 and s_["ts"] and abs(g["target"] - (s_["ts"] + s_["d"])) < 1), None)
             if a:
                 errs.append(a["arrived"] - (s_["ts"] + s_["d"]))
                 leads.append(s_["action"] - a["arrived"])
+                gap = a["arrived"] - a.get("prevFrame", a["arrived"])
+                frame_gaps.append(gap)
+                # measured against the frame clock: arrival must happen on the first frame at or
+                # after the target (the frame before it was still early)
+                late_frames.append(a.get("prevFrame", 0) > a["target"] + 1)
         r = {"glides": len(errs), "arrival_minus_ts_plus_d_ms": {"mean": round(sum(errs) / len(errs), 1) if errs else None,
              "max": round(max(errs), 1) if errs else None, "min": round(min(errs), 1) if errs else None},
+             "frame_gap_at_arrival_ms": {"max": round(max(frame_gaps), 1) if frame_gaps else None,
+                                         "mean": round(sum(frame_gaps) / len(frame_gaps), 1) if frame_gaps else None},
              "action_after_arrival_ms": {"min": round(min(leads), 1) if leads else None, "mean": round(sum(leads) / len(leads), 1) if leads else None}}
         results["cursor_timing_synthetic"] = r
         info("cursor timing (synthetic): " + json.dumps(r))
-        check("every glide arrives within one frame (≤ 20 ms) of ts + duration_ms", len(errs) == len(sent) and errs and max(errs) <= 20 and min(errs) >= -1, json.dumps(r))
+        # every glide lands on the first frame at or after ts + D (frame-clock exact), never early,
+        # and the frame clock itself stays fluid (a frame gap > 50 ms at arrival is a real stall,
+        # not llvmpipe load); with frames on time the old 20-ms bound still applies
+        ok = (len(errs) == len(sent) and errs and min(errs) >= -1 and not any(late_frames)
+              and max(frame_gaps) <= 50 and all(e <= max(20, g + 1) for e, g in zip(errs, frame_gaps)))
+        check("every glide arrives on the first frame at or after ts + duration_ms (frame clock), frames ≤ 50 ms apart", ok, json.dumps(r))
         check("the owner sees the cursor arrive before the action lands (arrival ≤ action)", leads and min(leads) >= 0, json.dumps(r))
         c.close()
         st = sess.wait_ast(lambda s: not screen_state(s)["cursor"]["mapped"], 3)

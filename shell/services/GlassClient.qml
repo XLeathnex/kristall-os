@@ -15,6 +15,7 @@ Singleton {
     // true while the effect is present and in state "active"; when false, draw fallbacks
     property bool active: false
     property string state: "absent"     // absent | active | disabled | failed
+    property string reason: ""          // why not active (e.g. "crash-guard"), from hello/state
     property string theme: "light"      // effective theme reported by the effect
     property string quality: ""
     property real glass: 0.3
@@ -44,10 +45,9 @@ Singleton {
             if (ev.event !== "socket" || ev.path !== root.socketPath)
                 return;
             root.socketExists = ev.exists;
-            if (ev.exists && !sock.connected) {
+            if (ev.exists && !root.isConnected()) {
                 root._backoff = 250;
-                sock.connected = false;
-                sock.connected = true;
+                root._connect();
             }
         }
         function onReadyChanged() {
@@ -63,12 +63,12 @@ Singleton {
     Timer {
         id: noHelper
         interval: 3000
-        onTriggered: if (!Helper.ready && !sock.connected) { sock.connected = false; sock.connected = true; }
+        onTriggered: if (!Helper.ready && !root.isConnected()) root._connect()
     }
 
     function bind(key, match) {
         _surfaces[key] = { match: match, shapes: _surfaces[key] ? _surfaces[key].shapes : "[]", sync: "immediate" };
-        if (sock.connected)
+        if (isConnected())
             _send({ op: "bind", surface: key, match: match });
         _markDirty(key);
     }
@@ -87,7 +87,7 @@ Singleton {
         if (!_surfaces[key])
             return;
         delete _surfaces[key];
-        if (sock.connected)
+        if (isConnected())
             _send({ op: "unbind", surface: key });
     }
 
@@ -105,7 +105,7 @@ Singleton {
 
     function _flush() {
         _flushQueued = false;
-        if (!sock.connected)
+        if (!isConnected())
             return;
         for (const key in _dirty) {
             const s = _surfaces[key];
@@ -140,6 +140,7 @@ Singleton {
         case "hello":
         case "state":
             root.state = ev.state;
+            root.reason = ev.reason || "";
             root.active = ev.state === "active";
             if (ev.theme)
                 root.theme = ev.theme;
@@ -170,26 +171,51 @@ Singleton {
         }
     }
 
-    Socket {
-        id: sock
-        path: root.socketPath
-        connected: false
-        onConnectedChanged: {
-            if (connected) {
-                retry.stop();
-                root._backoff = 250;
-                root._send({ op: "hello", client: "kristall-shell" });
-                for (const key in root._surfaces) {
-                    root._send({ op: "bind", surface: key, match: root._surfaces[key].match });
-                    root._markDirty(key);
-                }
-            } else {
-                root._lost();
-            }
+    // One Socket object per connection attempt (see Bridge.qml): a refused or lost connection
+    // destroys it, the next attempt creates a fresh one.
+    property var sock: null
+    function isConnected() {
+        return sock !== null && sock.connected;
+    }
+    function _connect() {
+        if (sock) {
+            const old = sock;
+            sock = null;
+            old.destroy();
         }
-        onError: root._lost()
-        parser: SplitParser {
-            onRead: data => root._handle(data)
+        sock = sockComp.createObject(root);
+        sock.connected = true;
+    }
+    function _onConnectedChanged(s) {
+        if (s !== sock)
+            return;
+        if (s.connected) {
+            retry.stop();
+            root._backoff = 250;
+            root._send({ op: "hello", client: "kristall-shell" });
+            for (const key in root._surfaces) {
+                root._send({ op: "bind", surface: key, match: root._surfaces[key].match });
+                root._markDirty(key);
+            }
+        } else {
+            root._lost();
+        }
+    }
+    function _onError(s) {
+        if (s === sock)
+            root._lost();
+    }
+    Component {
+        id: sockComp
+        Socket {
+            id: oneSock
+            path: root.socketPath
+            connected: false
+            onConnectedChanged: root._onConnectedChanged(oneSock)
+            onError: root._onError(oneSock)
+            parser: SplitParser {
+                onRead: data => root._handle(data)
+            }
         }
     }
 
@@ -201,8 +227,7 @@ Singleton {
             root._backoff = Math.min(root._backoff * 2, 5000);
             if (!root.socketExists && Helper.ready)
                 return;           // the helper tells us when it appears
-            sock.connected = false;
-            sock.connected = true;
+            root._connect();
         }
     }
 }

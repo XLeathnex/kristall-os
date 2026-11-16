@@ -416,6 +416,14 @@ def test_cc():
         calls = open(os.path.join(sess.tmp, "power-calls.log")).read() if os.path.exists(os.path.join(sess.tmp, "power-calls.log")) else ""
         check("Automatisch → kristall-power mode auto", st["power"]["selected"] == "auto" and "mode auto" in calls, calls)
         check("kristall-power status --json was read for the battery details", "status --json" in calls, calls)
+        # automatic mode holding Leise on battery (power contract: reason auto-battery)
+        with open(state + ".tmp", "w") as f:
+            json.dump({"schema": 1, "automatic": True, "manual": None, "reason": "auto-battery", "mode": "quiet", "on_battery": True}, f)
+        os.replace(state + ".tmp", state)
+        st = wait_ps(sess, lambda s: "Akkubetrieb" in s["power"].get("chosenText", ""))
+        check("auto-battery: shown as “Automatisch · leise im Akkubetrieb”", st["power"].get("chosenText") == "Automatisch · leise im Akkubetrieb"
+              and st["power"].get("summary", "").startswith("Automatisch · leise im Akkubetrieb"), json.dumps(st["power"], ensure_ascii=False))
+        daemon(None)
         sess.save_evidence(sess.screenshot(), "cc-energy-expanded-light-1.0x.png", crop=(W - 420, 0, W, 520))
 
         # ---- sound page: outputs and the microphone in use

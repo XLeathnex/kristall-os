@@ -530,8 +530,15 @@ def test_modules():
                 "Scope { Component.onCompleted: { ShellBus.claim('probe'); console.info('probe module:', Strings.t('probe.hello'), Theme.radius.menu); } }\n")
     with open(os.path.join(shell, "modules", "probe", "strings.json"), "w") as f:
         json.dump({"en": {"probe.hello": "hello"}, "de": {"probe.hello": "hallo"}}, f)
+    for m in ("broken", "throws", "probe"):
+        open(os.path.join(shell, "modules", m, "qmldir"), "w").write("# test module\n")
+    os.makedirs(os.path.join(shell, "modules", "noqmldir"))
+    with open(os.path.join(shell, "modules", "noqmldir", "Module.qml"), "w") as f:
+        f.write("import QtQuick\nimport Quickshell\nScope {}\n")
     with open(os.path.join(shell, "modules.list"), "a") as f:
-        f.write("broken\nthrows\nprobe\n")
+        f.write("broken\nthrows\nprobe\nnoqmldir\nghost\n")
+    listed = [l.split("#")[0].strip() for l in open(os.path.join(SHELL, "modules.list"))]
+    listed = [m for m in listed if m]
     sess = ss.ShellSession(width=1280, height=800, name="modules")
     sess.start()
     try:
@@ -544,8 +551,16 @@ def test_modules():
         check("module that throws is isolated (shell keeps running)", bool(st["bar"]) and "module bug" in log)
         check("good module loads, sees the core and its own strings", status["modules"].get("probe") == "loaded" and "probe module: hallo 12" in log,
               [l for l in log.splitlines() if "probe" in l][:3].__str__())
-        check("reserved modules that are not there yet are skipped silently",
-              all(status["modules"].get(m) in (None, "absent") for m in ("panels", "dock", "search")), json.dumps(status["modules"]))
+        check("a listed module without a directory is skipped silently", status["modules"].get("ghost") == "absent"
+              and "ghost" not in "".join(ss.warnings_in(log)), json.dumps(status["modules"]))
+        check("a module without a qmldir is logged clearly", "module noqmldir has no qmldir" in log)
+        present = [m for m in listed if os.path.exists(os.path.join(SHELL, "modules", m, "Module.qml"))]
+        for m in listed:
+            if m not in present:
+                check(f"module {m}: absent, skipped", status["modules"].get(m) == "absent", str(status["modules"].get(m)))
+                continue
+            w = [l for l in ss.warnings_in(log) if f"/modules/{m}/" in l or f"module {m} " in l]
+            check(f"module {m}: present → loaded without warnings", status["modules"].get(m) == "loaded" and not w, "\n".join(w[:5]) or str(status["modules"].get(m)))
         # safe mode skips modules
     finally:
         sess.stop()
@@ -642,6 +657,13 @@ def test_plasma():
             time.sleep(2)
             p = subprocess.Popen(["plasmashell", "--no-respawn"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             time.sleep(15)
+            if mode == "kristall":
+                # without Plasma's panels (system tray) plasmashell runs no notification server:
+                # org.freedesktop.Notifications is free for the shell's panels module
+                r = subprocess.run(["gdbus", "call", "--session", "--dest", "org.freedesktop.DBus", "--object-path", "/org/freedesktop/DBus",
+                                    "--method", "org.freedesktop.DBus.NameHasOwner", "org.freedesktop.Notifications"],
+                                   env=env, capture_output=True, text=True, timeout=10)
+                check("plasmashell with our layout does not take org.freedesktop.Notifications", "false" in r.stdout, r.stdout.strip() + r.stderr.strip())
             p.terminate()
             p.wait(10)
             kam.terminate()
@@ -787,6 +809,7 @@ def test_ctl():
         cases = [("-1", ["gallery", "noop", "-1"]), ("-5.5", ["gallery", "noop", "-5.5"]), ("", ["gallery", "noop", ""]),
                  ("zwei Wörter mit Leerzeichen", ["gallery", "noop", "zwei Wörter mit Leerzeichen"]),
                  ("Grüße aus Köln: äöüß ÄÖÜ", ["gallery", "noop", "Grüße aus Köln: äöüß ÄÖÜ"]),
+                 ('{"x":1,"y":2}', ["gallery", "noop", '{"x":1,"y":2}']), ("[1, 2]", ["gallery", "noop", "[1, 2]"]),
                  ("--output", ["gallery", "noop", "--", "--output"]), ("-h", ["gallery", "noop", "--", "-h"])]
         for want, argv in cases:
             r = subprocess.run([ctl] + argv + ["--output", "Virtual-0"] if "--" not in argv else [ctl, "--output", "Virtual-0"] + argv,
@@ -799,11 +822,278 @@ def test_ctl():
         r = subprocess.run(["quickshell", "ipc", "-p", sess.shell_path, "call", "shell", "request", "gallery", "noop", "-1", ""],
                            env=env, capture_output=True, text=True, timeout=15)
         info(f"control: 'quickshell ipc call … -1' without '--' exits {r.returncode}: {(r.stderr or r.stdout).strip()[:160]}")
+        r = subprocess.run([ctl, "gallery", "noop", "x"], env=dict(env, KRISTALL_SHELL_DIR=os.path.join(sess.tmp, "nowhere")),
+                           capture_output=True, text=True, timeout=15)
+        check("shellctl: no shell there → exit 1 with a message (never a silent 0)", r.returncode == 1 and "kristall-shellctl:" in r.stderr, f"rc={r.returncode} {r.stderr.strip()}")
         r = subprocess.run([ctl, "gallery"], env=env, capture_output=True, text=True, timeout=15)
         check("shellctl: missing action is a usage error (exit 2)", r.returncode == 2, str(r.returncode))
         r = subprocess.run([ctl, "gallery", "noop", "a", "b"], env=env, capture_output=True, text=True, timeout=15)
         check("shellctl: a fourth positional is a usage error (exit 2)", r.returncode == 2, str(r.returncode))
     finally:
+        sess.stop()
+
+
+def _stale_socket(path):
+    """a socket file nobody listens on: connect() is refused (ECONNREFUSED), like after a crash"""
+    import socket as _s
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if os.path.exists(path):
+        os.unlink(path)
+    k = _s.socket(_s.AF_UNIX, _s.SOCK_STREAM)
+    k.bind(path)
+    k.close()
+
+
+class FakeGlass:
+    """the smallest glass.sock: answers hello with state active (enough for GlassClient.state)"""
+    def __init__(self, path, hello=None):
+        self.hello = hello or b'{"event":"hello","server":"kristall-glass","protocol":1,"state":"active","theme":"light","glass":0.3}\n'
+        import socket as _s
+        import threading
+        if os.path.exists(path):
+            os.unlink(path)
+        self.srv = _s.socket(_s.AF_UNIX, _s.SOCK_STREAM)
+        self.srv.bind(path)
+        self.srv.listen(4)
+        self.conns = []
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _run(self):
+        while True:
+            try:
+                c, _ = self.srv.accept()
+            except OSError:
+                return
+            self.conns.append(c)
+            c.sendall(self.hello)
+
+    def close(self):
+        self.srv.close()
+        for c in self.conns:
+            c.close()
+
+
+def test_reconnect():
+    print("== reconnect: bridge and glass sockets that appear after the shell (refused first)", flush=True)
+    for helper in (True, False):
+        label = "with the helper (inotify)" if helper else "without the helper (backoff 0.25 s → 5 s)"
+        sess = ss.ShellSession(name="reconnect", glass=False)
+        sess.start(wait_glass=False)
+        glass_path = os.path.join(sess.tmp, "fake-glass.sock")
+        try:
+            _stale_socket(sess.bridge_path)
+            _stale_socket(glass_path)
+            extra = {"KRISTALL_GLASS_SOCKET": glass_path}
+            if not helper:
+                extra["KRISTALL_SHELL_HELPER"] = "/nonexistent/kristall-shell-helper"
+            sess.start_shell(extra_env=extra, bridge=False)
+            sess.wait_ready()
+            time.sleep(4.0 if helper else 7.0)       # refused attempts happen meanwhile
+            st = json.loads(sess.ipc("shell", "status"))
+            check(f"{label}: refused sockets: not connected, fallback state", st["bridge"] is False and st["glass"] != "active", json.dumps(st))
+            t0 = time.monotonic()
+            sess.bridge = ss.mockbridge.MockBridge(sess.bridge_path, outputs=[
+                {"name": "Virtual-0", "x": 0, "y": 0, "w": sess.width, "h": sess.height, "scale": 1.0, "refresh": 60.0,
+                 "internal": True, "primary": True}]).start()
+            fg = FakeGlass(glass_path)
+            ok = ss.wait_until(lambda: (lambda st: st["bridge"] is True and st["glass"] == "active")(json.loads(sess.ipc("shell", "status"))), 8, 0.2)
+            dt = time.monotonic() - t0
+            check(f"{label}: bridge and glass connect within 6 s of appearing", bool(ok) and dt <= 6.0, f"{dt:.2f} s")
+            results["reconnect_" + ("helper" if helper else "backoff") + "_s"] = round(dt, 2)
+            # the server goes away and comes back: connects again
+            fg.close()
+            time.sleep(1.0)
+            t0 = time.monotonic()
+            fg = FakeGlass(glass_path)
+            ok = ss.wait_until(lambda: json.loads(sess.ipc("shell", "status"))["glass"] == "active", 8, 0.2)
+            dt = time.monotonic() - t0
+            check(f"{label}: glass restarts → reconnected within 6 s", bool(ok) and dt <= 6.0, f"{dt:.2f} s")
+            fg.close()
+            if helper:
+                # the effect comes back disabled by its crash guard: one gentle notification per session
+                time.sleep(0.5)
+                fg = FakeGlass(glass_path, b'{"event":"hello","server":"kristall-glass","protocol":1,"state":"disabled","reason":"crash-guard","theme":"light","glass":0.3}\n')
+                marker = os.path.join(sess.runtime, "kristall", "glass-guard-notified")
+                ok = ss.wait_until(lambda: os.path.exists(marker), 8, 0.2)
+                check("glass disabled by its crash guard: the owner is told once (notification, marker for this session)", bool(ok))
+                fg.close()
+        finally:
+            sess.stop()
+
+
+def test_controls():
+    print("== core controls are binding-safe (a click never breaks the owner's binding)", flush=True)
+    owner_bin = os.path.join(os.environ.get("KRISTALL_BRIDGE_BUILD", "/tmp/kristall-bridge-build"), "bin", "owner")
+    sess = ss.ShellSession(name="controls")
+    sess.start(wait_glass=False)
+    owner = None
+    try:
+        sess.start_shell()
+        sess.wait_ready()
+        sess.ipc("test", "toggleTest", "true")
+        st = ss.wait_until(lambda: json.loads(sess.ipc("test", "toggleState") or "null"), 5, 0.2)
+        check("toggle shows the setting (off)", st and st["checked"] is False and st["shown"] is False, json.dumps(st))
+        if os.path.exists(owner_bin):
+            owner = subprocess.Popen([owner_bin], env=sess.env(), stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
+            if owner.stdout.readline().strip() != "ready":
+                raise RuntimeError("owner: no fake input")
+
+            def cmd(c):
+                owner.stdin.write(c + "\n")
+                owner.stdin.flush()
+                owner.stdout.readline()
+            cmd("move 141 132")
+            time.sleep(0.2)
+            cmd("button 272 1")
+            time.sleep(0.05)
+            cmd("button 272 0")
+            how = "pointer click"
+        else:
+            check("the owner's input client is built (kwin/bridge/tests)", False, owner_bin)
+            return
+        st = ss.wait_until(lambda: (lambda x: x if x and x["setting"] is True else None)(json.loads(sess.ipc("test", "toggleState"))), 5, 0.2)
+        check(f"{how}: the toggle requests the change and the setting follows", bool(st) and st["checked"] is True and st["shown"] is True, json.dumps(st))
+        settings_set(sess, "bar.showBatteryPercentage", False)
+        st = ss.wait_until(lambda: (lambda x: x if x and x["checked"] is False else None)(json.loads(sess.ipc("test", "toggleState"))), 5, 0.2)
+        check("after the click, an outside change of the setting moves the toggle (binding intact)", bool(st) and st["shown"] is False, json.dumps(st))
+        settings_set(sess, "bar.showBatteryPercentage", True)
+        st = ss.wait_until(lambda: (lambda x: x if x and x["checked"] is True else None)(json.loads(sess.ipc("test", "toggleState"))), 5, 0.2)
+        check("…and back on", bool(st) and st["shown"] is True, json.dumps(st))
+        w = [l for l in shell_warnings(sess) if "quickshell.service" not in l and "quickshell.network" not in l and "quickshell.bluetooth" not in l]
+        check("no warnings (system services are not mocked in this session)", not w, "\n".join(w[:6]))
+    finally:
+        if owner:
+            owner.kill()
+        sess.stop()
+
+
+def test_menus():
+    print("== menus: submenu safe triangle (synthetic pointer paths)", flush=True)
+    sess = ss.ShellSession(name="menus")
+    sess.start(wait_glass=False)
+    try:
+        sess.start_shell()
+        sess.wait_ready()
+
+        def state():
+            return json.loads(sess.ipc("test", "menuState"))
+
+        def play(points, ms=0):
+            sess.ipc("test", "hoverPath", ";".join(f"{x:.1f},{y:.1f}" for x, y in points))
+
+        def open_first():
+            sess.ipc("test", "openTestMenu", 200, 120)
+            st = ss.wait_until(state, 3, 0.1)
+            r0 = st[0]["rows"][0]
+            x0 = st[0]["x"] + st[0]["w"] * 0.5
+            play([(x0, r0["y"] + r0["h"] / 2)])
+            time.sleep(0.4)                       # 120 ms hover delay: the submenu opens
+            return ss.wait_until(lambda: (lambda s: s if s and len(s) == 2 else None)(state()), 3, 0.1)
+        st = open_first()
+        check("hovering a row with a submenu opens it", bool(st) and st[1]["anchorRow"] == 0, json.dumps(st and [l["anchorRow"] for l in st]))
+        p, sub = st[0], st[1]
+        r0 = p["rows"][0]
+        a = (p["x"] + p["w"] * 0.5, r0["y"] + r0["h"] / 2)
+        b = (sub["x"] + 8, sub["y"] + sub["h"] - 10)     # a lower item of the submenu, diagonally
+        path = [(a[0] + (b[0] - a[0]) * t / 14, a[1] + (b[1] - a[1]) * t / 14) for t in range(1, 15)]
+        crossed = sorted({k for (x, y) in path for k, r in enumerate(p["rows"]) if r["y"] <= y < r["y"] + r["h"] and x < p["x"] + p["w"]} - {0})
+        play(path, 16)
+        time.sleep(0.1)
+        st = state()
+        check("diagonal path to the submenu crosses other rows" , len(crossed) >= 1, str(crossed))
+        check("safe triangle: the submenu stays open while the pointer crosses other rows on the way",
+              bool(st) and len(st) == 2 and st[1]["anchorRow"] == 0, json.dumps(st and [l["anchorRow"] for l in st]))
+        check("…and the pointer arrives in it (its row is selected)", bool(st) and len(st) == 2 and st[1]["current"] >= 0, json.dumps(st and [l["current"] for l in st]))
+        sess.ipc("shell", "request", "shell", "close-menus", "", "")
+        time.sleep(0.4)
+        # control: moving straight down to another row and resting there switches after ~300 ms
+        st = open_first()
+        p = st[0]
+        r3 = p["rows"][3]
+        x = p["x"] + p["w"] * 0.5
+        for k in (1, 2, 3):
+            play([(x, p["rows"][k]["y"] + p["rows"][k]["h"] / 2)])
+        time.sleep(0.6)
+        st = state()
+        check("off course (straight down) and resting: the hovered row's submenu takes over",
+              bool(st) and len(st) == 2 and st[1]["anchorRow"] == 3, json.dumps(st and [l["anchorRow"] for l in st]))
+        sess.ipc("shell", "request", "shell", "close-menus", "", "")
+        # resting inside the triangle over another row (no submenu): after 300 ms that row wins
+        st = open_first()
+        p, sub = st[0], st[1]
+        r0, r1 = p["rows"][0], p["rows"][1]
+        play([(p["x"] + p["w"] - 30, r0["y"] + r0["h"] / 2), (p["x"] + p["w"] - 20, r1["y"] + 4)], 16)
+        time.sleep(0.15)
+        mid = state()
+        time.sleep(0.4)
+        st = state()
+        check("resting in the triangle: the submenu stays first, then (≈ 300 ms) the row under the pointer takes over",
+              bool(mid) and len(mid) == 2 and bool(st) and len(st) == 1 and st[0]["current"] == 1,
+              json.dumps({"after150ms": mid and [l["anchorRow"] for l in mid], "after550ms": st and [(l["anchorRow"], l["current"]) for l in st]}))
+        sess.ipc("shell", "request", "shell", "close-menus", "", "")
+    finally:
+        sess.stop()
+
+
+def test_reveal():
+    print("== full screen: the menu bar slides down at the top edge (not over games)", flush=True)
+    owner_bin = os.path.join(os.environ.get("KRISTALL_BRIDGE_BUILD", "/tmp/kristall-bridge-build"), "bin", "owner")
+    sess = ss.ShellSession(name="reveal")
+    sess.start(wait_glass=False)
+    owner = None
+    try:
+        sess.start_shell()
+        sess.wait_ready()
+        owner = subprocess.Popen([owner_bin], env=sess.env(), stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
+        if owner.stdout.readline().strip() != "ready":
+            raise RuntimeError("owner: no fake input")
+
+        def cmd(c):
+            owner.stdin.write(c + "\n")
+            owner.stdin.flush()
+            owner.stdout.readline()
+
+        def rv():
+            return sess.state()["bar"]["reveal"]
+        cmd("move 640 400")
+        st = rv()
+        check("no hot strip without a full-screen window", not st["strip"], json.dumps(st))
+        sess.ctl({"cmd": "open", "window": {"id": "v1", "appId": "org.mozilla.firefox", "title": "Video", "x": 0, "y": 0,
+                                            "w": sess.width, "h": sess.height, "fullscreen": True}})
+        sess.ctl({"cmd": "activate", "id": "v1"})
+        st = wait_state(sess, lambda s: s["bar"]["reveal"]["strip"], 4)["bar"]["reveal"]
+        check("full-screen window in front: the 2-px hot strip waits at the top edge", st["strip"] and not st["revealed"], json.dumps(st))
+        cmd("move 640 1")
+        time.sleep(0.1)
+        early = rv()
+        st = wait_state(sess, lambda s: s["bar"]["reveal"]["revealed"] and s["bar"]["reveal"]["slideY"] == 0, 3)["bar"]["reveal"]
+        check("resting at the top edge reveals the bar after ~250 ms (not at once)", not early["revealed"] and st["revealed"], json.dumps({"after100ms": early, "later": st}))
+        img = sess.screenshot()
+        sess.save(img, "bar-reveal-fullscreen.png", crop=(0, 0, sess.width, 60))
+        cmd("move 640 12")                      # on the bar
+        time.sleep(0.6)
+        check("stays while the pointer is on the bar", rv()["revealed"], json.dumps(rv()))
+        cmd("move 640 400")                     # away from the bar
+        st = wait_state(sess, lambda s: not s["bar"]["reveal"]["revealed"], 3)["bar"]["reveal"]
+        check("leaving the bar slides it away again", not st["revealed"] and st["strip"], json.dumps(st))
+        # a game (X11 client in full screen): the edge is left alone
+        sess.ctl({"cmd": "open", "window": {"id": "g1", "appId": "steam_app_12345", "title": "Spiel", "x": 0, "y": 0,
+                                            "w": sess.width, "h": sess.height, "fullscreen": True, "xwayland": True}})
+        sess.ctl({"cmd": "activate", "id": "g1"})
+        st = wait_state(sess, lambda s: s["bar"]["reveal"]["gameLike"], 4)["bar"]["reveal"]
+        check("full-screen game (Xwayland): no hot strip, no reveal", st["gameLike"] and not st["strip"], json.dumps(st))
+        cmd("move 640 1")
+        time.sleep(0.6)
+        check("…the pointer at the top edge does nothing", not rv()["revealed"], json.dumps(rv()))
+        sess.ctl({"cmd": "close", "id": "g1"})
+        sess.ctl({"cmd": "close", "id": "v1"})
+        st = wait_state(sess, lambda s: not s["bar"]["reveal"]["strip"], 4)["bar"]["reveal"]
+        check("no full-screen window: the strip is unmapped again", not st["strip"], json.dumps(st))
+        w = [l for l in shell_warnings(sess) if "quickshell.service" not in l and "quickshell.network" not in l and "quickshell.bluetooth" not in l]
+        check("no warnings", not w, "\n".join(w[:6]))
+    finally:
+        if owner:
+            owner.kill()
         sess.stop()
 
 
@@ -891,7 +1181,7 @@ def test_realbridge():
         sess.stop()
 
 
-SECTIONS = {"realbridge": test_realbridge, "static": test_static, "shortcuts": test_shortcuts, "ctl": test_ctl, "core": test_core, "appmenu": test_appmenu, "scale": test_scale, "fallback": test_fallback,
+SECTIONS = {"realbridge": test_realbridge, "static": test_static, "shortcuts": test_shortcuts, "ctl": test_ctl, "reconnect": test_reconnect, "controls": test_controls, "menus": test_menus, "reveal": test_reveal, "core": test_core, "appmenu": test_appmenu, "scale": test_scale, "fallback": test_fallback,
             "modules": test_modules, "restart": test_restart, "plasma": test_plasma, "gallery": test_gallery}
 
 if __name__ == "__main__":

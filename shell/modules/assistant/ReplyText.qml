@@ -7,7 +7,7 @@
 import QtQuick
 import Quickshell
 import qs.core
-import "Markdown.js" as Md
+import "../../core/Markdown.js" as Md
 
 TextEdit {
     id: rt

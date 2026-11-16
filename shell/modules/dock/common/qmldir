@@ -1,9 +1,0 @@
-# Shared by the shell-apps modules (dock, search, apps, switcher), imported as a directory
-# (`import "common"` here, `import "../dock/common"` from the others): Quickshell 0.2.1 does not
-# resolve `qs.modules.*` imports of directories nothing imports at start. Keep in sync with the files.
-AppIcon 1.0 AppIcon.qml
-AppsGlyph 1.0 AppsGlyph.qml
-SyncedGlassSurface 1.0 SyncedGlassSurface.qml
-singleton AppCatalog 1.0 AppCatalog.qml
-singleton IconShapes 1.0 IconShapes.qml
-IconProbe 1.0 IconProbe.qml

@@ -2,9 +2,9 @@
 // Badges and progress apps publish through the Unity launcher API (session bus), via one small
 // helper process that sleeps in its main loop until an app sends an update.
 import QtQuick
+import qs.core
 import Quickshell
 import Quickshell.Io
-import "common"
 
 Scope {
     id: entries

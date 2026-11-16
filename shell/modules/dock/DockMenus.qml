@@ -5,7 +5,6 @@ import QtQuick
 import Quickshell
 import qs.core
 import qs.services
-import "common"
 
 // Context menus of the Dock (macOS 26 arrangement): an app's windows, its desktop actions,
 // Options ▸ (Keep in Dock, Show in Files), Show All Windows, Hide, Quit / Open; Downloads (recent

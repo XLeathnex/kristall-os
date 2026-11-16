@@ -1,10 +1,13 @@
 {
  "last_run": {
   "sections": [
-   "contrast"
+   "settingsapp"
   ],
-  "failures": [],
-  "time": "2026-11-16T19:21:30"
+  "failures": [
+   "one System Settings tile while one System Settings window is open",
+   "\u2026and it is the kept tile, shown as running"
+  ],
+  "time": "2026-11-16T19:40:35"
  },
  "dolphin_launch_s": 0.7,
  "dock_layout_us_per_pass": 20,

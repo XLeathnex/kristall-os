@@ -96,7 +96,7 @@ Scope {
                        wifiEnabled: Network.wifiEnabled, wifiName: Network.wifiName, hasWifi: Network.hasWifi, netAvailable: Network.available };
             out.audio = { available: Audio.available, volume: Audio.volume, muted: Audio.muted, device: Audio.deviceName };
             out.media = { available: Media.available, title: Media.title, artist: Media.artist, playing: Media.playing, app: Media.appName };
-            out.power = { battery: Power.hasBattery, percent: Power.percent, mode: Power.mode, selected: PanelsUtil.selectedMode };
+            out.power = { battery: Power.hasBattery, percent: Power.percent, mode: Power.mode, selected: PanelsUtil.selectedMode, summary: PanelsUtil.energySummary(), chosenText: PanelsUtil.chosenModeText() };
             out.helper = { ready: PanelsHelper.ready, notifyOwner: PanelsHelper.notifyOwner };
             out.theme = Theme.scheme;
             out.open = ShellBus.open;

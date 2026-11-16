@@ -136,6 +136,12 @@ Singleton {
 
     // ---- windows <-> apps ----------------------------------------------------------------------
     property var _keyCache: ({})
+    // window app ids that are another name of a listed app
+    readonly property var appAliases: ({ "kdesystemsettings": "systemsettings", "org.kde.systemsettings": "systemsettings" })
+    function _program(exec) {
+        const first = String(exec || "").trim().split(/\s+/)[0] || "";
+        return first.split("/").pop();
+    }
     // the app key of a window's app id ("org.kde.dolphin", "firefox", a WM class …)
     function keyForAppId(appId) {
         if (!appId)
@@ -159,10 +165,23 @@ Singleton {
                 }
             }
         }
+        if (k === "" && appAliases[lower] && byKey[appAliases[lower]])
+            k = appAliases[lower];
         if (k === "") {
             const d = DesktopEntries.heuristicLookup(appId);
-            if (d && d.id)
+            if (d && d.id) {
                 k = d.id.replace(/\.desktop$/, "");
+                // a hidden helper entry of a listed app (e.g. kdesystemsettings.desktop, which System
+                // Settings uses when it is opened on one page) belongs to that app: same program
+                if (!byKey[k] && d.noDisplay) {
+                    const prog = _program(d.execString);
+                    for (const key in byKey)
+                        if (prog !== "" && _program(byKey[key].entry.execString) === prog) {
+                            k = key;
+                            break;
+                        }
+                }
+            }
         }
         if (k === "")
             k = "window:" + appId;
@@ -472,16 +491,39 @@ Singleton {
                     boost[key] = Math.max(boost[key] || 0, 180);
             }
         }
-        const out = [];
+        // with a limit (every keystroke of Search): keep only the best `limit` in a small sorted
+        // array — no object per match, no sort of hundreds of hits (≤ 2 ms per keystroke)
         const list = apps;
+        if (limit) {
+            const top = [];                 // [{rec, score, order}] best first
+            let floor = 0;
+            for (let i = 0; i < list.length; ++i) {
+                const r = list[i];
+                const s = Fuzzy.score(r.prepared, qq.q, qq.w, qq.c);
+                if (s <= 0)
+                    continue;
+                const sc = s + (usage[r.key] ? usageBoost(r.key) : 0) + (boost[r.key] || 0);
+                if (top.length >= limit && sc <= floor)
+                    continue;               // ties keep catalogue order: the earlier one stays
+                let k = top.length;
+                while (k > 0 && top[k - 1].score < sc)
+                    --k;
+                top.splice(k, 0, { rec: r, score: sc, order: i });
+                if (top.length > limit)
+                    top.pop();
+                floor = top.length >= limit ? top[top.length - 1].score : 0;
+            }
+            return top;
+        }
+        const out = [];
         for (let i = 0; i < list.length; ++i) {
             const r = list[i];
-            const s = Fuzzy.score(r.prepared, qq.q, qq.w);
+            const s = Fuzzy.score(r.prepared, qq.q, qq.w, qq.c);
             if (s <= 0)
                 continue;
             out.push({ rec: r, score: s + (usage[r.key] ? usageBoost(r.key) : 0) + (boost[r.key] || 0), order: i });
         }
         out.sort((a, b) => b.score - a.score || a.order - b.order);
-        return limit ? out.slice(0, limit) : out;
+        return out;
     }
 }

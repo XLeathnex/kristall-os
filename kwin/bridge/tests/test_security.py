@@ -100,6 +100,22 @@ def test_access_control():
             check(r.returncode == 0, "an executable under /usr/lib/kristall/ is privileged")
         finally:
             os.unlink(elf)
+        # a Python virtual environment under /usr/lib/kristall/ (the assistant daemon's, for
+        # instance) is a general interpreter: it must run an installed script to be trusted
+        exec_ctl = (f"import sys; sys.argv=['{INSTALLED_CTL}','--socket','{s.socket}','screenshot']; "
+                    f"exec(open('{INSTALLED_CTL}').read(), {{'__file__': '{INSTALLED_CTL}', '__name__': '__main__'}})")
+        for kind, venv_args in (("copied", ["--copies"]), ("symlinked", [])):
+            venv = f"/usr/lib/kristall/bridge/test-venv-{kind}"
+            subprocess.run(["/usr/bin/python3", "-m", "venv", "--without-pip", *venv_args, venv], check=True, timeout=60)
+            try:
+                py = os.path.join(venv, "bin", "python3")
+                r = subprocess.run([py, "-c", exec_ctl], env=s.env(), capture_output=True, text=True, timeout=30)
+                check(r.returncode != 0 and "denied" in r.stderr, f"{kind} venv interpreter under /usr/lib/kristall running -c: denied")
+                r = subprocess.run([py, "-I", INSTALLED_CTL, "--socket", s.socket, "screenshot"], env=s.env(),
+                                   capture_output=True, text=True, timeout=30)
+                check(r.returncode == 0 and "path" in r.stdout, f"{kind} venv interpreter running an installed script: privileged")
+            finally:
+                shutil.rmtree(venv, ignore_errors=True)
         # another uid: the socket and directory are 0600/0700; with them opened up, SO_PEERCRED still refuses
         os.chmod(s.tmp, 0o755)
         os.chmod(s.runtime, 0o755)

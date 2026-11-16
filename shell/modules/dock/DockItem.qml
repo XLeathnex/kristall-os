@@ -5,7 +5,6 @@
 import QtQuick
 import qs.core
 import qs.services
-import "common"
 
 Item {
     id: tile

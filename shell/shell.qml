@@ -63,13 +63,24 @@ ShellRoot {
                     blockLoading: true
                     printErrors: false
                 }
+                FileView {
+                    // every module directory carries a qmldir listing its types (shell.md §2):
+                    // Quickshell 0.2.1 resolves same-directory types of a module loaded by URL only with it
+                    id: qmldirFile
+                    path: mod.dir + "/qmldir"
+                    blockLoading: true
+                    printErrors: false
+                }
                 readonly property bool present: moduleFile.text().length > 0
                 onPresentChanged: if (present) Strings.addFile(mod.dir + "/strings.json")
                 Component.onCompleted: {
-                    if (present)
+                    if (present) {
                         Strings.addFile(mod.dir + "/strings.json");
-                    else
+                        if (qmldirFile.text().length === 0)
+                            console.warn("kristall-shell: module", mod.modelData, "has no qmldir (required, docs/contracts/shell.md §2): its own types may not resolve");
+                    } else {
                         shell._setModule(mod.modelData, "absent");
+                    }
                 }
                 LazyLoader {
                     active: mod.present
@@ -123,6 +134,25 @@ ShellRoot {
         }
     }
 
+    // ---- the glass effect switched itself off after crashes (glass.md §7): tell the owner once ------
+    // One gentle notification per login session (a marker in the runtime directory, which the
+    // next boot clears together with the effect's own record).
+    FileView {
+        id: glassNotified
+        path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/kristall/glass-guard-notified"
+        blockLoading: true
+        printErrors: false
+    }
+    readonly property bool glassGuardTripped: GlassClient.state === "disabled" && GlassClient.reason === "crash-guard"
+    onGlassGuardTrippedChanged: if (glassGuardTripped) Qt.callLater(_notifyGlassGuard)
+    function _notifyGlassGuard() {
+        if (!glassGuardTripped || glassNotified.text().length > 0)
+            return;
+        glassNotified.setText(String(Date.now()));
+        Quickshell.execDetached(["notify-send", "--app-name=" + Strings.t("glass.guard.app"), "--icon=dialog-information",
+                                 "--urgency=low", Strings.t("glass.guard.title"), Strings.t("glass.guard.body")]);
+    }
+
     // ---- requests the shell itself handles ----------------------------------------------------------
     Connections {
         target: ShellBus
@@ -146,6 +176,19 @@ ShellRoot {
         target: "shell"
         function request(target: string, action: string, arg: string, output: string): string {
             ShellBus.request(target, action, arg, output);
+            return "ok";
+        }
+        // what kristall-shellctl uses: arg and output percent-encoded (UTF-8), because quickshell's
+        // command line parser reads some arguments itself ("[1, 2]" as a list, "-x" as an option)
+        function requestEncoded(target: string, action: string, arg: string, output: string): string {
+            let a, o;
+            try {
+                a = decodeURIComponent(arg);
+                o = decodeURIComponent(output);
+            } catch (e) {
+                return "bad encoding";
+            }
+            ShellBus.request(target, action, a, o);
             return "ok";
         }
         function status(): string {

@@ -5,9 +5,9 @@
 // Downloads and the Trash. Entries: {id, kind: app|apps|sep|window|downloads|trash, key, windowId,
 // pinned, running, launching}.
 import QtQuick
+import qs.core
 import Quickshell
 import qs.services
-import "common"
 
 QtObject {
     id: model

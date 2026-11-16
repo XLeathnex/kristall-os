@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The microphone check: the owner says something and sees their own words, recognised on the
-// laptop (MicCheck: a voice turn that is cancelled as soon as the words are known).
+// laptop (MicCheck: the daemon's transcribe-only request — no Claude, works before sign-in).
 import QtQuick
 import qs.core
 import qs.services

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Text field (28 px, radius 8) or search field (`search: true`: capsule, magnifier, clear button).
+// `focusRing: false` — no focus ring (search-style fields that are the only input of their
+// surface, like the Apps search: the caret shows where typing goes, as on the Mac).
 // The surface that hosts a focused field needs keyboard focus (layer-shell OnDemand/Exclusive).
 import QtQuick
 
@@ -11,6 +13,7 @@ Item {
     property bool search: false
     property string scheme: Theme.scheme
     property bool password: false
+    property bool focusRing: true
     property string showState: ""     // gallery: "focus"
     signal accepted()
     signal escaped()
@@ -29,7 +32,7 @@ Item {
         border.width: 1 / Math.max(1, f.Window.window ? f.Window.window.devicePixelRatio : 1)
         border.color: Theme.color(f.scheme, "border")
     }
-    KFocusRing { target: f; visible: input.activeFocus || f.showState === "focus"; targetRadius: bg.radius; scheme: f.scheme }
+    KFocusRing { target: f; visible: f.focusRing && (input.activeFocus || f.showState === "focus"); targetRadius: bg.radius; scheme: f.scheme }
     KIcon {
         id: glass
         visible: f.search

@@ -27,7 +27,7 @@ the content that sits on the glass).
 | Plugin | `/usr/lib64/qt6/plugins/kwin/effects/plugins/kristall_glass.so` (plugin id `kristall_glass`) |
 | Enabled for all users | `/etc/xdg/kwinrc`: `[Plugins] kristall_glassEnabled=true`, `blurEnabled=false` (other keys in that file are preserved; other components must also merge, never overwrite) |
 | Socket | `$XDG_RUNTIME_DIR/kristall/glass.sock`, mode 0600, directory 0700. Override for tests: env `KRISTALL_GLASS_SOCKET` (read by server and the reference clients) |
-| Crash guard | `$XDG_RUNTIME_DIR/kristall/glass.guard` (§7) |
+| Crash guard | `$XDG_RUNTIME_DIR/kristall/glass.guard` (§7: whole-session record, 2 crashes in 10 min) |
 | CLI | `/usr/bin/kristall-glass-ctl` (`check`, `status`, `watch`, `apply`, `pipe`, `quality`, `debug`) |
 | Reference QML client | `/usr/share/kristall/glass/demo/{GlassClient,GlassSurface,GlassShape}.qml` (+ demo `shell.qml`) |
 | Logs | KWin's journal stream, category `kristall.glass` (`journalctl --user -b | grep kristall.glass`) |
@@ -199,7 +199,7 @@ longer) there; shapes are kept and re-apply when it appears.
 * `{"event":"error","code":…,"message":…,"op":…,"surface":…}` — codes: `bad-json`,
   `bad-request`, `unknown-op`, `unknown-surface`, `limit`, `too-long`. The connection stays open
   (except as stated in §3).
-* `status` — `state`, `clients`, `bindings`, counters `frames` (frames the effect saw),
+* `status` — `state`, `guard` (§7), `clients`, `bindings`, counters `frames` (frames the effect saw),
   `glassDraws`, `captures`, `blurs`, `cacheHits`, `composites`, `lumaReads`, `allocations`,
   `quality`, `theme`, `glass`, `reduceTransparency`, `windows` (per glass window: `explicit`,
   `shapes`, `pid`, `namespace`, `geometry`, `shapeStates`), `lastTiming`. Diagnostic: fields may
@@ -238,10 +238,18 @@ whenever any of these is true, and the glass otherwise:
 4. `bound` reports `windows: 0` for that surface (the shapes are not drawn anywhere).
 
 The effect protects the session: a plugin that fails to load (e.g. KWin updated without a
-rebuild) leaves KWin compositing normally without glass; an effect that crashes KWin while
-starting is disabled by the crash guard after the second consecutive crash within 30 s of
-start-up for the rest of the login session (`state:"disabled"`). Delete
-`$XDG_RUNTIME_DIR/kristall/glass.guard` (or log out) to retry.
+rebuild) leaves KWin compositing normally without glass. The **crash guard** covers the whole
+login session: the effect keeps `$XDG_RUNTIME_DIR/kristall/glass.guard` (JSON
+`{"schema":2,"armed":bool,"disabled":bool,"crashes":[epoch s…]}`, written atomically), `armed`
+while it is loaded and drawing; a clean unload clears it. A KWin that starts and finds the record
+still armed counts a crash (the previous KWin died with the effect active, at start-up or later).
+Two crashes within **10 minutes** and the effect starts disabled (`state:"disabled"`,
+`reason:"crash-guard"`) and stays disabled for the rest of the login session, also across
+further KWin restarts. The file lives on the runtime tmpfs: the next boot (or login) tries glass
+again; deleting the file retries at once. `kristall-glass-ctl status` shows the record under
+`guard` (`disabled`, `crashes`, `windowSeconds`); clients see `state`/`reason`, and the shell turns
+it into one gentle notification per session (shell.md §8). Tested by killing KWin with SIGSEGV
+twice (`tests/test_failsafe.py`).
 
 ## 8. Reference client
 

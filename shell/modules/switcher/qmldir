@@ -1,0 +1,2 @@
+# Types of the switcher module (docs/contracts/shell.md §2: every module directory has a qmldir).
+# The window switcher itself is a KWin TabBox layout (kwin/tabbox/), not a shell type.

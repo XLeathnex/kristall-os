@@ -37,10 +37,8 @@ NotifCard 1.0 NotifCard.qml
 NotifEntry 1.0 NotifEntry.qml
 NotificationCenter 1.0 NotificationCenter.qml
 singleton Notifs 1.0 Notifs.qml
-singleton PanelMetrics 1.0 PanelMetrics.qml
 singleton PanelsHelper 1.0 PanelsHelper.qml
 singleton PanelsMenus 1.0 PanelsMenus.qml
 singleton PanelsRegistry 1.0 PanelsRegistry.qml
 PanelsTestHooks 1.0 PanelsTestHooks.qml
 singleton PanelsUtil 1.0 PanelsUtil.qml
-RoundedImage 1.0 RoundedImage.qml

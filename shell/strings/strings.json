@@ -66,7 +66,11 @@
     "gallery.menus": "Menus",
     "gallery.materials": "Materials",
     "gallery.symbols": "Symbols",
-    "gallery.colors": "Colours"
+    "gallery.colors": "Colours",
+    "bar.search": "Search",
+    "glass.guard.app": "Kristall",
+    "glass.guard.title": "Glass effects turned off",
+    "glass.guard.body": "Glass effects were turned off after a problem. They'll be tried again after the next restart."
   },
   "de": {
     "common.ellipsis": " …",
@@ -135,6 +139,10 @@
     "gallery.menus": "Menüs",
     "gallery.materials": "Materialien",
     "gallery.symbols": "Symbole",
-    "gallery.colors": "Farben"
+    "gallery.colors": "Farben",
+    "bar.search": "Suche",
+    "glass.guard.app": "Kristall",
+    "glass.guard.title": "Glaseffekte ausgeschaltet",
+    "glass.guard.body": "Glaseffekte wurden nach einem Problem ausgeschaltet. Sie werden nach dem nächsten Neustart wieder versucht."
   }
 }

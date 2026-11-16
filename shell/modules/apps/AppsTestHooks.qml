@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Test-only IPC target "appstest" (KRISTALL_SHELL_TEST=1).
 import QtQuick
+import qs.core
 import Quickshell
 import Quickshell.Io
-import "../dock/common"
 
 Scope {
     id: hooks

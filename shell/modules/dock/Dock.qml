@@ -7,14 +7,13 @@
 // the pointer stays under it — the row grows away from the pointer's side, like the Mac), slot
 // presence while tiles appear/leave (others make room), and the capsule around them. Nothing runs
 // while the pointer is still or away: the surface presents no frames.
-// The capsule's glass is sent with sync "commit" (SyncedGlassSurface) so it moves in step with
+// The capsule's glass is sent with sync "commit" (GlassSurface's default) so it moves in step with
 // the icons. The input region covers only the capsule and the magnified icons.
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import qs.core
 import qs.services
-import "common"
 
 PanelWindow {
     id: dockWindow
@@ -235,7 +234,7 @@ PanelWindow {
     }
 
     // ---- material -----------------------------------------------------------------------------
-    SyncedGlassSurface {
+    GlassSurface {
         id: glassSurface
         key: "dock-" + dockWindow.screenName
         layerNamespace: "kristall-dock"

@@ -2,7 +2,8 @@
 
 Floating glass capsule at the bottom of the main display (bridge primary output, else the first
 screen). Layer-shell namespace `kristall-dock`, layer Top, reserves `capsule + 6 px` unless
-`dock.autoHide`. Also hosts `common/`, the code all four shell-apps modules share.
+`dock.autoHide`. The code the shell-apps modules share (AppCatalog, AppIcon, IconShapes, IconProbe,
+AppsGlyph, fuzzy.js) is in shell-core (`qs.core`, design.md §11).
 
 ```
 Module.qml          screen choice, ShellBus target "dock" (show, hide, bounce <app id>), Empty Trash alert
@@ -14,11 +15,8 @@ DockMenus.qml       context menus (apps, Apps tile, windows, Downloads, Trash, t
 Places.qml          Downloads (XDG user dir) and Trash state via FolderListModel (inotify)
 LauncherEntries.qml + helper/kristall-dock-launcher-entries   badges/progress (Unity LauncherEntry, D-Bus)
 ConfirmDialog.qml   "Empty Trash" alert (namespace kristall-dock-alert)
-common/             AppCatalog (apps + manifest, window→app, Mac click semantics, hide/quit,
-                    kept apps, learned ranking), fuzzy.js, AppIcon + IconShapes + IconProbe (icon
-                    plates), AppsGlyph, SyncedGlassSurface
 kwin/kwinrc         merged into /etc/xdg/kwinrc: Magic Lamp on, Squash off
-image/              install.sh, settings.json (→ settings.d/50-dock.json), merge-ini
+image/              install.sh, settings.json (→ settings.d/50-dock.json); merge-ini is shell-core's (shell/image/)
 tests/              run.sh, test_dock.py, support/appsession.py (shared by all four), evidence/
 ```
 
@@ -30,7 +28,7 @@ tests/              run.sh, test_dock.py, support/appsession.py (shared by all f
 * **Magnification**: raised-cosine falloff over ±max(2.6·size, 1.5·magnified) around the pointer;
   every tile's width follows; the point under the pointer stays under it (the row grows away from
   the pointer side). Enter/leave ease over 150 ms; nothing runs while the pointer is still.
-  Glass shapes go out with `sync:"commit"` (SyncedGlassSurface) so the capsule moves with the icons.
+  Glass shapes go out with `sync:"commit"` (core GlassSurface's default) so the capsule moves with the icons.
 * **Icon plates**: each icon's alpha is measured once (48×48, cached in
   `~/.cache/kristall/shell-apps/icon-shapes.json`). Filled rounded squares are drawn as they are;
   everything else sits on a light/dark rounded plate (superellipse) like macOS 26 does. Both are

@@ -4,6 +4,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
 import qs.core
 import qs.services
 import Quickshell.Services.SystemTray
@@ -21,8 +22,80 @@ Scope {
             hooks.requests = hooks.requests.concat([{ target: target, action: action, arg: arg, output: output }]).slice(-20);
         }
     }
+    // a KToggle bound to a setting, on its own surface at (100, 100) (binding-safety test)
+    property bool toggleTest: false
+    LazyLoader {
+        active: hooks.toggleTest
+        PanelWindow {
+            screen: Quickshell.screens[0]
+            WlrLayershell.namespace: "kristall-test"
+            WlrLayershell.layer: WlrLayer.Overlay
+            exclusionMode: ExclusionMode.Ignore
+            anchors { top: true; left: true }
+            margins { top: 100; left: 100 }
+            implicitWidth: 120
+            implicitHeight: 64
+            color: Theme.color(Theme.scheme, "window")
+            KToggle {
+                id: boundToggle
+                objectName: "test.toggle"
+                x: 20; y: 20
+                checked: Settings.get("bar.showBatteryPercentage", false) === true
+                onToggled: on => Settings.set("bar.showBatteryPercentage", on)
+                Component.onCompleted: hooks.testToggle = boundToggle
+            }
+        }
+    }
+    property var testToggle: null
     IpcHandler {
         target: "test"
+        // a static menu with two submenus at (x, y) of the first output (safe-triangle tests)
+        function openTestMenu(x: real, y: real): string {
+            const scr = Quickshell.screens[0].name;
+            Menus.open({ screen: scr, rect: { x: x, y: y, w: 1, h: 1 }, owner: "test:menu", source: Menus.list([
+                { label: "Erstes", children: [1, 2, 3, 4, 5, 6].map(i => ({ label: "Eins " + i, action: () => {} })) },
+                { label: "Zweites", action: () => {} },
+                { label: "Drittes", action: () => {} },
+                { label: "Viertes", children: [1, 2, 3].map(i => ({ label: "Vier " + i, action: () => {} })) },
+                { label: "Fünftes", action: () => {} }
+            ]) });
+            return "ok";
+        }
+        function menuState(): string {
+            const host = Menus.hosts[Quickshell.screens[0].name];
+            if (!host || !host.open)
+                return JSON.stringify(null);
+            const levels = [];
+            for (let i = 0; i < host.levelModel.count; ++i) {
+                const p = host.panelAt(i);
+                levels.push({ anchorRow: host._levels[i] ? host._levels[i].anchorRow : -1, current: p ? p.currentIndex : -1,
+                              x: p ? p.x : 0, y: p ? p.y : 0, w: p ? p.width : 0, h: p ? p.height : 0,
+                              rows: p ? p.entries.map((e, k) => p.rowRect(k)) : [] });
+            }
+            return JSON.stringify(levels);
+        }
+        // a pointer path over the open menu ("x,y;x,y;…"), delivered as consecutive motion events
+        function hoverPath(points: string): string {
+            const host = Menus.hosts[Quickshell.screens[0].name];
+            for (const pt of points.split(";").map(p => p.split(",").map(Number)))
+                if (host && pt.length === 2)
+                    host.pointerMove(pt[0], pt[1], false);
+            return "ok";
+        }
+        function hover(x: real, y: real): string {
+            const host = Menus.hosts[Quickshell.screens[0].name];
+            if (host)
+                host.pointerMove(x, y, false);
+            return "ok";
+        }
+        function toggleTest(on: bool): string {
+            hooks.toggleTest = on;
+            return "ok";
+        }
+        function toggleState(): string {
+            const t = hooks.testToggle;
+            return JSON.stringify(t ? { checked: t.checked, shown: t.shownChecked, setting: Settings.get("bar.showBatteryPercentage", false) } : null);
+        }
         function lastRequests(): string {
             return JSON.stringify(hooks.requests);
         }
@@ -100,6 +173,7 @@ Scope {
                 menu: Menus.current ? Menus.current.owner : null,
                 levels: levels,
                 bar: b ? { appName: b.appName, titles: b.ordered().map(x => x.text || x.owner), dimmed: b.dimmed, scheme: b.scheme,
+                           reveal: { strip: b.revealAllowed && !b.revealed, revealed: b.revealed, slideY: b.slideY, gameLike: b.gameLike, fullscreen: b.fullscreenWin !== null },
                            glassDrawn: GlassClient.isBound("bar-" + b.screenName) && GlassClient.active } : null,
                 theme: Theme.scheme, glass: GlassClient.state, bridge: Bridge.connected, activeId: Bridge.activeId,
                 power: { battery: Power.hasBattery, percent: Power.percent, mode: Power.mode, onBattery: Power.onBattery },

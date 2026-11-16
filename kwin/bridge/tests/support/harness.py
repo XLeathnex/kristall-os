@@ -2,6 +2,7 @@
 # Test harness for kristall-bridge: a headless KWin (virtual backend, llvmpipe) with the bridge
 # plugin, logging test clients, an "owner" that drives KWin's real input pipeline through
 # org_kde_kwin_fake_input, and a bridge client. Runs inside kristall-devenv under dbus-run-session.
+import glob
 import json
 import os
 import queue
@@ -135,6 +136,27 @@ BTN_LEFT, BTN_RIGHT, BTN_MIDDLE = 0x110, 0x111, 0x112
 KEY_ESC, KEY_LEFTSHIFT = 1, 42
 
 
+def _remove_stale_x_displays():
+    """Xwayland sessions of earlier test processes leave /tmp/.X<n>-lock and /tmp/.X11-unix/X<n>
+    behind when KWin is stopped. A new KWin may then reuse display <n>, its socket is not "new", and
+    the session would not find its DISPLAY (XWayland clients then fail to start). Remove the
+    leftovers of servers that are no longer running (only those)."""
+    for lock in glob.glob("/tmp/.X*-lock"):
+        n = lock[len("/tmp/.X"):-len("-lock")]
+        try:
+            with open(lock) as f:
+                pid = int(f.read().strip() or 0)
+        except (OSError, ValueError):
+            continue
+        if pid > 0 and os.path.exists(f"/proc/{pid}"):
+            continue
+        for path in (lock, f"/tmp/.X11-unix/X{n}"):
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+
+
 class Session:
     def __init__(self, width=1280, height=800, scale=1.0, outputs=1, xwayland=False, lockscreen=False, locked=False, dev=True,
                  layout=None, env=None, plugins=None, name=None, kwinrc_extra="", auto_owner=True):
@@ -200,6 +222,7 @@ class Session:
             args.append("--lockscreen")
         if self.outputs > 1:
             args += ["--output-count", str(self.outputs)]
+        _remove_stale_x_displays()
         before = set(os.listdir("/tmp/.X11-unix")) if os.path.isdir("/tmp/.X11-unix") else set()
         if self.xwayland:
             args.append("--xwayland")

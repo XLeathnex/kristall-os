@@ -65,8 +65,11 @@ Scope {
         return 3 * (1 - s) * (1 - s) * s * y1 + 3 * (1 - s) * s * s * y2 + s * s * s;
     }
 
+    property real _lastStep: 0
     function step() {
         const now = Date.now();
+        const prevStep = _lastStep;
+        _lastStep = now;
         if (now >= t1 || t1 <= t0) {
             gx = toX;
             gy = toY;
@@ -74,7 +77,9 @@ Scope {
             if (gliding) {
                 gliding = false;
                 const a = arrivals.slice(-49);
-                a.push({ target: t1, arrived: now, x: toX, y: toY });
+                // prevFrame: the frame before arrival (it must still have been before the target:
+                // then the cursor arrived on the first frame at or after it)
+                a.push({ target: t1, arrived: now, prevFrame: prevStep, x: toX, y: toY });
                 arrivals = a;
             }
             return;

@@ -109,7 +109,8 @@
     "panels.energy.reason.heavy": "for a demanding app",
     "panels.energy.reason.lowBattery": "battery low",
     "panels.battery.health": "Health {n}%",
-    "panels.battery.draw": "{w} W"
+    "panels.battery.draw": "{w} W",
+    "panels.energy.autoBattery": "Automatic · quiet on battery"
   },
   "de": {
     "panels.cc": "Kontrollzentrum",
@@ -221,6 +222,7 @@
     "panels.energy.reason.heavy": "für eine rechenintensive App",
     "panels.energy.reason.lowBattery": "Akku fast leer",
     "panels.battery.health": "Zustand {n} %",
-    "panels.battery.draw": "{w} W"
+    "panels.battery.draw": "{w} W",
+    "panels.energy.autoBattery": "Automatisch · leise im Akkubetrieb"
   }
 }

@@ -33,7 +33,7 @@ def sysconf(tmp):
     os.makedirs(os.path.join(root, "usr", "share", "kwin", "tabbox"))
     # the same merge the image build does (into empty files here)
     for name in ("kwinrc", "kglobalshortcutsrc"):
-        subprocess.run([sys.executable, os.path.join(A.DOCK, "image", "merge-ini"), os.path.join(root, "etc", "xdg", name),
+        subprocess.run([sys.executable, os.path.join(A.DOCK, "..", "..", "image", "merge-ini"), os.path.join(root, "etc", "xdg", name),
                         os.path.join(SW, "kwin", name)], check=True)
     shutil.copytree(os.path.join(SW, "kwin", "tabbox", "org.kristall.switcher"), os.path.join(root, "usr", "share", "kwin", "tabbox", "org.kristall.switcher"))
     return root
@@ -88,6 +88,17 @@ def test_switcher():
         s.tap("tab")
         time.sleep(0.6)
         img = s.screenshot()
+        try:
+            c = s.connect()
+            gst = c.status()
+            c.close()
+            gw = [w for w in (gst or {}).get("windows", []) if not w.get("explicit")]
+            print("INFO glass windows (blur requests): " + json.dumps(gw)[:800], flush=True)
+            # blocked (shell fix round, item 10): a QML Window inside KWin cannot request the glass
+            # with its own rounded shape — see README "Limits"
+            print("INFO switcher window on glass: " + ("yes" if gw else "no (fallback material)"), flush=True)
+        except OSError as e:
+            print("INFO glass status not readable: " + repr(e), flush=True)
         save = os.path.join(EVIDENCE, "switcher-held-light-1.0x.png")
         os.makedirs(EVIDENCE, exist_ok=True)
         Image.fromarray(img).crop((240, 220, 1040, 580)).save(save, optimize=True)

@@ -15,10 +15,9 @@ import Quickshell.Io
 import Quickshell.Wayland
 import qs.core
 import qs.services
-import "../dock/common"
 import "calc.js" as Calc
 import "catalog.js" as Catalog
-import "../dock/common/fuzzy.js" as Fuzzy
+import "../../core/fuzzy.js" as Fuzzy
 
 PanelWindow {
     id: searchWindow
@@ -204,41 +203,96 @@ PanelWindow {
     }
     onQueryChanged: {
         _userMoved = false;
+        _keyAt = Date.now();
         compute(query);
+        _awaitFrame = true;
+    }
+    // key → frame measurement (test hooks read it): when the text changed, and when the frame that
+    // shows the new results was presented
+    property real _keyAt: 0
+    property bool _awaitFrame: false
+    property var frameLog: []                   // [{q, keyAt, frameAt}] (wall-clock ms), last 64
+    Connections {
+        target: searchWindow.contentItem ? searchWindow.contentItem.Window.window : null
+        function onFrameSwapped() {
+            if (!searchWindow._awaitFrame)
+                return;
+            searchWindow._awaitFrame = false;
+            searchWindow.frameLog = searchWindow.frameLog.concat([{ q: searchWindow.query, keyAt: searchWindow._keyAt, frameAt: Date.now() }]).slice(-64);
+        }
     }
 
-    // ---- files: the system's file index (Baloo, file names only), asynchronously ---------------------
+    // ---- files: the system's file index (Baloo, file names only), off the UI thread ----------------
+    // A query runs in its own process (baloosearch6) 60 ms after typing pauses; a newer query
+    // cancels the running one (its process is stopped and whatever it still prints is ignored);
+    // results stream in as the process prints them (coalesced to one list update per frame).
     QtObject {
         id: files
         readonly property var cmd: (Quickshell.env("KRISTALL_SEARCH_FILES_CMD") || "baloosearch6").split(" ")
         property string pending: ""
+        property int gen: 0
+        property var proc: null
         function request(text) {
             pending = text;
+            gen++;
+            cancel();
             if (text.length < 2) {
+                fileTimer.stop();
                 searchWindow.fileRows = [];
                 searchWindow.fileQuery = text;
                 return;
             }
             fileTimer.restart();
         }
+        function cancel() {
+            if (proc) {
+                const p = proc;
+                proc = null;
+                p.gen = -1;
+                p.running = false;
+                p.destroy(1000);          // a queued stream update may still run: it is ignored (gen)
+            }
+        }
+        function start() {
+            cancel();
+            proc = fileProcComp.createObject(searchWindow, { forQuery: pending, gen: gen, command: cmd.concat(["-l", "40", pending]) });
+            proc.running = true;
+        }
     }
     Timer {
         id: fileTimer
-        interval: 120
-        onTriggered: {
-            fileProc.running = false;
-            fileProc.forQuery = files.pending;
-            fileProc.lines = [];
-            fileProc.command = files.cmd.concat(["-l", "40", files.pending]);
-            fileProc.running = true;
-        }
+        interval: 60
+        onTriggered: files.start()
     }
-    Process {
-        id: fileProc
-        property string forQuery: ""
-        property var lines: []
-        stdout: SplitParser { onRead: l => { if (l.startsWith("/")) fileProc.lines.push(l); } }
-        onExited: (code, status) => searchWindow._filesArrived(forQuery, lines)
+    Component {
+        id: fileProcComp
+        Process {
+            id: fp
+            property string forQuery: ""
+            property int gen: 0
+            property var lines: []
+            property bool _queued: false
+            function flush() {
+                _queued = false;
+                if (gen === files.gen && gen >= 0)
+                    searchWindow._filesArrived(forQuery, lines);
+            }
+            stdout: SplitParser {
+                onRead: l => {
+                    if (fp.gen !== files.gen || !l.startsWith("/"))
+                        return;
+                    fp.lines.push(l);
+                    if (!fp._queued) {
+                        fp._queued = true;
+                        Qt.callLater(fp.flush);
+                    }
+                }
+            }
+            onExited: (code, status) => {
+                if (gen === files.gen)
+                    flush();
+            }
+        }
     }
     function _fileIcon(path) {
         const ext = (path.match(/\.([A-Za-z0-9]+)$/) || [, ""])[1].toLowerCase();
@@ -339,7 +393,7 @@ PanelWindow {
     }
 
     // ---- surface --------------------------------------------------------------------------------
-    SyncedGlassSurface {
+    GlassSurface {
         id: gs
         key: "search-" + searchWindow.screenName
         layerNamespace: "kristall-search"

@@ -230,14 +230,28 @@ bool isTrustedPath(const QString &path)
 // The assistant's tools are Python programs, whose /proc/<pid>/exe is the interpreter. For a
 // system Python interpreter we accept the peer when the script it runs (the first non-option
 // argument) is one of our installed files. /usr is read-only, so only our files live there.
+//
+// An interpreter under a trusted prefix (a virtual environment copied to
+// /usr/lib/kristall/<x>/venv/bin/python3.14, say) is a general-purpose interpreter all the same:
+// `-c` would run anything. It gets the same argv rule as /usr/bin/python3; other general
+// interpreters there (shells, perl, node, …) are never trusted.
 bool isTrustedCommand(const QString &exe, const QList<QByteArray> &argv, QString *reason)
 {
-    if (isTrustedPath(exe)) {
-        *reason = QStringLiteral("executable %1").arg(exe);
-        return true;
-    }
     static const QRegularExpression python(QStringLiteral("^/usr/bin/python3(\\.[0-9]+)?$"));
-    if (!python.match(exe).hasMatch()) {
+    static const QRegularExpression pythonName(QStringLiteral("/(python|python3|python3\\.[0-9]+|pypy[0-9.]*)$"));
+    static const QRegularExpression otherInterpreter(
+        QStringLiteral("/(sh|bash|dash|zsh|fish|perl[0-9.]*|node|nodejs|ruby[0-9.]*|lua[0-9.]*|php[0-9.]*|tclsh[0-9.]*|wish[0-9.]*|gjs|osascript)$"));
+    if (isTrustedPath(exe)) {
+        if (otherInterpreter.match(exe).hasMatch()) {
+            *reason = QStringLiteral("interpreter %1 under a trusted prefix runs unattributable code").arg(exe);
+            return false;
+        }
+        if (!pythonName.match(exe).hasMatch()) {
+            *reason = QStringLiteral("executable %1").arg(exe);
+            return true;
+        }
+        // a Python interpreter under the trusted prefix: fall through to the script rule
+    } else if (!python.match(exe).hasMatch()) {
         *reason = QStringLiteral("executable %1 is not a Kristall binary").arg(exe);
         return false;
     }
