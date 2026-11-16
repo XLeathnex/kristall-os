@@ -228,7 +228,9 @@ PY
   note "kernel $kver: Fedora Secure Boot signature present"
   if [[ -z $ROOT ]] && command -v rpm >/dev/null; then
     local extra
-    extra=$(rpm -qa 'kmod-*' 'akmod-*' '*-kmod' 2>/dev/null || true)
+    # kmod-libs / kmod-devel are the module *tools* every Fedora base has, not modules; files of
+    # unpackaged modules are caught by the "unowned" check below.
+    extra=$(rpm -qa 'kmod-*' 'akmod-*' '*-kmod' 2>/dev/null | grep -v -E '^kmod-(libs|devel)-[0-9]' || true)
     [[ -z $extra ]] || fail "out-of-tree kernel modules are installed ($extra); they would break Secure Boot for the owner"
     local unowned
     unowned=$(comm -23 \
