@@ -167,3 +167,21 @@ C INSTALL.md, all suites totals.
   Getting ≤6 GB needs dropping the offline payload (network install from ghcr.io) → decision for coordinator.
 - panels suite ALL PASS (after image-path fix). Theme suite run was interrupted (re-run).
 - Bridge menu fix VERIFIED fresh session: kappmenuview owned by kwin at login, Dolphin menu exported; daemon 39 MB at login.
+- PUBLISHED round 3 49e282f.
+- Part C: INSTALL.md build times 20–30 min (CI measured 17/15 min), footer: no Flatpaks on stick. Full suites run started (kristall-integ-suites, scratchpad/suites).
+- CI round 3 49e282f: Component tests 43998310990 SUCCESS (all 15 jobs). Local full run: image, power, glass, bridge, shell, panels pass so far.
+- CI round 3: Build OS image 43998310979 SUCCESS; ISO run 44000971967 skipped build (installer from 43995804272 still current, <7 days).
+- Local full run (kristall-devenv, sequential, --network none): all 15 suites exit 0 except setup (exit 1: keyboard
+  system-chords, 5 global shortcuts not seen within 3 s after an xdg-document-portal/fuse activation in that run).
+  keyboard:system re-run 3+10 times: all pass. Reproducing with full keyboard suite loop (kristall-integ-flake).
+- voice: test_unloaded_models_give_memory_back flaky with real models (1/3 full-module runs). Diagnosis: onnxruntime
+  frees the rest ~1 s after the last reference (742 MB → 254/489 MB without a trim), a second malloc_trim then →
+  63 MB. FIX models.py: unload() schedules release_memory again after RELEASE_AGAIN_AFTER=2 s; test waits 2.5 s.
+  3/3 full voice module with models pass; assistant/core suite 140 passed, 10 skipped (no models in devenv).
+- setup flake ROOT CAUSE: the key test's logger desktop file claims the same keys as the stock Spectacle (Print
+  chords), emoji picker (Meta+.) and KRunner (Alt+Space) files in /usr/share/kglobalaccel; kglobalaccel registration
+  order decides the winner (exactly those 5 failed; Spectacle, a Qt app, then activated the portal → fuse error).
+  FIX setup/tests/test_keyboard.py: shadow those three files with key-less ones in the test's XDG data dir + check
+  "no stock owner competes" via KGlobalAccel.allComponents. keyboard:system passes; full setup suite re-running.
+- Step 7 logout: no Mac chord for log out exists (none designed; ⇧⌘Q unbound) → via menu bar  menu 'kristall abmelden …' → Kristall logout dialog, German, 60 s countdown, Esc cancels (07e). Neustart … dialog also seen. (My earlier misclick came from assuming scale 1.6; this session runs at 1.0.)
+- setup suite full re-run: ALL PASSED (with the shadowing fix). Final local totals: all 15 suites green.

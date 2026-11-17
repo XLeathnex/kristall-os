@@ -27,7 +27,8 @@ loginctl disable-linger kristall 2>/dev/null || true
 pkill -u kristall || true
 rm -rf /home/kristall && cp -a /etc/skel /home/kristall && chown -R kristall:kristall /home/kristall
 install -d -o kristall -g kristall /home/kristall/.config
-printf '[Formats]\nLANG=de_DE.UTF-8\n\n[Translations]\nLANGUAGE=de\n' >/home/kristall/.config/plasma-localerc
+L=${INTEG_LANG:-de_DE.UTF-8}
+printf '[Formats]\nLANG=%s\n\n[Translations]\nLANGUAGE=%s\n' "$L" "${L%%_*}" >/home/kristall/.config/plasma-localerc
 printf '[Layout]\nLayoutList=de\nUse=true\n' >/home/kristall/.config/kxkbrc   # Plasma Setup's keyboard step
 chown kristall:kristall /home/kristall/.config/plasma-localerc /home/kristall/.config/kxkbrc
 if [ "${INTEG_SETUP_DONE:-0}" = 1 ]; then     # walkthrough after step 1: the Setup Assistant was finished before
@@ -35,5 +36,5 @@ if [ "${INTEG_SETUP_DONE:-0}" = 1 ]; then     # walkthrough after step 1: the Se
   printf '{"setup": {"done": true}, "appearance": {"theme": "light", "accent": "green"}}\n' >/home/kristall/.config/kristall/settings.json
   chown kristall:kristall /home/kristall/.config/kristall/settings.json
 fi
-localectl set-locale LANG=de_DE.UTF-8 2>/dev/null || echo 'LANG=de_DE.UTF-8' >/etc/locale.conf
+localectl set-locale LANG="$L" 2>/dev/null || echo "LANG=$L" >/etc/locale.conf
 echo prepared

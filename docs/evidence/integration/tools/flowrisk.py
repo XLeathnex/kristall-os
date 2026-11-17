@@ -1,0 +1,16 @@
+import re, subprocess
+env = dict(os.environ, GDK_BACKEND="wayland")
+subprocess.Popen(["python3", "/work/assistant/hands/tests/support/riskwin.py", "Neue Nachricht – Testpost"], env=env,
+                 stdout=open("/tmp/riskwin.log", "w"), stderr=subprocess.STDOUT)
+time.sleep(4)
+txt, _ = call("ui_tree", window="Neue Nachricht", find="Senden")
+ref = next((l.split()[0] for l in txt.splitlines() if "Senden" in l and "button" in l), None)
+print("Senden ref:", ref)
+txt, err = call("click", ref=ref, intent="Nachricht abschicken")
+subprocess.run(["python3", "/integ/shot.py", "08e-riskgate-refused"])
+risk = re.search(r'risk[^"“]*["“]([a-z_]+)["”]', txt)
+print("risk named by the refusal:", risk.group(1) if risk else None)
+txt, err = call("click", ref=ref, intent="Nachricht abschicken", risk=(risk.group(1) if risk else "send"))
+time.sleep(1)
+subprocess.run(["python3", "/integ/shot.py", "08f-riskgate-allowed"])
+print("riskwin log:", open("/tmp/riskwin.log").read()[-400:])

@@ -22,7 +22,7 @@ pytestmark = pytest.mark.skipif(not MODELS or not Path(MODELS, "asr").is_dir(),
                                 reason="speech models not available (set KRISTALL_TEST_MODELS)")
 
 from kristall_assistant.voice.audio import FileSink, FileSource, resample  # noqa: E402
-from kristall_assistant.voice.models import ModelManager                   # noqa: E402
+from kristall_assistant.voice.models import RELEASE_AGAIN_AFTER, ModelManager  # noqa: E402
 from kristall_assistant.voice.pipeline import ListenConfig, Listener, Speaker  # noqa: E402
 from kristall_assistant.voice.speechtext import normalize                  # noqa: E402
 
@@ -228,7 +228,7 @@ def test_unloaded_models_give_memory_back():
         await models.asr()
         loaded = rss_kb()
         models.unload()
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(RELEASE_AGAIN_AFTER + 0.5)
         return base, loaded, rss_kb()
     base, loaded, after = run(go())
     grown = loaded - base

@@ -11,15 +11,15 @@
    "frames_per_s": 0.6666666666666666,
    "light_updates_per_s": 0.0,
    "shell_cpu_ms_per_s": 0.0,
-   "kwin_cpu_ms_per_s": 0.0
+   "kwin_cpu_ms_per_s": 3.3333333333333335
   },
   "active": {
-   "frames_per_s": 61.2,
-   "light_updates_per_s": 60.4,
-   "shell_cpu_ms_per_s": 726.0,
-   "kwin_cpu_ms_per_s": 518.0,
-   "per_light_update_kwin_ms": 8.576,
-   "per_light_update_shell_ms": 12.02
+   "frames_per_s": 60.2,
+   "light_updates_per_s": 60.8,
+   "shell_cpu_ms_per_s": 618.0,
+   "kwin_cpu_ms_per_s": 436.0,
+   "per_light_update_kwin_ms": 7.171,
+   "per_light_update_shell_ms": 10.164
   },
   "idle_after": {
    "frames_per_s": 0.0,
@@ -34,16 +34,16 @@
   "idle_before": {
    "frames_per_s": 0.0,
    "light_updates_per_s": 0.0,
-   "shell_cpu_ms_per_s": 3.3333333333333335,
+   "shell_cpu_ms_per_s": 0.0,
    "kwin_cpu_ms_per_s": 0.0
   },
   "active": {
    "frames_per_s": 0.0,
-   "light_updates_per_s": 62.8,
-   "shell_cpu_ms_per_s": 12.0,
+   "light_updates_per_s": 60.4,
+   "shell_cpu_ms_per_s": 6.0,
    "kwin_cpu_ms_per_s": 0.0,
    "per_light_update_kwin_ms": 0.0,
-   "per_light_update_shell_ms": 0.191
+   "per_light_update_shell_ms": 0.099
   },
   "idle_after": {
    "frames_per_s": 0.0,
@@ -56,24 +56,24 @@
  },
  "light_cost_gl_2880x1800@1.6": {
   "idle_before": {
-   "frames_per_s": 0.6666666666666666,
+   "frames_per_s": 1.0,
    "light_updates_per_s": 0.0,
    "shell_cpu_ms_per_s": 0.0,
    "kwin_cpu_ms_per_s": 6.666666666666667
   },
   "active": {
-   "frames_per_s": 59.6,
-   "light_updates_per_s": 50.8,
-   "shell_cpu_ms_per_s": 1408.0,
-   "kwin_cpu_ms_per_s": 1080.0,
-   "per_light_update_kwin_ms": 21.26,
-   "per_light_update_shell_ms": 27.717
+   "frames_per_s": 59.0,
+   "light_updates_per_s": 53.0,
+   "shell_cpu_ms_per_s": 1430.0,
+   "kwin_cpu_ms_per_s": 978.0,
+   "per_light_update_kwin_ms": 18.453,
+   "per_light_update_shell_ms": 26.981
   },
   "idle_after": {
    "frames_per_s": 0.0,
    "light_updates_per_s": 0.0,
    "shell_cpu_ms_per_s": 0.0,
-   "kwin_cpu_ms_per_s": 3.3333333333333335
+   "kwin_cpu_ms_per_s": 0.0
   },
   "light_area_device_px": 806543,
   "screen_device_px": 5184000
@@ -87,11 +87,11 @@
   },
   "active": {
    "frames_per_s": 0.0,
-   "light_updates_per_s": 62.8,
-   "shell_cpu_ms_per_s": 10.0,
+   "light_updates_per_s": 63.0,
+   "shell_cpu_ms_per_s": 6.0,
    "kwin_cpu_ms_per_s": 0.0,
    "per_light_update_kwin_ms": 0.0,
-   "per_light_update_shell_ms": 0.159
+   "per_light_update_shell_ms": 0.095
   },
   "idle_after": {
    "frames_per_s": 0.0,
@@ -105,17 +105,17 @@
  "cursor_timing_synthetic": {
   "glides": 8,
   "arrival_minus_ts_plus_d_ms": {
-   "mean": 9.0,
-   "max": 15,
+   "mean": 6.0,
+   "max": 14,
    "min": 0
   },
   "frame_gap_at_arrival_ms": {
    "max": 17,
-   "mean": 16.0
+   "mean": 16.1
   },
   "action_after_arrival_ms": {
-   "min": 55.8,
-   "mean": 77.1
+   "min": 56.4,
+   "mean": 73.6
   }
  },
  "cursor_timing_real_bridge": {
@@ -123,28 +123,28 @@
   "cursor_events": 9,
   "pairs": [
    {
-    "click_minus_arrival_ms": 40.0,
-    "arrival_minus_target_ms": 3,
-    "ripple_minus_click_ms": -1.0,
-    "click_minus_pulse_ms": 1.4
-   },
-   {
-    "click_minus_arrival_ms": 31.8,
-    "arrival_minus_target_ms": 10,
-    "ripple_minus_click_ms": 0.2,
-    "click_minus_pulse_ms": 0.1
-   },
-   {
-    "click_minus_arrival_ms": 41.7,
+    "click_minus_arrival_ms": -0.0,
     "arrival_minus_target_ms": 0,
+    "ripple_minus_click_ms": 0.0,
+    "click_minus_pulse_ms": 0.2
+   },
+   {
+    "click_minus_arrival_ms": 32.0,
+    "arrival_minus_target_ms": 9,
+    "ripple_minus_click_ms": -0.0,
+    "click_minus_pulse_ms": -0.1
+   },
+   {
+    "click_minus_arrival_ms": 41.4,
+    "arrival_minus_target_ms": 0,
+    "ripple_minus_click_ms": 0.6,
+    "click_minus_pulse_ms": -0.1
+   },
+   {
+    "click_minus_arrival_ms": 37.7,
+    "arrival_minus_target_ms": 4,
     "ripple_minus_click_ms": 0.3,
     "click_minus_pulse_ms": 0.1
-   },
-   {
-    "click_minus_arrival_ms": 37.9,
-    "arrival_minus_target_ms": 4,
-    "ripple_minus_click_ms": 0.1,
-    "click_minus_pulse_ms": -0.1
    }
   ],
   "durations": [
@@ -174,10 +174,10 @@
    "realbridge"
   ],
   "failures": [],
-  "time": "2026-11-16T23:05:01"
+  "time": "2026-11-17T02:16:13"
  },
  "edge_light_entry_exit_ms": {
-  "in": 690,
-  "out": 277
+  "in": 670,
+  "out": 281
  }
 }

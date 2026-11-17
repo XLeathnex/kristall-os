@@ -101,6 +101,9 @@ class Vad:
         return sherpa_onnx.VoiceActivityDetector(cfg, buffer_size_in_seconds=60)
 
 
+RELEASE_AGAIN_AFTER = 2.0   # seconds after unloading
+
+
 def release_memory() -> None:
     """Give freed heap back to the system. Without it the daemon kept ~1 GB RSS after the models were
     unloaded (onnxruntime's buffers were freed, but glibc kept the pages): measured in the integrated
@@ -191,6 +194,12 @@ class ModelManager:
         self._voices.clear()
         gc.collect()
         release_memory()
+        # onnxruntime finishes tearing the sessions down (its worker threads exit) within about a
+        # second after the last reference goes: trim once more then, or ~0.4-0.7 GB stays resident
+        try:
+            asyncio.get_running_loop().call_later(RELEASE_AGAIN_AFTER, release_memory)
+        except RuntimeError:
+            pass
 
     @property
     def loaded(self) -> list[str]:

@@ -1,0 +1,51 @@
+{"seconds": 60.1, "frames_first_30s": 0, "fps_first_30s": 0.0, "frames_total": 1}
+  1055.2 MB    2.81 %     0.02 cs/s     733  /usr/lib/kristall/assistant/venv/bin/python -I -m kristall_assistant.daemon
+   372.0 MB    0.00 %     0.02 cs/s     479  /usr/bin/plasmashell --no-respawn
+   368.0 MB    0.02 %     0.18 cs/s     472  /opt/integ/real/kwin_wayland --virtual --width 2880 --height 1800 --wayland-fd 7 --socket wayland-1 --xwayland
+   355.9 MB    0.00 %     0.12 cs/s     735  quickshell --no-duplicate -p /usr/share/kristall/shell
+   335.7 MB    0.00 %     0.00 cs/s     507  /usr/bin/plasma-keyboard
+    76.8 MB    0.00 %     0.00 cs/s     474  /usr/bin/kded6
+    58.8 MB    0.00 %     0.00 cs/s     807  /usr/libexec/xdg-desktop-portal-kde
+    56.2 MB    0.07 %     0.00 cs/s     531  /usr/libexec/org_kde_powerdevil
+    55.4 MB    0.00 %     0.00 cs/s     892  /usr/bin/ksecretd
+    53.7 MB    0.00 %     0.00 cs/s     527  /usr/bin/kaccess
+    43.8 MB    0.00 %     0.00 cs/s     577  /usr/bin/Xwayland :0 -auth /run/user/1000/xauth_euYGxR -listenfd 8 -listenfd 9 -displayfd 78 -wm 80 -initfd 11
+    41.9 MB    0.00 %     0.00 cs/s     524  /usr/libexec/kactivitymanagerd
+    36.9 MB    0.00 %     0.00 cs/s     440  /usr/bin/startplasma-wayland
+    33.7 MB    0.00 %     0.00 cs/s     929  /usr/bin/python3 /usr/lib/kristall/shell/kristall-shell-helper
+    33.7 MB    0.00 %     0.02 cs/s     743  /usr/bin/python3 -IB /usr/bin/kristall-power session
+    33.1 MB    0.00 %     0.00 cs/s     931  /usr/bin/python3 /usr/share/kristall/shell/modules/panels/helper/kristall-panels-helper
+    32.7 MB    0.00 %     0.00 cs/s     724  /usr/bin/python3 /usr/lib/kristall/theme/kristall-appearance run
+    30.5 MB    0.00 %     0.00 cs/s     932  /usr/bin/python3 -I /usr/share/kristall/shell/modules/dock/helper/kristall-dock-launcher-entries
+    30.5 MB    0.00 %     0.00 cs/s     889  /usr/libexec/kf6/kioworker /usr/lib64/qt6/plugins/kf6/kio/desktop.so desktop  local:/run/user/1000/plasmashell
+    30.3 MB    0.00 %     0.00 cs/s     475  /usr/bin/ksmserver
+    28.2 MB    0.00 %     0.00 cs/s     526  /usr/bin/gmenudbusmenuproxy
+    27.9 MB    0.00 %     0.02 cs/s     769  /usr/libexec/kf6/baloo_file
+    27.3 MB    0.00 %     0.03 cs/s     861  /usr/libexec/xdg-desktop-portal-gtk
+    27.0 MB    0.00 %     0.00 cs/s     534  /usr/bin/xembedsniproxy
+    24.8 MB    0.00 %     0.03 cs/s     813  /usr/libexec/kf6/baloo_idle_monitor
+    23.0 MB    0.00 %     0.00 cs/s     525  /usr/libexec/knighttimed
+    20.6 MB    0.00 %     0.00 cs/s     468  /usr/bin/kwin_wayland_wrapper --xwayland
+    17.4 MB    0.00 %     0.00 cs/s     741  /usr/libexec/xdg-desktop-portal
+    15.4 MB    0.00 %     0.00 cs/s     989  /usr/bin/python3 -IS /usr/bin/kristall-settings watch appearance accessibility
+    15.4 MB    0.00 %     0.00 cs/s     930  /usr/bin/python3 -IS /usr/bin/kristall-settings watch --full --initial
+    15.4 MB    0.00 %     0.00 cs/s     879  /usr/bin/python3 -IS /usr/bin/kristall-settings watch --full --initial power
+    14.3 MB    0.00 %     0.00 cs/s     494  /usr/bin/wireplumber
+    13.1 MB    0.00 %     0.13 cs/s    1254  python3 /integ/idle.py 60
+    13.1 MB    0.00 %     0.00 cs/s     405  /usr/lib/systemd/systemd --user
+     9.3 MB    0.00 %     0.00 cs/s     746  /usr/libexec/geoclue-2.0/demos/agent
+     8.6 MB    0.00 %     0.00 cs/s     846  /usr/bin/pipewire-pulse
+     8.4 MB    0.00 %     0.00 cs/s     493  /usr/bin/pipewire
+     7.5 MB    0.00 %     0.00 cs/s     610  /usr/libexec/at-spi-bus-launcher
+     7.3 MB    0.00 %     0.07 cs/s     645  /usr/libexec/at-spi2-registryd --use-gnome-session
+     7.3 MB    0.00 %     0.00 cs/s     783  /usr/libexec/xdg-document-portal
+     6.7 MB    0.00 %     0.00 cs/s     771  /usr/libexec/xdg-permission-store
+     6.4 MB    0.00 %     0.00 cs/s     679  /usr/libexec/dconf-service
+     5.4 MB    0.00 %     0.00 cs/s     536  /usr/bin/ssh-agent -D
+     4.7 MB    0.00 %     0.00 cs/s     431  /usr/bin/dbus-broker-launch --scope user
+     4.4 MB    0.00 %     0.00 cs/s     635  /usr/bin/dbus-broker-launch --config-file=/usr/share/defaults/at-spi2/accessibility.conf --scope user
+     4.3 MB    0.00 %     0.03 cs/s     432  dbus-broker --log 11 --controller 10 --machine-id 2cf133f1560c4c71a66baf0d6aa4e6b7 --max-bytes 100000000000000
+     3.2 MB    0.00 %     0.00 cs/s     407  (sd-pam)
+     3.2 MB    0.00 %     0.17 cs/s     638  dbus-broker --log 10 --controller 9 --machine-id 2cf133f1560c4c71a66baf0d6aa4e6b7 --max-bytes 100000000000000 
+KRISTALL TOTAL (kristall-*, quickshell, their helpers): 1620.9 MB RSS, 2.81 % CPU, 0.1 context switches/s
+ALL OWNER PROCESSES: 3504.3 MB RSS, 2.90 % CPU, 0.8 cs/s

@@ -112,6 +112,14 @@ class KeySession(bh.Session):
             f.write("[Desktop Entry]\nType=Application\nName=Kristall key test\nExec=%s none\nActions=%s\n" % (log, ";".join(a for a, _, _ in acts)))
             for a, keys, word in acts:
                 f.write(f"\n[Desktop Action {a}]\nName={a}\nExec={log} {word}\nX-KDE-Shortcuts={keys}\n")
+        # the stock owners of the same keys (Spectacle: the Print chords, the emoji picker: Meta+.,
+        # KRunner: Alt+Space) would race the logger for them, and whichever kglobalaccel registers
+        # first wins: shadow their shortcut files with key-less ones
+        for stock in ("org.kde.spectacle.desktop", "org.kde.plasma.emojier.desktop", "org.kde.krunner.desktop"):
+            for d in ("kglobalaccel", "applications"):
+                os.makedirs(os.path.join(share, d), exist_ok=True)
+                with open(os.path.join(share, d, stock), "w") as f:
+                    f.write("[Desktop Entry]\nType=Application\nName=shadowed by the key test\nExec=true\nNoDisplay=true\n")
 
     def start(self, wait_bridge=True):
         if not self.shortcuts:
@@ -387,6 +395,10 @@ def test_system():
         wait_until(lambda: s.status().get("active"), 5)
         wins, clients = open_clients(s, b)
         time.sleep(1.5)  # kglobalaccel reads the shortcut files
+        comps = subprocess.run(["gdbus", "call", "--session", "--dest", "org.kde.kglobalaccel", "--object-path", "/kglobalaccel",
+                                "--method", "org.kde.KGlobalAccel.allComponents"], capture_output=True, text=True).stdout
+        check("no stock owner competes for the test's keys (Spectacle, emoji picker, KRunner)",
+              "keytest" in comps and not any(c in comps for c in ("spectacle", "emojier", "krunner")), comps.strip()[:300])
         focus(s, b, wins["native"])
         for keys, word in (((CMD, "space"), "search"), ((CMD, "shift", "3"), "screenshot-screen"), ((CMD, "shift", "4"), "screenshot-region"),
                            ((CMD, "shift", "5"), "screenshot-tool"), (("ctrl", CMD, "space"), "emoji"), ((OPT, "space"), "assistant")):

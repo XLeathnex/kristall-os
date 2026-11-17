@@ -35,14 +35,14 @@ Nur beim allerersten Mal. Öffne dein Projekt auf github.com.
 2. **Automatik einschalten:** Reiter *Actions*. Erscheint ein grüner Knopf
    *„I understand my workflows, go ahead and enable them“*, klicke ihn.
 3. **Warten**, bis unter *Actions* der Eintrag **„Build OS image“** einen **grünen Haken** hat
-   (etwa 1 Stunde). Ein rotes Kreuz? Öffne den Eintrag – oben steht in einfachen Worten, was fehlt.
+   (etwa 20–30 Minuten). Ein rotes Kreuz? Öffne den Eintrag – oben steht in einfachen Worten, was fehlt.
 4. **Das System öffentlich herunterladbar machen** (damit der Laptop später Updates holen darf):
    Klicke oben rechts auf dein Profilbild → *Your profile* → Reiter *Packages* → **kristall-os** →
    rechts *Package settings* → ganz unten *Change visibility* → **Public** → Namen zur Bestätigung
    eintippen → *I understand…*.
 
 Danach baut GitHub den Installations-Stick-Inhalt von selbst (Eintrag **„Build installer ISO“**,
-etwa 1–2 Stunden). Er startet automatisch nach Schritt 3; wenn nicht: *Actions* → links
+etwa 20–30 Minuten). Er startet automatisch nach Schritt 3; wenn nicht: *Actions* → links
 *Build installer ISO* → rechts *Run workflow* → grüner Knopf *Run workflow*. Danach entsteht jeden
 Montag ein neuer.
 
@@ -186,15 +186,15 @@ Only the very first time. Open your project on github.com.
 2. **Switch the automation on:** tab *Actions*. If a green button
    *"I understand my workflows, go ahead and enable them"* appears, click it.
 3. **Wait** until under *Actions* the entry **"Build OS image"** has a **green tick**
-   (about 1 hour). A red cross? Open it – the top says in plain words what is missing.
+   (about 20–30 minutes). A red cross? Open it – the top says in plain words what is missing.
 4. **Make the system downloadable** (so the laptop may fetch updates later): click your profile
    picture (top right) → *Your profile* → tab *Packages* → **kristall-os** → *Package settings*
    (right) → at the bottom *Change visibility* → **Public** → type the name to confirm →
    *I understand…*.
 
-GitHub then builds the installer by itself (entry **"Build installer ISO"**, about 1–2 hours). It
-starts automatically after step 3; if not: *Actions* → left *Build installer ISO* → right
-*Run workflow* → green *Run workflow* button. A new one is made every Monday.
+GitHub then builds the installer by itself (entry **"Build installer ISO"**, about 20–30
+minutes). It starts automatically after step 3; if not: *Actions* → left *Build installer ISO*
+→ right *Run workflow* → green *Run workflow* button. A new one is made every Monday.
 
 ### Step 2 – Download the installer file
 
@@ -300,5 +300,5 @@ Nothing changes while you work. If something is wrong after an update: choose
 
 <sub>For maintainers: what happens behind these steps is described in `image/README.md`
 (image pipeline), `image/iso/` (installer) and `docs/contracts/update.md` (updates).
-Installer = Titanoboa live ISO with Anaconda; the OS image and the free default apps travel on
-the stick, proprietary apps (VS Code, Steam, Sober) are downloaded on first start.</sub>
+Installer = Titanoboa live ISO with Anaconda; the OS image travels on the stick (offline install,
+~8.2 GiB ISO), the Flatpak apps are downloaded on first start (`docs/contracts/apps.md`).</sub>

@@ -35,6 +35,21 @@ if sys.argv[1] == "tools":
     sys.exit(0)
 setup = mcp_config.load([Path("/usr/share/kristall/assistant/mcp.d")])
 policy = Policy(PolicyPaths(Path(os.path.expanduser("~")), []), GrantStore(None), setup.decls)
+def call(tool, **args):
+    """one model tool call: policy first (owner answers 'allow once' when asked), then hands"""
+    d = policy.evaluate("mcp__hands__" + tool, args)
+    pre = f"[policy {d.verdict}/{d.category}" + (f" asks: „{d.question['de']}“ → owner: allow once" if d.verdict == "ask" else "") + "]"
+    if d.verdict == "deny":
+        print(tool, json.dumps(args, ensure_ascii=False)[:120], pre, "→ not called", flush=True)
+        return "", True
+    t0 = time.monotonic()
+    txt, err = mcp.call(tool, args)
+    print(f"{tool} {json.dumps(args, ensure_ascii=False)[:160]} {pre} → {'ERROR ' if err else ''}{txt[:900]} ({(time.monotonic()-t0)*1000:.0f} ms)", flush=True)
+    return txt, err
+
+if sys.argv[1].endswith(".py"):
+    exec(open(sys.argv[1]).read())
+    sys.exit(0)
 for tool, args in json.load(open(sys.argv[1])):
     if tool == "sleep":
         time.sleep(args); continue

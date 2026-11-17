@@ -1,0 +1,49 @@
+{"seconds": 60.1, "frames_first_30s": 0, "fps_first_30s": 0.0, "frames_total": 1}
+  1053.8 MB    0.00 %     0.00 cs/s     767  /usr/lib/kristall/assistant/venv/bin/python -I -m kristall_assistant.daemon
+   371.5 MB    0.00 %     0.00 cs/s     492  /usr/bin/plasmashell --no-respawn
+   366.2 MB    0.03 %     0.23 cs/s     485  /opt/integ/real/kwin_wayland --virtual --width 2880 --height 1800 --wayland-fd 7 --socket wayland-1 --xwayland
+   334.0 MB    0.00 %     0.00 cs/s     522  /usr/bin/plasma-keyboard
+   300.2 MB    0.00 %     0.15 cs/s    3824  quickshell --no-duplicate -p /usr/share/kristall/shell
+    77.0 MB    0.00 %     0.00 cs/s     487  /usr/bin/kded6
+    58.7 MB    0.00 %     0.00 cs/s     838  /usr/libexec/xdg-desktop-portal-kde
+    56.3 MB    0.10 %     0.00 cs/s     548  /usr/libexec/org_kde_powerdevil
+    55.7 MB    0.00 %     0.00 cs/s     903  /usr/bin/ksecretd
+    53.8 MB    0.00 %     0.00 cs/s     546  /usr/bin/kaccess
+    46.0 MB    0.00 %     0.00 cs/s     534  /usr/libexec/kactivitymanagerd
+    44.3 MB    0.00 %     0.00 cs/s     555  /usr/bin/Xwayland :0 -auth /run/user/1000/xauth_dVKMAK -listenfd 8 -listenfd 9 -displayfd 77 -wm 79 -initfd 11
+    37.3 MB    0.00 %     0.00 cs/s     453  /usr/bin/startplasma-wayland
+    33.7 MB    0.00 %     0.00 cs/s    3949  /usr/bin/python3 /usr/lib/kristall/shell/kristall-shell-helper
+    33.7 MB    0.00 %     0.02 cs/s     777  /usr/bin/python3 -IB /usr/bin/kristall-power session
+    32.6 MB    0.00 %     0.00 cs/s     766  /usr/bin/python3 /usr/lib/kristall/theme/kristall-appearance run
+    30.3 MB    0.00 %     0.00 cs/s     488  /usr/bin/ksmserver
+    28.4 MB    0.00 %     0.00 cs/s     545  /usr/bin/gmenudbusmenuproxy
+    28.0 MB    0.00 %     0.02 cs/s     797  /usr/libexec/kf6/baloo_file
+    27.6 MB    0.02 %     0.03 cs/s     892  /usr/libexec/xdg-desktop-portal-gtk
+    27.2 MB    0.00 %     0.00 cs/s     551  /usr/bin/xembedsniproxy
+    24.4 MB    0.00 %     0.05 cs/s     913  /usr/libexec/kf6/baloo_idle_monitor
+    23.6 MB    0.00 %     0.00 cs/s     544  /usr/libexec/knighttimed
+    20.8 MB    0.00 %     0.00 cs/s     481  /usr/bin/kwin_wayland_wrapper --xwayland
+    17.9 MB    0.00 %     0.00 cs/s     776  /usr/libexec/xdg-desktop-portal
+    15.4 MB    0.00 %     0.00 cs/s     887  /usr/bin/python3 -IS /usr/bin/kristall-settings watch --full --initial power
+    15.4 MB    0.00 %     0.00 cs/s    3950  /usr/bin/python3 -IS /usr/bin/kristall-settings watch --full --initial
+    15.2 MB    0.00 %     0.00 cs/s    1043  /usr/bin/python3 -IS /usr/bin/kristall-settings watch appearance accessibility
+    14.7 MB    0.00 %     0.00 cs/s     866  /usr/bin/pipewire-pulse
+    14.6 MB    0.00 %     0.00 cs/s     507  /usr/bin/wireplumber
+    13.1 MB    0.00 %     0.00 cs/s     417  /usr/lib/systemd/systemd --user
+    13.1 MB    0.00 %     0.13 cs/s    4190  python3 /integ/idle.py 60
+    10.2 MB    0.00 %     0.00 cs/s    3686  python3 /integ/mic.py /tmp/mic.fifo
+     9.8 MB    0.00 %     0.00 cs/s     506  /usr/bin/pipewire
+     9.1 MB    0.00 %     0.00 cs/s     781  /usr/libexec/geoclue-2.0/demos/agent
+     7.6 MB    0.00 %     0.00 cs/s     822  /usr/libexec/xdg-document-portal
+     7.6 MB    0.00 %     0.00 cs/s     610  /usr/libexec/at-spi-bus-launcher
+     7.4 MB    0.02 %     0.10 cs/s     631  /usr/libexec/at-spi2-registryd --use-gnome-session
+     6.8 MB    0.00 %     0.00 cs/s     799  /usr/libexec/xdg-permission-store
+     6.5 MB    0.00 %     0.00 cs/s     653  /usr/libexec/dconf-service
+     5.4 MB    0.00 %     0.00 cs/s     552  /usr/bin/ssh-agent -D
+     4.6 MB    0.00 %     0.00 cs/s     444  /usr/bin/dbus-broker-launch --scope user
+     4.4 MB    0.00 %     0.00 cs/s     626  /usr/bin/dbus-broker-launch --config-file=/usr/share/defaults/at-spi2/accessibility.conf --scope user
+     4.3 MB    0.00 %     0.03 cs/s     445  dbus-broker --log 11 --controller 10 --machine-id 2cf133f1560c4c71a66baf0d6aa4e6b7 --max-bytes 100000000000000
+     3.3 MB    0.00 %     0.17 cs/s     627  dbus-broker --log 10 --controller 9 --machine-id 2cf133f1560c4c71a66baf0d6aa4e6b7 --max-bytes 100000000000000 
+     3.1 MB    0.00 %     0.00 cs/s     419  (sd-pam)
+KRISTALL TOTAL (kristall-*, quickshell, their helpers): 1500.0 MB RSS, 0.00 % CPU, 0.2 context switches/s
+ALL OWNER PROCESSES: 3374.5 MB RSS, 0.17 % CPU, 0.9 cs/s

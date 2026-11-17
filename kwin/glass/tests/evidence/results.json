@@ -3,9 +3,9 @@
   "rapid": {
    "messages": 3000,
    "shapes_per_message": 12,
-   "send_s": 0.327,
-   "drained_s": 0.332,
-   "kwin_cpu_s": 0.37,
+   "send_s": 0.285,
+   "drained_s": 0.287,
+   "kwin_cpu_s": 0.32,
    "frames": 21
   }
  },
@@ -260,19 +260,19 @@
  "timing_llvmpipe": {
   "high": {
    "frames": 25,
-   "captureMs": 0.718,
-   "blurMs": 0.484,
-   "compositeMs": 2.777,
-   "lumaMs": 0.134,
-   "totalMs": 4.113
+   "captureMs": 0.429,
+   "blurMs": 0.316,
+   "compositeMs": 2.39,
+   "lumaMs": 0.094,
+   "totalMs": 3.228
   },
   "efficient": {
    "frames": 25,
-   "captureMs": 0.68,
-   "blurMs": 0.556,
-   "compositeMs": 2.309,
-   "lumaMs": 0.041,
-   "totalMs": 3.586
+   "captureMs": 0.531,
+   "blurMs": 0.529,
+   "compositeMs": 1.969,
+   "lumaMs": 0.042,
+   "totalMs": 3.07
   }
  },
  "multioutput": {
@@ -309,6 +309,18 @@
     "size": "800x600",
     "std_in_a": 9.1
    }
+  }
+ },
+ "internal_window": {
+  "background": {
+   "mean_luminance": 158.4,
+   "luminance_std": 37.7,
+   "saturation": 0.369
+  },
+  "glass": {
+   "mean_luminance": 186.9,
+   "luminance_std": 20.5,
+   "saturation": 0.285
   }
  }
 }

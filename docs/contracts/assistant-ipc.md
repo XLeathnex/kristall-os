@@ -542,7 +542,7 @@ The daemon reads all layers (it never writes) and applies changes live.
 | `end_of_speech_ms` | `800` | |
 | `no_speech_timeout_seconds` | `7` | |
 | `max_utterance_seconds` | `45` | |
-| `models_unload_after_seconds` | `300` | speech models leave memory after this quiet period (and the freed memory is returned to the system). Models are never loaded at login: the recogniser and VAD load when the owner invokes the assistant (`prepare`) or a `transcribe`/voice turn starts — the microphone is buffered meanwhile — and a voice when the first reply is spoken. Measured (integrated session, 2026-11-17): daemon 39 MB RSS after login, ~1.05 GB with the models loaded, 71 MB after unloading; first utterance with the models unloaded: final transcript 0.74 s after the end of speech (recogniser load 2.5 s overlaps the speaking), loaded: 1.16 s |
+| `models_unload_after_seconds` | `300` | speech models leave memory after this quiet period (and the freed memory is returned to the system within ~2 s). Models are never loaded at login: the recogniser and VAD load when the owner invokes the assistant (`prepare`) or a `transcribe`/voice turn starts — the microphone is buffered meanwhile — and a voice when the first reply is spoken. Measured (integrated session, 2026-11-17): daemon 39 MB RSS after login, ~1.05 GB with the models loaded, 71 MB after unloading; first utterance with the models unloaded: final transcript 0.74 s after the end of speech (recogniser load 2.5 s overlaps the speaking), loaded: 1.16 s |
 | `brain_unload_after_seconds` | `600` | the warm Claude process is closed after this quiet period (an idle `claude` process still wakes up: ~0.2 % of a core measured) |
 | `permission_timeout_seconds` | `120` | |
 | `model` | `"claude-haiku-5-5"` | |

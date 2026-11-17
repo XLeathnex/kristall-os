@@ -1,29 +1,34 @@
 {
  "last_run": {
   "sections": [
-   "behaviour"
+   "static",
+   "behaviour",
+   "looks"
   ],
   "failures": [],
-  "time": "2026-11-16T23:25:21"
+  "time": "2026-11-17T02:09:06"
  },
- "search_files_latency_s": 0.049,
- "search_sync_us_per_keystroke": 1610,
+ "search_files_latency_s": 0.043,
+ "search_sync_us_per_keystroke": 1225,
  "search_engine_us": {
-  "apps": 895,
-  "settings": 165,
-  "actions": 65
+  "apps": 750,
+  "settings": 65,
+  "actions": 80
  },
  "search_key_to_frame_ms": {
   "n": 29,
-  "p50": 5.1845703125,
-  "p95": 11.529541015625,
-  "max": 13.0703125,
-  "shell_text_to_frame_p50": 4,
+  "p50": 4.427001953125,
+  "p95": 11.362060546875,
+  "max": 12.46728515625,
+  "shell_text_to_frame_p50": 3,
   "shell_text_to_frame_p95": 10,
   "sync_work_p50": 2,
-  "sync_work_p95": 5,
-  "sync_work_max": 6,
+  "sync_work_p95": 8,
+  "sync_work_max": 8,
   "output_hz": 60,
-  "renderer": "Qt Quick software (headless llvmpipe session)"
+  "renderer": "Qt Quick software (headless llvmpipe session)",
+  "calibration_ms": 37.8,
+  "machine_factor": 1.08,
+  "sync_budget_ms": 9.0
  }
 }

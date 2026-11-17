@@ -1,10 +1,25 @@
 {
  "last_run": {
   "sections": [
-   "shortcuts"
+   "static",
+   "shortcuts",
+   "ctl",
+   "reconnect",
+   "controls",
+   "menus",
+   "reveal",
+   "core",
+   "appmenu",
+   "scale",
+   "fallback",
+   "modules",
+   "restart",
+   "plasma",
+   "gallery",
+   "realbridge"
   ],
   "failures": [],
-  "time": "2026-11-17T01:28:36"
+  "time": "2026-11-17T02:01:45"
  },
  "idle_bar": {
   "seconds": 5.0,
@@ -22,6 +37,6 @@
  },
  "restart_seconds": 1.6,
  "scale16_bar_device_px": 38,
- "reconnect_helper_s": 3.79,
- "reconnect_backoff_s": 3.81
+ "reconnect_helper_s": 3.77,
+ "reconnect_backoff_s": 3.72
 }

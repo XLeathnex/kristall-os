@@ -11,14 +11,14 @@
    "idle"
   ],
   "failures": [],
-  "time": "2026-11-17T01:43:23"
+  "time": "2026-11-17T02:05:07"
  },
  "notifications_groups": 7,
  "idle_panels_closed": {
   "seconds": 5.0,
   "frames": 0,
   "cpu_ms": 0.0,
-  "wakeups": 2,
+  "wakeups": 1,
   "processes": 4
  },
  "idle_after_panels": {
