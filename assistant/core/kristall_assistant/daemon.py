@@ -803,6 +803,11 @@ class Assistant:
             self.turn = None
         if not self.turn:
             await self.ducker.restore()
+            # no turn, no agent cursor: a turn cancelled while a tool was moving it (the owner pressed
+            # Escape mid-way) left it on screen (integration walkthrough, demo turn)
+            if self.cursor and self.cursor.get("visible"):
+                self.cursor = dict(self.cursor, visible=False)
+                self.emit({"type": "agent_cursor", **self.cursor, "turn_id": at.id})
         self.emit({"type": "turn_finished", "turn_id": at.id, "outcome": outcome, "error_code": err_code})
         self.update_state()
 

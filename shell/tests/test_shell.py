@@ -205,6 +205,24 @@ def test_static():
                         os.path.join(SHELL, "systemd", "kristall-shell-fallback.service")], capture_output=True, text=True)
     errs = [l for l in (r.stdout + r.stderr).splitlines() if l.strip() and "graphical-session.target" not in l]
     check("systemd-analyze verify (user units; graphical-session.target absent in the container)", not errs, "; ".join(errs))
+    unit = open(os.path.join(SHELL, "systemd", "kristall-shell.service")).read()
+    check("one crash is not a failure: RestartMode=direct (OnFailure= fallback only when the start limit gives up)",
+          "RestartMode=direct" in unit and "OnFailure=kristall-shell-fallback.service" in unit)
+    # the fallback itself refuses while the shell is restarting (older systemd triggers OnFailure= per crash)
+    fk = tempfile.mkdtemp()
+    for name, body in (("systemctl", "#!/bin/sh\necho \"$FAKE_SUBSTATE\"\n"), ("gdbus", "#!/bin/sh\necho called >> \"$FAKE_LOG\"\n"),
+                       ("notify-send", "#!/bin/sh\necho notified >> \"$FAKE_LOG\"\n")):
+        with open(os.path.join(fk, name), "w") as f:
+            f.write(body)
+        os.chmod(os.path.join(fk, name), 0o755)
+    for sub, want in (("auto-restart", False), ("failed", True)):
+        st = tempfile.mkdtemp()
+        logf = os.path.join(st, "log")
+        subprocess.run([os.path.join(SHELL, "bin", "kristall-shell-fallback")], capture_output=True, text=True,
+                       env=dict(os.environ, PATH=fk + ":" + os.environ["PATH"], XDG_STATE_HOME=st, FAKE_SUBSTATE=sub, FAKE_LOG=logf))
+        added = os.path.exists(os.path.join(st, "kristall", "shell", "fallback-panel"))
+        check(f"fallback with the shell {sub}: {'adds the panel' if want else 'does nothing'}", added == want,
+              open(logf).read() if os.path.exists(logf) else "no calls")
     # launcher crash ladder with a stand-in quickshell that prints its environment
     fake = tempfile.mkdtemp()
     with open(os.path.join(fake, "quickshell"), "w") as f:
@@ -724,6 +742,8 @@ def _qt_key(text):
             v |= ord(part.upper())
         elif part[0] == "F" and part[1:].isdigit():
             v |= 0x01000030 + int(part[1:]) - 1
+        elif part in ("Left", "Up", "Right", "Down"):
+            v |= 0x01000012 + ("Left", "Up", "Right", "Down").index(part)
         else:
             raise ValueError(part)
     return v

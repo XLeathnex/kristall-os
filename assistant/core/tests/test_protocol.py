@@ -282,6 +282,36 @@ def test_voice_without_models_fails_soft(env):
     assert snap["voice"]["input"] is False
 
 
+def test_cancelled_turn_hides_the_agent_cursor(env, monkeypatch):
+    """the owner cancels while a tool shows the agent cursor; the tool stays connected: the cursor
+    must still disappear when the turn ends (it stayed on screen in the integrated session)"""
+    monkeypatch.setenv("FAKE_CLAUDE_MODE", "slow")
+
+    async def go():
+        a = await start_daemon(env)
+        await a.refresh_account()
+        ui = await SockClient.connect(env.socket)
+        tool = await SockClient.connect(env.socket)
+        await tool.request({"type": "hello", "client": "hands", "role": "tool"})
+        t = (await ui.request({"type": "invoke", "mode": "text", "text": "Räum die Fotos auf"}))["turn_id"]
+        await ui.wait_for(lambda e: e["type"] == "reply_delta")
+        await tool.request({"type": "agent_cursor", "x": 300, "y": 200, "visible": True, "label": "Bilder"})
+        await ui.wait_for(lambda e: e["type"] == "agent_cursor" and e.get("visible") is True)
+        n = len(ui.events)
+        await ui.request({"type": "cancel"})
+        fin = await ui.wait_for(lambda e: e["type"] == "turn_finished" and e["turn_id"] == t)
+        hid = [e for e in ui.events[n:ui.events.index(fin) + 1] if e["type"] == "agent_cursor"]
+        snap = a.snapshot()
+        await tool.close()
+        await ui.close()
+        await a.stop()
+        return hid, snap, ui.events
+    hid, snap, ev = run(go())
+    assert hid and hid[-1]["visible"] is False and hid[-1]["x"] == 300
+    assert not snap["agent_cursor"] or snap["agent_cursor"].get("visible") is False
+    assert_conforms(ev)
+
+
 def test_agent_cursor_and_tool_activity_relay(env):
     async def go():
         a = await start_daemon(env)

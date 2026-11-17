@@ -32,6 +32,9 @@ public:
 private:
     void registerSessionMethods();
     void setupMenuView();
+    void syncMenuView();
+    void retryMenuView();
+    int m_menuViewRetries = 0;
     bool m_menuViewWanted = false;
     bool m_menuViewOwned = false;
 

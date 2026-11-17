@@ -15,6 +15,11 @@ Type=exec
 ExecStart=/usr/libexec/kristall/kristall-shell
 Restart=always
 RestartSec=1
+# OnFailure= must mean "gave up", not "crashed once": without this, systemd triggers it on every
+# crash before the restart, so one crash put a Plasma panel on screen and let plasmashell take over
+# the notifications (integrated session, 2026-11-17). With "direct" a restart skips the failed
+# state; OnFailure= runs only when the start limit stops the restarts.
+RestartMode=direct
 TimeoutStopSec=5
 Slice=session.slice
 SyslogIdentifier=kristall-shell

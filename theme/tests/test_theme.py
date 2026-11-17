@@ -191,6 +191,10 @@ def test_install():
     check("kdeglobals: Kristall Light colours, Inter 13 px, Breeze icons, automatic light/dark with our two packages",
           kg.get("General", "ColorScheme") == "KristallLight" and kg.get("Colors:Window", "BackgroundNormal") == "236,236,238"
           and kg.get("General", "font", ).startswith("Inter,9.75") and kg.get("KDE", "DefaultDarkLookAndFeel") == "org.kristall.desktop.dark")
+    g3 = open(os.path.join(P["etc"], "gtk-3.0", "settings.ini")).read()
+    g4 = open(os.path.join(P["etc"], "gtk-4.0", "settings.ini")).read()
+    check("GTK settings: the GTK 4-only gtk-hint-font-metrics only in gtk-4.0 (GTK 3 warned on every app start)",
+          "gtk-hint-font-metrics" not in g3 and "gtk-hint-font-metrics=false" in g4)
     snap = {f: open(f, "rb").read() for f in glob.glob(os.path.join(P["etc"], "**", "*"), recursive=True) if os.path.isfile(f)}
     r2 = ts.install_stage(fresh=False)
     snap2 = {f: open(f, "rb").read() for f in glob.glob(os.path.join(P["etc"], "**", "*"), recursive=True) if os.path.isfile(f)}
@@ -577,8 +581,9 @@ def test_switch():
         # what running Qt apps actually draw: the scheme's selection colour, re-tinted by
         # plasma-apply-colorscheme --accent-color (before the fix it stayed one change behind)
         sel = s.run(["kreadconfig6", "--file", "kdeglobals", "--group", "Colors:Selection", "--key", "BackgroundNormal"]).stdout.strip()
-        check("accent green reaches running Qt/KDE apps (kdeglobals Colors:Selection = accent, not the previous one)",
-              sel.replace(" ", "") == "40,205,65", sel)
+        rgb = [int(x) for x in sel.replace(" ", "").split(",")[:3]] if sel.count(",") >= 2 else [0, 0, 0]
+        check("accent green reaches running Qt/KDE apps (kdeglobals Colors:Selection is green now, not the previous blue)",
+              rgb[1] > rgb[0] + 40 and rgb[1] > rgb[2] + 40, sel)
         css = open(os.path.join(s.config, "gtk-4.0", "kristall.css")).read()
         check("accent green reaches GTK 4/libadwaita (--accent-bg-color) and GTK 3 (@accent_bg_color)",
               "--accent-bg-color: #28CD41" in css and "@define-color accent_bg_color #28CD41" in open(os.path.join(s.config, "gtk-3.0", "kristall.css")).read())

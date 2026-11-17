@@ -20,6 +20,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QJsonArray>
+#include <QTimer>
 
 namespace Kristall
 {
@@ -92,34 +93,65 @@ bool BridgePlugin::init()
 void BridgePlugin::setupMenuView()
 {
     QObject::connect(m_server, &Server::subscribersChanged, this, [this]() {
-        const bool want = m_server->hasSubscribers(QStringLiteral("menus"));
-        if (want == m_menuViewWanted) {
-            return;
-        }
-        m_menuViewWanted = want;
-        QDBusConnection bus = QDBusConnection::sessionBus();
+        syncMenuView();
+    });
+}
+
+// Owns or releases org.kde.kappmenuview to match the "menus" subscribers. A request that could not
+// be made or failed (the session bus not reachable yet: the shell subscribes within the first
+// second of KWin's life) is retried a few times instead of being forgotten — before, the first
+// session after login had no application menus until the shell restarted (integrated session).
+void BridgePlugin::syncMenuView()
+{
+    const bool want = m_server->hasSubscribers(QStringLiteral("menus"));
+    if (want == m_menuViewWanted) {
+        return;
+    }
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    static const QString name = QStringLiteral("org.kde.kappmenuview");
+    if (want) {
         if (!bus.isConnected()) {
+            retryMenuView();
             return;
         }
-        static const QString name = QStringLiteral("org.kde.kappmenuview");
-        if (want) {
-            QDBusMessage msg = QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.DBus"), QStringLiteral("/org/freedesktop/DBus"),
-                                                              QStringLiteral("org.freedesktop.DBus"), QStringLiteral("RequestName"));
-            msg << name << uint(0); // queue behind another view (e.g. KWin's own decoration button)
-            auto *watcher = new QDBusPendingCallWatcher(bus.asyncCall(msg), this);
-            QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *w) {
-                const QDBusPendingReply<uint> reply = *w;
-                // 4 = already owned by this connection (KWin itself): never release that
-                m_menuViewOwned = reply.isValid() && reply.value() != 4;
-                w->deleteLater();
-            });
-        } else if (m_menuViewOwned) {
+        m_menuViewWanted = true;
+        QDBusMessage msg = QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.DBus"), QStringLiteral("/org/freedesktop/DBus"),
+                                                          QStringLiteral("org.freedesktop.DBus"), QStringLiteral("RequestName"));
+        msg << name << uint(0); // queue behind another view (e.g. KWin's own decoration button)
+        auto *watcher = new QDBusPendingCallWatcher(bus.asyncCall(msg), this);
+        QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *w) {
+            const QDBusPendingReply<uint> reply = *w;
+            w->deleteLater();
+            if (!reply.isValid()) {
+                logWarning(QStringLiteral("could not request org.kde.kappmenuview: %1").arg(reply.error().message()));
+                m_menuViewWanted = false;
+                retryMenuView();
+                return;
+            }
+            // 4 = already owned by this connection (KWin itself): never release that
+            m_menuViewOwned = reply.value() != 4;
+            m_menuViewRetries = 0;
+        });
+    } else {
+        m_menuViewWanted = false;
+        if (m_menuViewOwned && bus.isConnected()) {
             m_menuViewOwned = false;
             QDBusMessage msg = QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.DBus"), QStringLiteral("/org/freedesktop/DBus"),
                                                               QStringLiteral("org.freedesktop.DBus"), QStringLiteral("ReleaseName"));
             msg << name;
             bus.asyncCall(msg);
         }
+    }
+}
+
+void BridgePlugin::retryMenuView()
+{
+    if (m_menuViewRetries >= 30) { // 30 s: then the next (un)subscription tries again
+        return;
+    }
+    ++m_menuViewRetries;
+    QTimer::singleShot(1000, this, [this]() {
+        syncMenuView();
     });
 }
 

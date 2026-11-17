@@ -51,7 +51,7 @@ Montag ein neuer.
 1. *Actions* → links **Build installer ISO** → oben der neueste Eintrag mit grünem Haken.
 2. Klicke im Bereich *Summary* auf **„Download the Kristall OS installer“**
    (oder unten bei *Artifacts* auf **Kristall-OS-Installer.iso**).
-3. Die Datei ist etwa 8–12 GB groß; der Download dauert je nach Internet 10–60 Minuten.
+3. Die Datei ist etwa 8–9 GB groß; der Download dauert je nach Internet 10–60 Minuten.
    Du musst bei GitHub angemeldet sein. Die Datei ist fertig – nichts entpacken.
 
 ### Schritt 3 – Sichern, was du behalten willst
@@ -201,7 +201,7 @@ starts automatically after step 3; if not: *Actions* → left *Build installer I
 1. *Actions* → left **Build installer ISO** → the newest entry with a green tick.
 2. In the *Summary* click **"Download the Kristall OS installer"**
    (or at the bottom under *Artifacts* click **Kristall-OS-Installer.iso**).
-3. The file is about 8–12 GB; downloading takes 10–60 minutes depending on your internet.
+3. The file is about 8–9 GB; downloading takes 10–60 minutes depending on your internet.
    You must be signed in to GitHub. The file is ready to use – nothing to unzip.
 
 ### Step 3 – Back up what you want to keep

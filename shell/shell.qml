@@ -23,6 +23,14 @@ ShellRoot {
         console.info("kristall-shell: starting", safeMode ? "(safe mode: modules off)" : "", "on", Quickshell.screens.length, "output(s)");
         Helper.request("fallback.cleanup", { delay: 20 });
     }
+    // a restarted helper forgets the pending cleanup: ask again whenever it (re)starts
+    Connections {
+        target: Helper
+        function onEvent(ev) {
+            if (ev && ev.event === "ready")
+                Helper.request("fallback.cleanup", { delay: 20 });
+        }
+    }
 
     // ---- per output: bar, menu host, tooltip host -------------------------------------------------
     Variants {

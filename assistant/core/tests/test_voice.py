@@ -215,6 +215,27 @@ def test_models_unload_after_quiet_period():
     assert before and after == []
 
 
+def test_unloaded_models_give_memory_back():
+    """unloading must lower the process's RSS, not only drop references (glibc keeps freed pages
+    unless trimmed: the daemon stayed at ~1 GB after its first use in the integrated session)"""
+    def rss_kb():
+        return int(next(l for l in open("/proc/self/status") if l.startswith("VmRSS:")).split()[1])
+
+    async def go():
+        models = mm({"models_unload_after_seconds": 3600})
+        base = rss_kb()
+        await models.voice("de")
+        await models.asr()
+        loaded = rss_kb()
+        models.unload()
+        await asyncio.sleep(0.2)
+        return base, loaded, rss_kb()
+    base, loaded, after = run(go())
+    grown = loaded - base
+    assert grown > 100_000, f"models did not load ({base} → {loaded} kB)"
+    assert after - base < grown * 0.4, f"RSS stayed high after unloading: {base} → {loaded} → {after} kB"
+
+
 def test_full_spoken_turn_through_daemon(env, monkeypatch):
     """Voice question (synthesised) → transcript → Claude (recorded) → spoken answer."""
     monkeypatch.setenv("FAKE_CLAUDE_FIXTURE", "de_simple_followup")

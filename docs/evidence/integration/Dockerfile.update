@@ -3,9 +3,14 @@
 # Kinoite base has and the first build lacked (systemd-pam: the user manager needs pam_systemd;
 # German and English locales).
 FROM kristall-integ:latest
-RUN dnf5 install -y --setopt=install_weak_deps=False systemd-pam glibc-langpack-de glibc-langpack-en >/dev/null && dnf5 clean all >/dev/null
+RUN dnf5 install -y --setopt=install_weak_deps=False systemd-pam glibc-langpack-de glibc-langpack-en firefox-langpacks >/dev/null && dnf5 clean all >/dev/null
+# The Fedora container base installs no translations (%_install_langs en_US); Kinoite has them all.
+RUN rm -f /etc/rpm/macros.image-language-conf && dnf5 reinstall -y -q dolphin kwrite plasma-systemsettings konsole \
+      kf6-kxmlgui kf6-kio kf6-kwidgetsaddons kf6-kconfigwidgets kf6-ki18n kf6-kcoreaddons kf6-kcompletion kf6-ktextwidgets \
+      kf6-kbookmarks kf6-knotifications kf6-kservice kf6-kirigami kf6-kcmutils plasma-workspace plasma-desktop kwin \
+      xdg-user-dirs ktexteditor >/dev/null 2>&1; dnf5 clean all >/dev/null; true
 COPY . /ctx
-ARG COMPONENTS="kwin/glass kwin/bridge shell shell/modules/switcher assistant/hands setup"
+ARG COMPONENTS="image kwin/glass kwin/bridge shell shell/modules/panels shell/modules/dock shell/modules/switcher assistant/hands theme setup"
 RUN set -e; for c in $COMPONENTS; do echo "== reinstall $c"; (cd /ctx/$c && KRISTALL_CTX=/ctx KRISTALL_COMPONENT=$c KRISTALL_STRICT=1 bash image/install.sh) 2>&1 | tail -3; done; \
     LIB=/usr/lib/kristall/assistant; rm -rf $LIB/kristall_assistant && cp -r /ctx/assistant/core/kristall_assistant $LIB/ \
     && find $LIB/kristall_assistant -name __pycache__ -prune -exec rm -rf {} + && $LIB/venv/bin/python -m compileall -q $LIB/kristall_assistant >/dev/null; \

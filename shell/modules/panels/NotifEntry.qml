@@ -72,8 +72,12 @@ QtObject {
     // notification's image ("image://icon/<name>") with an empty appIcon. It is the app's icon, not
     // content: shown as an image it became the icon theme's magenta "missing" checkerboard whenever
     // the name did not resolve (integration walkthrough). It goes to the app-icon slot instead.
+    // (an image-path hint arrives the same way, as image://icon//abs/path: that stays the content image)
     function _iconFromImage(img) {
-        return img.startsWith("image://icon/") ? decodeURIComponent(img.slice("image://icon/".length).split("?")[0]) : "";
+        if (!img.startsWith("image://icon/"))
+            return "";
+        const name = decodeURIComponent(img.slice("image://icon/".length).split("?")[0]);
+        return name.startsWith("/") || name.startsWith("file:") ? "" : name;
     }
 
     function sync() {

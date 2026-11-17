@@ -159,6 +159,10 @@ install -d "$etc/gtk-3.0" "$etc/gtk-4.0"
 for v in 3.0 4.0; do
     python3 "$here/tools/kini.py" merge "$etc/gtk-$v/settings.ini" "$here/config/gtk/settings.ini"
 done
+gtk4only=$(mktemp)
+printf '[Settings]\ngtk-hint-font-metrics=false\n' >"$gtk4only"
+python3 "$here/tools/kini.py" merge "$etc/gtk-4.0/settings.ini" "$gtk4only"
+rm -f "$gtk4only"
 # GNOME settings defaults (GTK on Wayland and the GTK portal read these)
 install -d "$share/glib-2.0/schemas"
 install -m 0644 "$here/config/gtk/90-kristall.gschema.override" "$share/glib-2.0/schemas/90-kristall.gschema.override"

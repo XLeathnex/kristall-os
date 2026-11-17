@@ -8,6 +8,14 @@ set -u
 state="${XDG_STATE_HOME:-$HOME/.local/state}/kristall/shell"
 mkdir -p "$state"
 [[ -f $state/fallback-panel ]] && exit 0     # one fallback panel is enough
+# only when systemd gave up: a shell that is being restarted (or runs again) needs no fallback
+# (older systemd without RestartMode=direct also triggers OnFailure= on every crash)
+sub=$(systemctl --user show -p SubState --value kristall-shell.service 2>/dev/null || true)
+case $sub in
+    auto-restart | auto-restart-queued | start | start-pre | running)
+        echo "kristall-shell-fallback: the shell is restarting ($sub); no fallback panel" >&2
+        exit 0 ;;
+esac
 script='loadTemplate("org.kde.plasma.desktop.defaultPanel")'
 if gdbus call --session --dest org.kde.plasmashell --object-path /PlasmaShell \
         --method org.kde.PlasmaShell.evaluateScript "$script" >/dev/null; then

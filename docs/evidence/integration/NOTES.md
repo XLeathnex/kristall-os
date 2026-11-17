@@ -118,3 +118,52 @@ C INSTALL.md, all suites totals.
   Shift+Cmd+Q produced no log-out dialog (to check). Remaining: logout dialog, steps 8–12.
 - RESTART #2 (coordinator): containers killed. ISO run 43990164711 failed only at upload: titanoboa wrote
   _actions/ublue-os/titanoboa/<sha>/output/KRISTALL-OS.iso (11.8 GB!) not output/Kristall-OS-Installer.iso. TODO fix path + size.
+- PUBLISHED round 2 (see git log in kristall-os).
+- ISO decisions (round 2): build-iso.yml mkdir output before Titanoboa (realpath w/o -m); build-live.sh embeds NO Flatpaks
+  (apps install at first start; INSTALL.md already says it needs internet) and deletes speech models + assistant venv from the
+  LIVE rootfs only; OS payload (offline install) kept. apps.md embed_in_iso reworded. INSTALL.md size "8–12 GB" to update
+  once CI reports the real size.
+- Step 8 plan: daemon in --demo via drop-in (no real Claude login; never copy my own credentials); tools/hands.py drives
+  /usr/bin/kristall-hands over MCP with the daemon's real Policy (like hands' test_riskgate_e2e); riskwin.py for "Senden".
+- Step 12 startup (fresh container, llvmpipe, scale 1.0 at start): session start→KWin started 1.8 s; plasmashell 14.0 s; graphical-session.target 17.0 s; kristall-shell started 17.2 s; dock module loaded 22.5 s; bar+Dock mapped 23.6 s; no frames for 2 s from 24.4 s. Kristall's own part ≈ 6.4 s (shell start → mapped), rest is Plasma/KWin startup on software GL.
+- Step 8 (session 3, demo daemon): Option+Space (physical Win+Space) → panel + edge light + streamed demo text + permission
+  card + agent cursor (08a–08c); owner cursor stayed at (1500,600). hands over MCP with real Policy (tools/hands.py flow8.py):
+  open_app Texteditor → ui_tree → ui_act New File → screenshot → click (agent cursor) → type_text German multi-line list with
+  umlauts: "Verified in the text field" (08d); owner cursor unchanged (1574,401) before/after.
+  Firefox: Fedora's redhat prefs already set intl.locale.requested "" → my pref was redundant, REVERTED. First Firefox start
+  stays English + "Firefox spricht Ihre Sprache" (Fedora wrapper links the langpack into the profile; active from 2nd start) → open.
+  KWrite started by hands showed its in-window menu (English), bar had minimal menus → check menus topic after restart.
+- Step 8 riskgate: hands refuses click on 'Senden' (16 ms, guiding error), retry with risk:send → policy ask „Darf ich etwas in deinem Namen senden?“ → allow once → Clicked; riskwin log confirms (08e/08f). FIX theme: gtk-hint-font-metrics only in gtk-4.0 settings (GTK3 warned every start) + theme test.
+- Step 8 more: hands read Firefox (opened before hands) tree: 72 lines, German labels (Tab schließen…). Copilot key (fake
+  input Meta+Shift+F23, Mac keyboard on) did NOT open the assistant — remapper keeps Meta for F23 (remapper.cpp:763), cause
+  not found, UNVERIFIED on hardware → open. Hold-to-talk: release not observable in logs → unverified.
+  FIX daemon: agent cursor stayed on screen after a demo turn was cancelled mid-path (label "Bilder"): _finish_turn hides
+  a visible cursor when no turn remains + test_cancelled_turn_hides_the_agent_cursor.
+- Step 9: kristall-power status --json OK (mode balanced, reason auto, power_source none); doctor runs (German, real sysfs of
+  the sandbox; top wakers gmenudbusmenuproxy 2/s, firefox, dbus, tuned 1/s, tuned-ppd 1/s); kristall-update status --json OK
+  (state unknown, bootc false). Settings Batterie page (09a): mode Automatisch + reason; "Batterie" heading empty without
+  battery (cosmetic). Window title "System Settings" English (KDE).
+- Step 10: resilience (kill -9): quickshell back 1.26 s, usable (bridge+glass) 2.26 s; helper 0.55 s; assistant daemon 3.26 s; appearance 2.21 s; power session 2.28 s. CRITICAL FIX: one shell crash triggered OnFailure= fallback (systemd fires it per crash before restart): Plasma panel appeared + plasmashell took org.freedesktop.Notifications + 'Menüleiste ausgefallen' notification. Fix: RestartMode=direct + fallback script refuses while SubState auto-restart/running + cleanup re-requested on helper ready; static tests; shell.md §8. Verified: crash → no panel/marker (10c).
+- Step 10 KWin: kill -9 kwin_wayland → wrapper restarted it in 115 ms; shell back on bridge+glass 2.1 s; kristall_glass loaded; keyboard plugin running (reason on); KWrite/Settings survived; FIREFOX CRASHED (English 'Firefox Crash Reporter' dialog — upstream, no Wayland reconnect). Ctrl+Up opens Overview after KWin restart (new kglobalaccel file read) → Overview fix VERIFIED (10e). Plasma kept org.freedesktop.Notifications (pid plasmashell) after the earlier fallback panel removal → open (real fallback case).
+- Step 11 EN: setup Welcome + Get Online (11a/11b), menu bar 'Files File Go Window', CC English (DND label truncated 'Do Not Dist…'), assistant panel English 'Before Kristall can help, Claude needs to be set up once' (11c/11d). PASS.
+- Idle 2 (EN session, 60 s): 0 frames in 30 s (1 in 60 s); Kristall total 1621 MB RSS; daemon 1055 MB RSS right after start (speech models loaded eagerly) and 2.8 % CPU in that minute; quickshell 356 MB; helpers ~15-34 MB each.
+- RESTART #3. Round-2 CI: image SUCCESS; Component tests FAIL in shell (shortcuts: test _qt_key had no "Up"), theme (accent:
+  --accent-color doesn't store AccentColor → now written after; Selection expectation was exact token, now "green-dominant"),
+  panels (image-path arrives as image://icon//abs/path → my icon-name rule ate it; now paths excluded). All three FIXED in tree,
+  re-run of shortcuts+panels was killed by the restart → rerun. ISO 43995804272 running.
+- NEW TASK (coordinator): lazy speech models (ASR/TTS/VAD load on first use, unload after assistant.voice.unloadAfterSeconds
+  default 300; warm ASR on invoke), document settings.md + assistant-ipc.md, measure idle RSS before/after and first-utterance
+  latency cold/warm. Before: daemon 1055 MB RSS right after login.
+- LAZY MODELS: design already lazy (39 MB RSS at login; my 1055 MB came from invoking right before measuring). Real defect:
+  after unload RSS stayed 684 MB (glibc kept pages). FIX voice/models.py release_memory() (malloc_trim) after unload →
+  1085 → 71 MB. test_unloaded_models_give_memory_back (needs models: passes in kristall-integ). Latency (transcribe,
+  4.24 s German sentence, mic buffered while loading): models unloaded → final 0.74 s after speech end (first partial 2.26 s);
+  loaded → 1.16 s. Page-cache-cold first load after container start took 29.5 s (sandbox overlay disk) — first use after boot
+  on real NVMe unmeasured. Kept existing key assistant.models_unload_after_seconds (300) instead of a new voice.unloadAfterSeconds;
+  assistant-ipc.md row updated.
+- FIX bridge: org.kde.kappmenuview never claimed in a fresh session (old code set m_menuViewWanted before the bus check → lost forever; menus only after a shell restart). syncMenuView/retryMenuView (1 s, ≤30). test_application_menus passes; needs fresh-login verification in integ.
+- ISO run 43995804272 SUCCESS: artifact Kristall-OS-Installer.iso 8,856,205,312 B (8.2 GiB), sha256 c8388d65…; live /usr 7.9 G,
+  OS payload (oci, offline install) 4.6 G. INSTALL.md size → "8–9 GB". Removed invalid `remove-codeql` input (warning).
+  Getting ≤6 GB needs dropping the offline payload (network install from ghcr.io) → decision for coordinator.
+- panels suite ALL PASS (after image-path fix). Theme suite run was interrupted (re-run).
+- Bridge menu fix VERIFIED fresh session: kappmenuview owned by kwin at login, Dolphin menu exported; daemon 39 MB at login.

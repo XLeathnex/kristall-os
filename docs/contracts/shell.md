@@ -279,7 +279,9 @@ StatusNotifierItem (`Quickshell.Services.SystemTray`), `SystemClock`, `DesktopEn
   preset) runs the launcher with `Restart=always`, `RestartSec=1`.
 * The launcher counts starts in `$XDG_RUNTIME_DIR/kristall/shell-starts`; the fourth start within
   60 s runs in safe mode (`KRISTALL_SHELL_SAFE=1`: no modules).
-* `StartLimitBurst=6` in 180 s; then `OnFailure=kristall-shell-fallback.service` adds a plain Plasma
+* `StartLimitBurst=6` in 180 s; then `OnFailure=kristall-shell-fallback.service` (only then: `RestartMode=direct`
+  keeps single crashes from counting as failures, and the script also does nothing while the unit is
+  restarting) adds a plain Plasma
   panel (launcher, task manager, clock, log out) through `org.kde.PlasmaShell.evaluateScript`,
   writes `~/.local/state/kristall/shell/fallback-panel` and notifies the owner. The next time the
   shell runs for 20 s it removes all Plasma panels again and deletes the marker.

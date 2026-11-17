@@ -101,6 +101,17 @@ class Vad:
         return sherpa_onnx.VoiceActivityDetector(cfg, buffer_size_in_seconds=60)
 
 
+def release_memory() -> None:
+    """Give freed heap back to the system. Without it the daemon kept ~1 GB RSS after the models were
+    unloaded (onnxruntime's buffers were freed, but glibc kept the pages): measured in the integrated
+    session 1085 MB → 684 MB without, → 71 MB with malloc_trim."""
+    try:
+        import ctypes
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except (OSError, AttributeError):
+        pass
+
+
 class ModelManager:
     """Owns the loaded models; everything heavy runs in worker threads."""
 
@@ -179,6 +190,7 @@ class ModelManager:
         self._asr = None
         self._voices.clear()
         gc.collect()
+        release_memory()
 
     @property
     def loaded(self) -> list[str]:

@@ -165,9 +165,6 @@ for d in /usr/lib64/firefox/browser/defaults/preferences /usr/lib/firefox/browse
 // Kristall OS: hardware video decoding (VA-API) on Intel graphics.
 pref("media.hardware-video-decoding.enabled", true);
 pref("media.ffmpeg.vaapi.enabled", true);
-// Firefox in the system language from the first start (firefox-langpacks), without its
-// "Firefox speaks your language — switch?" question (integration walkthrough).
-pref("intl.locale.requested", "");
 EOF
   fi
 done

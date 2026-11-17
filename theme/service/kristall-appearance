@@ -160,10 +160,12 @@ def set_scheme(mode, accent):
             kwrite("kdeglobals", "General", "AccentColor", want, notify=False)
         run(["plasma-apply-colorscheme", scheme], timeout=30, quiet=False)
     elif cur_accent != want:
-        # only the accent: plasma-apply-colorscheme --accent-color compares with kdeglobals itself;
-        # writing AccentColor beforehand made it see no change, and running apps kept the previous
-        # accent — always one change behind (integration walkthrough)
+        # only the accent: plasma-apply-colorscheme --accent-color re-tints the scheme but compares
+        # with kdeglobals itself; writing AccentColor beforehand made it see no change, and running
+        # apps kept the previous accent — always one change behind (integration walkthrough). It
+        # does not store AccentColor either: write it afterwards (with the change notification).
         run(["plasma-apply-colorscheme", "--accent-color", accent], timeout=30, quiet=False)
+        kwrite("kdeglobals", "General", "AccentColor", want)
 
 
 def write_if_changed(path, text):
