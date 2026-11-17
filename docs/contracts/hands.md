@@ -251,7 +251,8 @@ the window's default button (state `is-default`); Space only counts on a focused
 read with it: the name and description, the app id, the window title, and — when the element is
 in a dialog or alert (or a modal window) — the dialog's title and its labels (≤ 80 elements,
 ≤ 600 characters). All lookups of one check share a budget of **150 ms** (libatspi's method timeout
-is lowered to what is left); measured 4–25 ms per check in the dev container (GTK 3, Qt 6, Firefox).
+is lowered to what is left); measured in the dev container: 3–20 ms per check (median 5 ms GTK 3,
+10 ms Qt 6), Firefox page refusals ≤ 35 ms for the whole tool call.
 
 **Classes** (matched case-insensitively on whole words of the name, else the description, after
 normalisation: NFKC, casefold so ß = ss, mnemonics and punctuation removed; only for the roles

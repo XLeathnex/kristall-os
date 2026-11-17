@@ -3,6 +3,7 @@
 # Rendering measurements of the glass effect in a headless KWin (llvmpipe).
 # Every check prints what it measured; results also go to $KRISTALL_GLASS_RESULTS (JSON).
 import json
+import subprocess
 import os
 import sys
 import time
@@ -522,6 +523,85 @@ def test_multioutput():
         s.stop()
 
 
+INTERNAL_SCRIPT = """import QtQuick
+import org.kde.kwin as KWin  // namespaced: KWin also has a (non-creatable) Window type
+Item {
+    // created like the switcher's TabBox window (an Instantiator delegate)
+    Instantiator {
+        active: true
+        delegate: Window {
+            id: win
+            flags: Qt.BypassWindowManagerHint | Qt.FramelessWindowHint | Qt.ToolTip
+            color: "transparent"
+            visible: true
+            x: 700; y: 150; width: 400; height: 260
+            // what shell/modules/switcher declares on its TabBox window (glass.md: kristallGlass)
+            property var kristallGlass: ({ id: "panel", x: 30, y: 30, w: 340, h: 200, radius: 22 })
+            property bool kristallGlassActive: false   // set by the effect while it draws the glass
+            // a marker: green while the effect says the glass is drawn, red otherwise
+            Rectangle { x: 0; y: 0; width: 20; height: 20; color: win.kristallGlassActive ? "#00ff00" : "#ff0000" }
+            Timer { interval: 3000; running: true; onTriggered: win.kristallGlass = [{ id: "panel", x: 30, y: 30, w: 340, h: 200, radius: 22 },
+                                                                                     { id: "chip", kind: "capsule", x: 30, y: 2, w: 120, h: 24 }] }
+            Timer { interval: 6000; running: true; onTriggered: win.kristallGlass = null }
+        }
+    }
+}
+"""
+
+
+def test_internal_window():
+    """a KWin-internal QML Window gets real glass from its declared kristallGlass property, live"""
+    sc = Scene("busy")
+    try:
+        path = os.path.join(sc.s.tmp, "internal-glass.qml")
+        with open(path, "w") as f:
+            f.write(INTERNAL_SCRIPT)
+        bg = inside_stats(sc.shot(), (730, 180, 340, 200))
+        env = sc.s.env()
+
+        def gdbus(method, *args):
+            return subprocess.run(["gdbus", "call", "--session", "--dest", "org.kde.KWin", "--object-path", "/Scripting",
+                                   "--method", "org.kde.kwin.Scripting." + method, *args], env=env, capture_output=True, text=True, timeout=10)
+        r = gdbus("loadDeclarativeScript", path, "kristall-internal-glass")
+        sid = r.stdout.strip().strip("(),")
+        r2 = subprocess.run(["gdbus", "call", "--session", "--dest", "org.kde.KWin", "--object-path", f"/Scripting/Script{sid}",
+                             "--method", "org.kde.kwin.Script.run"], env=env, capture_output=True, text=True, timeout=10)
+        check("declarative KWin script with a QML Window loaded", r.returncode == 0 and r2.returncode == 0, (r.stdout + r.stderr + r2.stderr).strip())
+        t0 = time.monotonic()
+
+        def internal_windows():
+            st = sc.status() or {}
+            return [w for w in st.get("windows", []) if w.get("internal")]
+        got = harness.wait_until(internal_windows, 2.5)
+        check("the internal window is on glass with its declared shape", bool(got) and got[0]["internal"] == 1 and got[0]["explicit"]
+              and got[0]["shapes"] == 1, json.dumps(got))
+        if got:
+            g = got[0]["geometry"]
+            check("…at the window's place", abs(g[0] - 700) < 1 and abs(g[1] - 150) < 1, str(g))
+        time.sleep(0.6)
+        img = sc.shot()
+        inside = inside_stats(img, (730, 180, 340, 200))
+        RESULTS["internal_window"] = {"background": bg, "glass": inside}
+        px = img[160, 710, :3].tolist()
+        check("the effect told the window its glass is drawn (kristallGlassActive → green marker)", px[1] > 200 and px[0] < 60, str(px))
+        check("the background behind it is refracted and blurred (less detail inside the shape)",
+              inside["luminance_std"] < bg["luminance_std"] * 0.8, f"luminance std {bg['luminance_std']} → {inside['luminance_std']}")
+        Image.fromarray(img).crop((660, 110, 1140, 450)).save(os.path.join(EVIDENCE, "internal-window-glass.png"), optimize=True)
+        time.sleep(max(0, 3.6 - (time.monotonic() - t0)))
+        got = harness.wait_until(lambda: [w for w in internal_windows() if w["internal"] == 2], 2.0)
+        check("a changed kristallGlass is followed (notify signal): now two shapes", bool(got) and got[0]["shapes"] == 2, json.dumps(internal_windows()))
+        time.sleep(max(0, 6.6 - (time.monotonic() - t0)))
+        gone = harness.wait_until(lambda: not internal_windows(), 2.0)
+        check("kristallGlass = null removes the glass", bool(gone), json.dumps(internal_windows()))
+        time.sleep(0.4)
+        px = sc.shot()[160, 710, :3].tolist()
+        check("…and kristallGlassActive is false again (red marker: the window draws its own material)", px[0] > 200 and px[1] < 60, str(px))
+        if FAILURES:
+            print("   KWin log tail:", "\n".join(sc.s.log_text().splitlines()[-40:]))
+    finally:
+        sc.close()
+
+
 def main():
     os.makedirs(EVIDENCE, exist_ok=True)
     which = sys.argv[1:] or ["refraction", "refraction16", "slider", "legibility", "idle", "timing", "evidence"]
@@ -539,6 +619,8 @@ def main():
         test_timing_and_quality()
     if "multioutput" in which:
         test_multioutput()
+    if "internal" in which:
+        test_internal_window()
     if "evidence" in which:
         evidence_demo(1.0, "light", 0.15, "demo-1.0x-light-clear.png")
         evidence_demo(1.0, "dark", 0.85, "demo-1.0x-dark-tinted.png")

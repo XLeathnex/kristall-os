@@ -14,6 +14,7 @@
 #include "virtualdesktops.h"
 #include "wayland/clientconnection.h"
 #include "wayland/layershell_v1.h"
+#include "wayland/pointerconstraints_v1.h"
 #include "wayland/surface.h"
 #include "wayland_server.h"
 #include "window.h"
@@ -310,7 +311,13 @@ void WindowModel::track(Window *w, bool announce)
     cons << connect(w, &Window::closed, this, [this, w]() {
         untrack(w);
     });
+    // pointer lock/confinement of the window's surface (games): watched on the current surface
+    cons << connect(w, &Window::surfaceChanged, this, [this, w]() {
+        watchConstraints(w);
+        markDirty(w);
+    });
     m_connections.insert(w, cons);
+    watchConstraints(w);
     const QJsonObject obj = serialize(w);
     m_lastSent.insert(w, obj);
     if (announce) {
@@ -326,6 +333,9 @@ void WindowModel::untrack(Window *w)
         return;
     }
     const QString id = m_lastSent.value(w).value(QStringLiteral("id")).toString();
+    for (const auto &c : m_constraintConnections.take(w)) {
+        disconnect(c);
+    }
     for (const auto &c : m_connections.take(w)) {
         disconnect(c);
     }
@@ -412,6 +422,39 @@ void WindowModel::flush()
     }
 }
 
+void WindowModel::watchConstraints(Window *w)
+{
+    for (const auto &c : m_constraintConnections.take(w)) {
+        disconnect(c);
+    }
+    SurfaceInterface *surface = w->surface();
+    if (!surface) {
+        return;
+    }
+    auto dirty = [this, w]() {
+        markDirty(w);
+    };
+    QList<QMetaObject::Connection> cons;
+    cons << connect(surface, &SurfaceInterface::lockedPointerRegionChanged, this, dirty);
+    cons << connect(surface, &SurfaceInterface::confinedPointerRegionChanged, this, dirty);
+    cons << connect(surface, &SurfaceInterface::pointerConfinementChangedWithoutCommit, this, dirty);
+    m_constraintConnections.insert(w, cons);
+}
+
+// A pointer lock / confinement the window's client holds (zwp_pointer_constraints_v1), whether
+// KWin has activated it at this moment or not: games keep it while they run.
+static bool hasPointerLock(const Window *w)
+{
+    const SurfaceInterface *s = w->surface();
+    return s && (s->lockedPointer() || s->lockedPointerRegion().has_value());
+}
+
+static bool hasPointerConfinement(const Window *w)
+{
+    const SurfaceInterface *s = w->surface();
+    return s && (s->confinedPointer() || s->confinedPointerRegion().has_value());
+}
+
 QJsonObject WindowModel::serialize(Window *w) const
 {
     const QString scope = m_scopes->scopeOf(w);
@@ -464,6 +507,8 @@ QJsonObject WindowModel::serialize(Window *w) const
         {QStringLiteral("type"), type},
         {QStringLiteral("parentId"), (parent && tracked(parent)) ? QJsonValue(idOf(parent)) : QJsonValue()},
         {QStringLiteral("xwayland"), isXwayland(w)},
+        {QStringLiteral("pointerLocked"), hasPointerLock(w)},
+        {QStringLiteral("pointerConstrained"), hasPointerConfinement(w)},
         {QStringLiteral("content"), QJsonObject{{QStringLiteral("x"), round2(w->clientGeometry().x())}, {QStringLiteral("y"), round2(w->clientGeometry().y())},
                                                 {QStringLiteral("w"), round2(w->clientGeometry().width())}, {QStringLiteral("h"), round2(w->clientGeometry().height())}}},
     };

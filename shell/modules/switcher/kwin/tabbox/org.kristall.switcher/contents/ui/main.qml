@@ -6,7 +6,9 @@
 // While it is shown: Tab/Shift+Tab and ←/→ move, Q quits the highlighted app, H hides it, Escape
 // cancels (KWin), releasing the key switches (KWin).
 // Look: design tokens of docs/contracts/design.md copied here (KWin's QML cannot import the
-// shell's): HUD radius 22, the fallback material, label colours, Inter, durations 100/150 ms.
+// shell's): HUD radius 22, label colours, Inter, durations 100/150 ms. Material: real Liquid Glass
+// through the glass effect's kristallGlass property (glass.md); the opaque fallback material only
+// while the effect is not drawing it (no effect, crash guard).
 import QtQuick
 import org.kde.kwin as KWin
 import org.kde.kirigami as Kirigami
@@ -61,6 +63,12 @@ KWin.TabBoxSwitcher {
             x: tabBox.screenGeometry.x + (tabBox.screenGeometry.width - width) / 2
             y: tabBox.screenGeometry.y + (tabBox.screenGeometry.height - height) / 2
             readonly property real shadowPad: 30
+            // Liquid Glass: the glass effect (kwin/glass, glass.md "Internal windows") reads this
+            // shape from KWin-internal windows and draws real glass under the panel; it sets
+            // kristallGlassActive while it does, and the panel then drops its opaque fallback fill.
+            property var kristallGlass: ({ id: "switcher", x: shadowPad, y: shadowPad, w: width - 2 * shadowPad,
+                                           h: height - 2 * shadowPad, radius: 22 })
+            property bool kristallGlassActive: false
 
             // soft layered shadow outside the panel (design.md §7, hud: blur 30, y 10)
             Repeater {
@@ -85,7 +93,8 @@ KWin.TabBoxSwitcher {
                 width: win.width - 2 * win.shadowPad
                 height: win.height - 2 * win.shadowPad
                 radius: 22
-                color: tabBox.material
+                // on glass: only a light veil for legibility (the glass brings tint and blur)
+                color: win.kristallGlassActive ? Qt.rgba(tabBox.material.r, tabBox.material.g, tabBox.material.b, 0.18) : tabBox.material
                 border.width: 1
                 border.color: tabBox.border
 

@@ -145,7 +145,7 @@ def sysconf():
     root = tempfile.mkdtemp(prefix="kristall-settings-sysconf-")
     os.makedirs(os.path.join(root, "etc", "xdg"))
     os.makedirs(os.path.join(root, "usr", "share"))
-    subprocess.run([sys.executable, os.path.join(S.SETUP, "image", "merge-ini"), os.path.join(root, "etc", "xdg", "kdeglobals"),
+    subprocess.run([sys.executable, os.path.join(S.REPO, "shell", "image", "merge-ini"), os.path.join(root, "etc", "xdg", "kdeglobals"),
                     os.path.join(S.SETUP, "data", "xdg", "kdeglobals")], check=True)
     return root
 

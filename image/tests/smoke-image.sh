@@ -16,6 +16,13 @@ check() { # description, command...
   if "$@" >/dev/null 2>&1; then ok "$d"; else bad "$d"; fi
 }
 
+# /var first, before any Kristall tool below runs: kristall-update and kristall-apps create their
+# state directories under /var/lib/kristall when called, so a later look would see the test itself.
+if [[ -e /var/lib/kristall ]]; then
+  echo "note  /var/lib/kristall in the image: $(find /var/lib/kristall -printf '%p(%y) ' 2>/dev/null | awk '{ print substr($0, 1, 600) }')"
+fi
+check "no Kristall state baked into /var" test ! -e /var/lib/kristall
+
 # Identity: display names changed, machine identifiers kept.
 osr() { sed -n "s/^$1=//p" /usr/lib/os-release | tr -d '"'; }
 check "os-release NAME is Kristall OS" test "$(osr NAME)" = "Kristall OS"
@@ -74,7 +81,6 @@ done
 
 # Nothing in /usr/local, /opt, /var (beyond the base's skeleton)
 check "/usr/local empty" test -z "$(find -L /usr/local -mindepth 1 -type f 2>/dev/null | head -1)"
-check "no Kristall state baked into /var" test ! -e /var/lib/kristall
 
 if ((fails)); then
   echo "$fails check(s) failed"

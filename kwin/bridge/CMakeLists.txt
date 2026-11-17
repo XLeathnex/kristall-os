@@ -23,6 +23,7 @@ find_package(KWin REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(WAYLAND REQUIRED IMPORTED_TARGET wayland-client wayland-server)
 pkg_check_modules(XKB REQUIRED IMPORTED_TARGET xkbcommon)
+pkg_check_modules(XCB REQUIRED IMPORTED_TARGET xcb) # X round trips to Xwayland (ordered keys for X11 windows)
 pkg_check_modules(SYSTEMD IMPORTED_TARGET libsystemd)
 pkg_get_variable(WAYLAND_PROTOCOLS_DIR wayland-protocols pkgdatadir)
 find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
@@ -83,7 +84,7 @@ target_link_libraries(kristall_bridge PRIVATE
     Qt6::Core Qt6::Gui Qt6::GuiPrivate Qt6::Network Qt6::Concurrent Qt6::DBus
     KF6::ConfigCore KF6::CoreAddons
     KDecoration3::KDecoration
-    PkgConfig::WAYLAND PkgConfig::XKB
+    PkgConfig::WAYLAND PkgConfig::XKB PkgConfig::XCB
 )
 set_target_properties(kristall_bridge PROPERTIES PREFIX "")
 install(TARGETS kristall_bridge DESTINATION ${KDE_INSTALL_PLUGINDIR}/kwin/plugins)

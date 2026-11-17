@@ -15,6 +15,36 @@ Status: protocol version **1**. This document is normative; the implementation f
   KWin internal windows (`kwin_blur` property) and translucent window decorations. These get one
   rounded-rect shape over the requested region with default parameters (§5.4). KWin's stock
   `blur` effect is disabled system-wide; the glass effect advertises the blur capability instead.
+* for **KWin-internal QML windows that declare `kristallGlass`** (§1.1) — explicit shapes for
+  windows that live inside KWin's own process and so cannot use `glass.sock` (the app switcher).
+
+### 1.1 Internal windows: `kristallGlass`
+
+A `Window` created by KWin's QML (a TabBox layout, a declarative KWin script) cannot set
+`kwin_blur` (its value must be a KWin `RegionF`), and `PlasmaCore.Dialog` brings Plasma's opaque
+frame. Such a window declares its glass in QML instead:
+
+```qml
+Window {
+    property var kristallGlass: ({ id: "switcher", x: 30, y: 30, w: 400, h: 150, radius: 22 })
+    property bool kristallGlassActive: false   // optional: set by the effect
+}
+```
+
+* `kristallGlass`: one shape object or an array of them, in the window's logical coordinates, with
+  the fields of a `glass.sock` shape (§4 Shape object; `id` optional here). `null`/`undefined` or
+  an empty array: no glass. The effect reads it when the window appears and follows its notify
+  signal (a `property var` declared in QML) — changes apply on the next frame. Invalid shapes are
+  logged and ignored; at most 64.
+* Material and theme behave as for explicit shapes of a bound surface (full slider tint, follows
+  the theme; no legibility adaptation events, there is no client to send them to).
+* `kristallGlassActive` (if the window declares it): the effect sets it to `true` while it draws
+  the window's shapes and to `false` when the shapes go away or the effect unloads. A window draws
+  its own opaque fallback material while it is `false` (no effect, crash guard), and only a light
+  veil while it is `true`.
+* `status` lists such windows with `"internal": <number of shapes>` and `"explicit": true`.
+  Test: `kwin/glass/tests/test_render.py internal` (a declarative KWin script's window; evidence
+  `tests/evidence/internal-window-glass.png`).
 
 The client draws its own content and shadows; the effect draws only the glass, underneath the
 client's pixels. Where a glass shape is, the client surface must be transparent (or carry only
@@ -202,7 +232,7 @@ longer) there; shapes are kept and re-apply when it appears.
 * `status` — `state`, `guard` (§7), `clients`, `bindings`, counters `frames` (frames the effect saw),
   `glassDraws`, `captures`, `blurs`, `cacheHits`, `composites`, `lumaReads`, `allocations`,
   `quality`, `theme`, `glass`, `reduceTransparency`, `windows` (per glass window: `explicit`,
-  `shapes`, `pid`, `namespace`, `geometry`, `shapeStates`), `lastTiming`. Diagnostic: fields may
+  `shapes`, `internal` (§1.1), `pid`, `namespace`, `geometry`, `shapeStates`), `lastTiming`. Diagnostic: fields may
   be added.
 * `timing` — `frames`, `captureMs`, `blurMs`, `compositeMs`, `lumaMs`, `totalMs` (averages per frame).
 * `pong`, `debug` — replies.

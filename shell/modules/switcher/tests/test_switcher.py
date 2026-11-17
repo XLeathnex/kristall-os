@@ -92,13 +92,13 @@ def test_switcher():
             c = s.connect()
             gst = c.status()
             c.close()
-            gw = [w for w in (gst or {}).get("windows", []) if not w.get("explicit")]
-            print("INFO glass windows (blur requests): " + json.dumps(gw)[:800], flush=True)
-            # blocked (shell fix round, item 10): a QML Window inside KWin cannot request the glass
-            # with its own rounded shape — see README "Limits"
-            print("INFO switcher window on glass: " + ("yes" if gw else "no (fallback material)"), flush=True)
         except OSError as e:
-            print("INFO glass status not readable: " + repr(e), flush=True)
+            gst = {"error": repr(e)}
+        gw = [w for w in (gst or {}).get("windows", []) if w.get("internal")]
+        print("INFO glass windows (internal): " + json.dumps(gw)[:800], flush=True)
+        # the TabBox window declares kristallGlass (glass.md "Internal windows"): real Liquid Glass
+        check("the held switcher is drawn on Liquid Glass (glass effect reads its kristallGlass shape)",
+              bool(gw) and gw[0].get("shapes") == 1, json.dumps(gst)[:600])
         save = os.path.join(EVIDENCE, "switcher-held-light-1.0x.png")
         os.makedirs(EVIDENCE, exist_ok=True)
         Image.fromarray(img).crop((240, 220, 1040, 580)).save(save, optimize=True)

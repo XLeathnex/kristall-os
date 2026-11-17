@@ -25,6 +25,7 @@ class Agent;
 class WindowModel;
 class HelperClient;
 struct TextJob;
+struct KeyStroke;
 
 // agent.key and agent.text. Keyboard focus is singular: the target's surface gets the seat's
 // keyboard focus for the duration of the call (Wayland clients: keyboard focus only, the window
@@ -40,6 +41,8 @@ struct TextJob;
 //                    to the text, Ctrl+V (Ctrl+Shift+V in terminals) sent, and the clipboard restored
 // Where the text switches between text-input and a key path, the client is synchronised (ping/pong)
 // first, because toolkits apply text-input commits and key events from different queues.
+// XWayland targets: keys wait until X has confirmed the activation (FocusIn), and focus is handed
+// back only after a short settle, because X focus and keys reach Xwayland on different connections.
 class AgentKeyboard : public QObject
 {
     Q_OBJECT
@@ -53,7 +56,9 @@ public:
 
 private:
     void key(Params &p, const ReplyPtr &reply);
+    void sendKey(const std::shared_ptr<TextJob> &job, const ReplyPtr &reply, const QStringList &mods, const KeyStroke &stroke);
     void text(Params &p, const ReplyPtr &reply);
+    void startJob(const std::shared_ptr<TextJob> &job, bool hadFocus);
     void runJob(const std::shared_ptr<TextJob> &job);
     void step(const std::shared_ptr<TextJob> &job);
     void barrier(const std::shared_ptr<TextJob> &job);

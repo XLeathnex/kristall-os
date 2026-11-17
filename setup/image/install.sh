@@ -48,9 +48,9 @@ python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$PREFIX/share/krista
 install -Dm0644 "$here/systemd/kristall-setup.service" "$PREFIX/lib/systemd/user/kristall-setup.service"
 install -Dm0644 "$here/systemd/50-kristall-setup.preset" "$PREFIX/lib/systemd/user-preset/50-kristall-setup.preset"
 
-# system-wide KDE configuration, merged (other components' keys are kept)
+# system-wide KDE configuration, merged (other components' keys are kept) with shell-core's helper
 for f in kwinrc kdeglobals kcm-about-distrorc; do
-    python3 "$here/image/merge-ini" "/etc/xdg/$f" "$here/data/xdg/$f"
+    python3 "$repo/shell/image/merge-ini" "/etc/xdg/$f" "$here/data/xdg/$f"
 done
 
 # the Setup Assistant's shell module

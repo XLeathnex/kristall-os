@@ -228,6 +228,7 @@ class GlobalShortcuts:
             self.bus.signal_unsubscribe(sub)
         self.subs = [self.bus.signal_subscribe(KGA, "org.kde.kglobalaccel.Component", sig, path, None, Gio.DBusSignalFlags.NONE, self.on_signal)
                      for sig in ("globalShortcutPressed", "globalShortcutReleased")]
+        self.free_from_krunner()
         for action, info in SHORTCUTS.items():
             aid = self.action_id(action)
             keys = GLib.Variant("a(ai)", [([k],) for k in info["keys"]])
@@ -238,6 +239,32 @@ class GlobalShortcuts:
             self.call("setShortcutKeys", GLib.Variant.new_tuple(GLib.Variant("as", aid), keys, GLib.Variant("u", SET_PRESENT)),
                       lambda v, a=action: self.got_keys(a, v))
         self.registered = True
+
+    def free_from_krunner(self):
+        """KRunner's stock shortcut includes Alt+Space, the assistant's key. The image moves KRunner's
+        default in /etc/xdg/kglobalshortcutsrc, but a user's kglobalacceld may already hold the stock
+        keys (stored per user, or read before that default existed). So, every time we register:
+        if KRunner holds one of the assistant's keys, take that key off KRunner through kglobalacceld
+        itself (stored in the user's kglobalshortcutsrc; idempotent; KRunner keeps Alt+F2/Search)."""
+        ours = {k for info in SHORTCUTS.values() for k in info["keys"]}
+        for aid in (["org.kde.krunner.desktop", "_launch", "", ""], ["krunner.desktop", "_launch", "", ""]):
+            try:
+                v = self.bus.call_sync(KGA, "/kglobalaccel", "org.kde.KGlobalAccel", "shortcutKeys", GLib.Variant("(as)", (aid,)),
+                                       None, Gio.DBusCallFlags.NONE, 2000, None).unpack()[0]
+            except GLib.Error as e:
+                log(f"kglobalaccel shortcutKeys {aid[0]}: {e.message}")
+                continue
+            seqs = [list(seq[0]) for seq in v if seq and seq[0]]
+            keep = [seq for seq in seqs if not (len([k for k in seq if k]) == 1 and seq[0] in ours)]
+            if len(keep) == len(seqs):
+                continue
+            try:
+                self.bus.call_sync(KGA, "/kglobalaccel", "org.kde.KGlobalAccel", "setForeignShortcutKeys",
+                                   GLib.Variant("(asa(ai))", (aid, [(seq,) for seq in keep])), None, Gio.DBusCallFlags.NONE, 2000, None)
+                log(f"took the assistant's key off KRunner ({aid[0]}): KRunner keeps {[[hex(k) for k in seq if k] for seq in keep]}")
+                emit({"event": "shortcut.freed", "from": aid[0], "keys": [k for seq in seqs if seq not in keep for k in seq if k]})
+            except GLib.Error as e:
+                log(f"kglobalaccel setForeignShortcutKeys {aid[0]}: {e.message}")
 
     def got_keys(self, action, v):
         # a(ai): one key sequence per entry, up to four key combinations each (we use the first)

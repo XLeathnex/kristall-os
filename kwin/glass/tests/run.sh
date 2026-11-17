@@ -45,7 +45,7 @@ run "protocol" "$here/test_protocol.py"
 if [ "${1:-}" = quick ]; then
     run "rendering (quick)" "$here/test_render.py" refraction idle
 else
-    run "rendering" "$here/test_render.py" refraction refraction16 slider legibility idle timing multioutput evidence
+    run "rendering" "$here/test_render.py" refraction refraction16 slider legibility idle timing multioutput internal evidence
 fi
 run "fail-soft" "$here/test_failsafe.py"
 

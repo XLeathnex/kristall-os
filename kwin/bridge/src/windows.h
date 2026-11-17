@@ -69,6 +69,7 @@ private:
     void track(KWin::Window *window, bool announce);
     void untrack(KWin::Window *window);
     void markDirty(KWin::Window *window);
+    void watchConstraints(KWin::Window *window);
     void scheduleFlush();
     void flush();
     bool shouldTrack(KWin::Window *window) const;
@@ -81,6 +82,7 @@ private:
     QHash<KWin::Window *, QJsonObject> m_lastSent;
     QSet<KWin::Window *> m_dirty;
     QHash<KWin::Window *, QList<QMetaObject::Connection>> m_connections;
+    QHash<KWin::Window *, QList<QMetaObject::Connection>> m_constraintConnections; // on the window's current surface
     bool m_stackingDirty = false;
     bool m_outputsDirty = false;
     QJsonObject m_lastOutputs; // what outputs subscribers were last told

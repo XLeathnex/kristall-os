@@ -219,6 +219,44 @@ def test_multiline_text_in_order():
 
 
 @test
+def test_x11_keys_after_clipboard_text():
+    """agent.key right after agent.text used the clipboard path in an X11 window, alternating with a
+    native window: no key is lost (X focus hand-over is ordered with the keys)"""
+    with Session(layout="de", xwayland=True) as s:
+        b = s.bridge()
+        nat = s.wlprobe("--title", "native", "--size", "300x200")
+        wn = place(b, window_by_title(b, "native"), 20, 20, 300, 200)
+        x = s.qtprobe("qtxkeys", platform="xcb")
+        layx = qt_layout(x)
+        xw = window_by_title(b, "qtxkeys", 15)
+        xx, xy = content(xw)
+        rounds = 6
+        with b.agent_session("x11keys") as a:
+            a.click(xx + layx["text"]["x"] + 20, xy + layx["text"]["y"] + 10)
+            a.key("ctrl+a", window_id=xw["id"])
+            a.key("delete", window_id=xw["id"])
+            b.call("window.activate", id=wn["id"])
+            time.sleep(0.3)
+            mx, mn = x.mark(), nat.mark()
+            want = ""
+            paths = set()
+            for i in range(rounds):
+                r = a.text(f"{i}ö😀", window_id=xw["id"])
+                paths.update(r["paths"])
+                a.key("return", window_id=xw["id"])   # the key that used to be lost
+                a.key("a", window_id=wn["id"])        # focus moves to a native window and back
+                want += f"{i}ö😀\n"
+            got = wait_until(lambda: last_of(x, "textedit", mx) == want and want, 5) or last_of(x, "textedit", mx)
+            check("clipboard" in paths, f"the emoji went through the clipboard path: {sorted(paths)}")
+            presses = [(e["text"], e["mods"]) for e in x.since(mx) if e.get("ev") == "keypress" and e.get("widget") == "QTextEdit"]
+            check(got == want, f"X11 text edit got every text and every Return, in order: {got!r} (key presses: {presses})")
+            wait_until(lambda: typed(nat, mn) == "a" * rounds, 3)   # the probe's log may lag behind the reply
+            check(typed(nat, mn) == "a" * rounds, f"the native window got every key: {typed(nat, mn)!r} "
+                  f"(events: {[(e.get('ev'), e.get('sym'), e.get('state'), e.get('mods', e.get('depressed'))) for e in nat.since(mn) if e.get('ev') in ('key', 'key_enter', 'key_leave', 'modifiers')]})")
+            check(refresh(b, wn)["active"], "the native window is active again at the end")
+
+
+@test
 def test_key_chords_on_german_layout():
     """chords go to the target with the right modifiers; keysyms are found on the German layout"""
     with Session(layout="de") as s:

@@ -1,25 +1,10 @@
 {
  "last_run": {
   "sections": [
-   "static",
-   "shortcuts",
-   "ctl",
-   "reconnect",
-   "controls",
-   "menus",
-   "reveal",
-   "core",
-   "appmenu",
-   "scale",
-   "fallback",
-   "modules",
-   "restart",
-   "plasma",
-   "gallery",
-   "realbridge"
+   "shortcuts"
   ],
   "failures": [],
-  "time": "2026-11-16T23:13:28"
+  "time": "2026-11-17T00:09:51"
  },
  "idle_bar": {
   "seconds": 5.0,

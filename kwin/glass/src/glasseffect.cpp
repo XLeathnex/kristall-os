@@ -34,7 +34,10 @@
 
 #include <KDecoration3/Decoration>
 
+#include <QJSValue>
 #include <QJsonArray>
+#include <QJsonDocument>
+#include <QMetaProperty>
 #include <QWindow>
 
 #include <algorithm>
@@ -56,6 +59,44 @@ constexpr int kSchemeDwellMs = 600; ///< minimum time between two scheme flips o
 constexpr float kSchemeAnimSeconds = 0.30f;
 constexpr float kPressAnimSeconds = 0.12f;
 constexpr qreal kGridLogical = 32.0; ///< capture rects snap to this grid so animating shapes reuse the cached blur
+
+// "kristallGlass" on a KWin-internal QML window (e.g. our TabBox switcher's Window): one glass shape
+// object or an array of them, in the window's logical coordinates and with the same fields as a
+// glass.sock shape (id, x, y, w, h, kind, radius, …). A plain QML Window cannot set "kwin_blur" (a
+// KWin RegionF), and PlasmaCore.Dialog brings Plasma's opaque frame; this is the third way.
+std::vector<ShapeSpec> readInternalGlass(const QWindow *window)
+{
+    std::vector<ShapeSpec> out;
+    QVariant v = window->property("kristallGlass");
+    if (v.canConvert<QJSValue>() && v.metaType() == QMetaType::fromType<QJSValue>()) {
+        v = v.value<QJSValue>().toVariant();
+    }
+    if (!v.isValid() || v.isNull()) {
+        return out;
+    }
+    const QJsonValue json = QJsonValue::fromVariant(v);
+    QJsonArray list;
+    if (json.isArray()) {
+        list = json.toArray();
+    } else if (json.isObject()) {
+        list.append(json);
+    }
+    for (const QJsonValue &item : std::as_const(list)) {
+        QJsonObject o = item.toObject();
+        if (!o.contains(QLatin1String("id"))) {
+            o.insert(QStringLiteral("id"), QStringLiteral("internal-%1").arg(out.size()));
+        }
+        QString error;
+        if (auto spec = parseShape(o, &error)) {
+            if (!spec->rect.isEmpty() && out.size() < size_t(Limits::maxShapesPerSurface)) {
+                out.push_back(*spec);
+            }
+        } else {
+            qCWarning(KRISTALL_GLASS) << "ignoring kristallGlass shape of an internal window:" << error;
+        }
+    }
+    return out;
+}
 
 float luminance(const QColor &c)
 {
@@ -198,6 +239,12 @@ GlassEffect::~GlassEffect()
     if (m_valid) {
         waylandServer()->backgroundEffectManager()->removeBlurCapability();
     }
+    // internal windows that drew on our glass get their own material back
+    for (const auto &[w, gw] : m_windows) {
+        if (QWindow *internal = gw->internalShapes.empty() ? nullptr : w->internalWindow()) {
+            internal->setProperty("kristallGlassActive", false);
+        }
+    }
     effects->makeOpenGLContextCurrent();
     m_windows.clear();
     m_renderer.reset();
@@ -290,7 +337,7 @@ void GlassEffect::maybeDropGlassWindow(EffectWindow *w)
         return;
     }
     GlassWindow &gw = *it->second;
-    if (!gw.bindings.empty() || gw.blurContent.has_value() || gw.blurFrame.has_value()) {
+    if (!gw.bindings.empty() || !gw.internalShapes.empty() || gw.blurContent.has_value() || gw.blurFrame.has_value()) {
         return;
     }
     scheduleGlassRepaint(gw);
@@ -309,6 +356,7 @@ void GlassEffect::slotWindowAdded(EffectWindow *w)
     }
     if (QWindow *internal = w->internalWindow()) {
         internal->installEventFilter(this);
+        watchInternalGlass(w);
     }
     const auto connectDecoration = [this, w]() {
         if (w->decoration()) {
@@ -398,12 +446,37 @@ void GlassEffect::slotViewRemoved(RenderView *view)
     }
 }
 
+// A QML-declared property (`property var kristallGlass`) is no dynamic property: follow its
+// notify signal instead.
+void GlassEffect::watchInternalGlass(EffectWindow *w)
+{
+    QWindow *internal = w->internalWindow();
+    const int index = internal ? internal->metaObject()->indexOfProperty("kristallGlass") : -1;
+    if (index < 0) {
+        return;
+    }
+    const QMetaProperty property = internal->metaObject()->property(index);
+    const int slot = metaObject()->indexOfSlot("internalGlassChanged()");
+    if (property.hasNotifySignal() && slot >= 0) {
+        QMetaObject::connect(internal, property.notifySignalIndex(), this, slot, Qt::UniqueConnection);
+    }
+}
+
+void GlassEffect::internalGlassChanged()
+{
+    if (auto *internal = qobject_cast<QWindow *>(sender())) {
+        if (EffectWindow *w = effects->findWindow(internal)) {
+            updateBlurRequest(w);
+        }
+    }
+}
+
 bool GlassEffect::eventFilter(QObject *watched, QEvent *event)
 {
     auto internal = qobject_cast<QWindow *>(watched);
     if (internal && event->type() == QEvent::DynamicPropertyChange) {
         auto *pe = static_cast<QDynamicPropertyChangeEvent *>(event);
-        if (pe->propertyName() == "kwin_blur") {
+        if (pe->propertyName() == "kwin_blur" || pe->propertyName() == "kristallGlass") {
             if (EffectWindow *w = effects->findWindow(internal)) {
                 updateBlurRequest(w);
             }
@@ -422,10 +495,16 @@ void GlassEffect::updateBlurRequest(EffectWindow *w)
             content = surface->blurRegion();
         }
     }
+    std::vector<ShapeSpec> internalShapes;
     if (QWindow *internal = w->internalWindow()) {
         const QVariant property = internal->property("kwin_blur");
         if (property.isValid()) {
             content = property.value<RegionF>();
+        }
+        internalShapes = readInternalGlass(internal);
+        // tell the window that its glass is drawn (it may then drop its own opaque fallback fill)
+        if (internal->metaObject()->indexOfProperty("kristallGlassActive") >= 0) {
+            internal->setProperty("kristallGlassActive", !internalShapes.empty());
         }
     }
     if (w->decorationHasAlpha() && w->decoration() && !w->decoration()->blurRegion().isNull()) {
@@ -434,15 +513,16 @@ void GlassEffect::updateBlurRequest(EffectWindow *w)
     }
 
     GlassWindow *gw = glassWindow(w);
-    if (!content && !frame && !gw) {
+    if (!content && !frame && internalShapes.empty() && !gw) {
         return;
     }
     if (!gw) {
         gw = ensureGlassWindow(w);
     }
-    if (gw->blurContent != content || gw->blurFrame != frame) {
+    if (gw->blurContent != content || gw->blurFrame != frame || gw->internalShapes != internalShapes) {
         gw->blurContent = content;
         gw->blurFrame = frame;
+        gw->internalShapes = std::move(internalShapes);
         gw->dirty = true;
         scheduleGlassRepaint(*gw);
     }
@@ -597,6 +677,23 @@ void GlassEffect::rebuildShapes(GlassWindow &gw)
     std::unordered_map<QString, ShapeState> states;
     int slot = 0;
     if (gw.isExplicit()) {
+        // shapes a KWin-internal QML window declared (window-local = surface-local here)
+        for (const ShapeSpec &spec : gw.internalShapes) {
+            if (spec.opacity <= 0.0) {
+                continue;
+            }
+            LocalShape ls;
+            ls.spec = spec;
+            resolveMaterial(ls, false);
+            if (slot < GlassRenderer::kLumaSlots) {
+                ls.lumaSlot = slot++;
+            }
+            const QString key = QStringLiteral("internal/") + spec.id;
+            auto old = gw.states.find(key);
+            states.emplace(key, old != gw.states.end() ? old->second : ShapeState{});
+            ls.stateKey = key;
+            gw.shapes.push_back(std::move(ls));
+        }
         for (quint64 id : gw.bindings) {
             const SurfaceBinding *b = m_server->binding(id);
             if (!b) {
@@ -1207,6 +1304,9 @@ QJsonObject GlassEffect::status() const
     for (const auto &[w, gw] : m_windows) {
         QJsonObject wo;
         wo[QStringLiteral("explicit")] = gw->isExplicit();
+        if (!gw->internalShapes.empty()) {
+            wo[QStringLiteral("internal")] = int(gw->internalShapes.size());
+        }
         wo[QStringLiteral("shapes")] = int(gw->shapes.size());
         wo[QStringLiteral("pid")] = qint64(w->pid());
         if (m_tracker) {

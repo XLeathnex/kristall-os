@@ -23,8 +23,9 @@ $(eval $(call proto,xdg-shell,$(WP)/stable/xdg-shell/xdg-shell.xml))
 $(eval $(call proto,text-input-unstable-v3,$(WP)/unstable/text-input/text-input-unstable-v3.xml))
 $(eval $(call proto,xdg-decoration-unstable-v1,$(WP)/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml))
 $(eval $(call proto,fake-input,$(PWP)/fake-input.xml))
+$(eval $(call proto,pointer-constraints-unstable-v1,$(WP)/unstable/pointer-constraints/pointer-constraints-unstable-v1.xml))
 
-WLPROBE_GEN := xdg-shell text-input-unstable-v3 xdg-decoration-unstable-v1
+WLPROBE_GEN := xdg-shell text-input-unstable-v3 xdg-decoration-unstable-v1 pointer-constraints-unstable-v1
 $(OUT)/wlprobe: wlprobe.c $(foreach p,$(WLPROBE_GEN),$(GEN)/$(p)-client-protocol.h $(GEN)/$(p)-protocol.c)
 	$(CC) $(CFLAGS) -o $@ wlprobe.c $(foreach p,$(WLPROBE_GEN),$(GEN)/$(p)-protocol.c) $(shell pkg-config --cflags --libs wayland-client xkbcommon)
 

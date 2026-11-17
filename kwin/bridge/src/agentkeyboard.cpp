@@ -10,6 +10,7 @@
 
 #include "input.h"
 #include "keyboard_input.h"
+#include "main.h"
 #include "wayland/clientconnection.h"
 #include "wayland/display.h"
 #include "wayland/keyboard.h"
@@ -21,16 +22,21 @@
 #include "wayland_server.h"
 #include "window.h"
 #include "workspace.h"
+#include "x11window.h"
 #include "xkb.h"
 
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
+#include <xcb/xcb.h>
+#include <xcb/xcbext.h> // xcb_poll_for_reply
 #include <xkbcommon/xkbcommon.h>
 
+#include <QElapsedTimer>
 #include <QJsonArray>
 #include <QTimer>
 
 #include <cstring>
+#include <functional>
 #include <fcntl.h>
 #include <linux/input-event-codes.h>
 #include <sys/mman.h>
@@ -62,6 +68,15 @@ constexpr int kPasteGraceMs = 300;
 constexpr int kBarrierSettleMs = 8;
 constexpr int kBarrierTimeoutMs = 1000; // a client that does not answer the ping in time
 constexpr int kBarrierFallbackMs = 50; // surfaces without xdg_surface (layer shell): a plain pause
+// XWayland targets: X11 input focus is set by KWin over its X11 connection, keys travel over
+// Xwayland's Wayland connection, and nothing orders the two. Keys sent before Xwayland has applied
+// the activation's SetInputFocus, or still unread when the focus is handed back, reach whichever
+// X window has focus at that moment (the "lost key after typing" defect). The bridge therefore
+// uses an X round trip as a barrier (xBarrier): GetInputFocus on KWin's X11 connection, sent after
+// the Wayland events were flushed. Xwayland reads every ready socket in one wait and converts input
+// before it executes requests, so once the reply is there, every key sent before it has been routed;
+// and the reply says whether the target has X focus yet (if not, ask again until kXFocusWaitMs).
+constexpr int kXFocusWaitMs = 500;
 
 enum class Path {
     TextInput,
@@ -395,6 +410,84 @@ static void releaseFocus(TextJob &job)
     input()->keyboard()->update();
 }
 
+// One X round trip after flushing the Wayland events (see kXFocusWaitMs). `then(focus)` gets the X
+// input focus window, or XCB_WINDOW_NONE on timeout or without an X11 connection. The reply is
+// collected on a 1 ms timer that exists only while the round trip lasts.
+static void xBarrier(QObject *owner, std::function<void(xcb_window_t)> then, int timeoutMs = kXFocusWaitMs)
+{
+    xcb_connection_t *c = kwinApp()->x11Connection();
+    if (!c) {
+        then(XCB_WINDOW_NONE);
+        return;
+    }
+    waylandServer()->display()->flush();
+    const xcb_get_input_focus_cookie_t cookie = xcb_get_input_focus(c);
+    xcb_flush(c);
+    auto *timer = new QTimer(owner);
+    auto elapsed = std::make_shared<QElapsedTimer>();
+    elapsed->start();
+    QObject::connect(timer, &QTimer::timeout, timer, [timer, c, cookie, elapsed, timeoutMs, then]() {
+        void *reply = nullptr;
+        xcb_generic_error_t *error = nullptr;
+        if (xcb_poll_for_reply(c, cookie.sequence, &reply, &error)) {
+            const xcb_window_t focus = reply ? static_cast<xcb_get_input_focus_reply_t *>(reply)->focus : XCB_WINDOW_NONE;
+            free(reply);
+            free(error);
+            timer->deleteLater();
+            then(focus);
+            return;
+        }
+        if (elapsed->elapsed() > timeoutMs) {
+            xcb_discard_reply(c, cookie.sequence);
+            timer->deleteLater();
+            then(XCB_WINDOW_NONE);
+        }
+    });
+    timer->start(1);
+}
+
+// Runs `then` once an XWayland target the bridge just activated really has X input focus
+// (an X round trip says so), or after kXFocusWaitMs. Immediately for everything else.
+static void whenXFocused(QObject *owner, const TextJob &job, std::function<void()> then)
+{
+    auto *x11 = qobject_cast<X11Window *>(job.target.data());
+    if (!job.xwayland || !job.activated || !x11) {
+        then();
+        return;
+    }
+    const xcb_window_t want = x11->window();
+    auto deadline = std::make_shared<QElapsedTimer>();
+    deadline->start();
+    auto ask = std::make_shared<std::function<void()>>();
+    *ask = [owner, want, deadline, ask, then]() {
+        xBarrier(owner, [owner, want, deadline, ask, then](xcb_window_t focus) {
+            if (focus == want || deadline->elapsed() > kXFocusWaitMs) {
+                *ask = nullptr; // break the cycle
+                then();
+            } else {
+                QTimer::singleShot(2, owner, [ask]() {
+                    if (*ask) {
+                        (*ask)();
+                    }
+                });
+            }
+        });
+    };
+    (*ask)();
+}
+
+// Runs `then` when Xwayland has routed every key sent so far (XWayland targets), right away otherwise.
+static void whenXDelivered(QObject *owner, const TextJob &job, std::function<void()> then)
+{
+    if (!job.xwayland) {
+        then();
+        return;
+    }
+    xBarrier(owner, [then](xcb_window_t) {
+        then();
+    });
+}
+
 // ------------------------------------------------------------------------------------ AgentKeyboard
 
 AgentKeyboard::AgentKeyboard(Agent *agent, Server *server, WindowModel *windows, HelperClient *helper)
@@ -614,7 +707,34 @@ void AgentKeyboard::key(Params &p, const ReplyPtr &reply)
             reply->fail(Err::Busy, QStringLiteral("the window did not accept keyboard focus"));
             return;
         }
-        SeatInterface *seat = waylandServer()->seat();
+        auto jobp = std::make_shared<TextJob>(job);
+        m_focusHolder = jobp;
+        const KeyStroke key = *stroke;
+        whenXFocused(this, *jobp, [this, jobp, reply, mods, key]() {
+            sendKey(jobp, reply, mods, key);
+        });
+    });
+}
+
+void AgentKeyboard::sendKey(const std::shared_ptr<TextJob> &jobp, const ReplyPtr &reply, const QStringList &mods, const KeyStroke &keyStroke)
+{
+    const KeyStroke *stroke = &keyStroke;
+    Window *w = jobp->target.data();
+    SeatInterface *seat = waylandServer()->seat();
+    if (m_focusHolder != jobp || !jobp->holdsFocus || !w || !reply->alive() || !m_agent->sessionActive() || waylandServer()->isScreenLocked()
+        || seat->focusedKeyboardSurface() != jobp->surface) {
+        // the owner typed meanwhile (ownerKey already answered), the window went away, or the session ended
+        if (m_focusHolder == jobp) {
+            releaseFocus(*jobp);
+            m_focusHolder.reset();
+        }
+        m_agent->m_inCall = std::max(0, m_agent->m_inCall - 1);
+        if (!reply->done()) {
+            reply->fail(w ? Err::Busy : Err::NotFound, w ? QStringLiteral("keyboard focus moved away before the key was sent") : QStringLiteral("the window went away"));
+        }
+        return;
+    }
+    {
         KWin::Display *display = waylandServer()->display();
         const xkb_mod_mask_t mask = modifierMask(mods) | stroke->mods;
         // press the modifier keys too: some clients look at key events, not only the modifier state
@@ -639,17 +759,17 @@ void AgentKeyboard::key(Params &p, const ReplyPtr &reply)
         const QJsonObject target{{QStringLiteral("windowId"), m_windows->tracked(w) ? QJsonValue(WindowModel::idOf(w)) : QJsonValue()},
                                  {QStringLiteral("appId"), m_windows->tracked(w) ? m_windows->serialize(w).value(QStringLiteral("appId")) : QJsonValue()}};
         // let the client process the key while it still has focus, then restore
-        auto jobp = std::make_shared<TextJob>(job);
-        m_focusHolder = jobp;
-        QTimer::singleShot(0, this, [this, jobp, reply, target]() {
-            releaseFocus(*jobp);
+        whenXDelivered(this, *jobp, [this, jobp, reply, target]() {
             if (m_focusHolder == jobp) {
+                releaseFocus(*jobp);
                 m_focusHolder.reset();
             }
-            m_agent->m_inCall--;
-            reply->ok(QJsonObject{{QStringLiteral("target"), target}});
+            m_agent->m_inCall = std::max(0, m_agent->m_inCall - 1);
+            if (!reply->done()) {
+                reply->ok(QJsonObject{{QStringLiteral("target"), target}});
+            }
         });
-    });
+    }
 }
 
 void AgentKeyboard::text(Params &p, const ReplyPtr &reply)
@@ -717,6 +837,19 @@ void AgentKeyboard::text(Params &p, const ReplyPtr &reply)
             finishJob(job, Err::Busy, QStringLiteral("the window did not accept keyboard focus"));
             return;
         }
+        job->waiting = true;
+        whenXFocused(this, *job, [this, job, hadFocus]() {
+            job->waiting = false;
+            if (!job->done) {
+                startJob(job, hadFocus);
+            }
+        });
+    });
+}
+
+void AgentKeyboard::startJob(const std::shared_ptr<TextJob> &job, bool hadFocus)
+{
+    {
         const QStringList allow = job->paths;
         const bool textInputAllowed = allow.isEmpty() || allow.contains(QStringLiteral("textInput"));
         if (textInputAllowed && !hadFocus && !textInputActiveFor(job->surface) && clientSupportsTextInput(job->surface)) {
@@ -748,7 +881,7 @@ void AgentKeyboard::text(Params &p, const ReplyPtr &reply)
             return;
         }
         runJob(job);
-    });
+    }
 }
 
 void AgentKeyboard::runJob(const std::shared_ptr<TextJob> &job)
@@ -1046,7 +1179,11 @@ void AgentKeyboard::finishJob(const std::shared_ptr<TextJob> &job, const QString
     };
     if (errorCode.isEmpty()) {
         // let the client consume the last events while it still has focus
-        QTimer::singleShot(0, this, finish);
+        if (job->xwayland) {
+            whenXDelivered(this, *job, finish);
+        } else {
+            QTimer::singleShot(0, this, finish);
+        }
     } else {
         finish();
     }

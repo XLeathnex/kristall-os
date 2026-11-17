@@ -107,6 +107,7 @@ private:
         std::vector<quint64> bindings;
         std::optional<KWin::RegionF> blurContent;
         std::optional<KWin::RegionF> blurFrame;
+        std::vector<ShapeSpec> internalShapes; ///< "kristallGlass" of a KWin-internal QML window (window-local)
         std::unique_ptr<KWin::BackgroundEffectItem> item;
         QMetaObject::Connection containerConnection;
         QMetaObject::Connection commitConnection;
@@ -119,7 +120,7 @@ private:
         bool hasAutoClip = false;
         KWin::RegionF autoClip; ///< window-local; app blur regions that are not a single rounded rect
 
-        bool isExplicit() const { return !bindings.empty(); }
+        bool isExplicit() const { return !bindings.empty() || !internalShapes.empty(); }
     };
 
     // windows and bindings
@@ -130,6 +131,8 @@ private:
     void slotBindingChanged(quint64 id, bool matchChanged);
     void slotBindingRemoved(quint64 id);
     void updateBlurRequest(KWin::EffectWindow *w);
+    void watchInternalGlass(KWin::EffectWindow *w);
+    Q_SLOT void internalGlassChanged();
     bool matches(quint64 bindingId, KWin::EffectWindow *w);
     void rematchBinding(quint64 id);
     void reportBindingCounts();

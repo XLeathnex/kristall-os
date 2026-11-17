@@ -27,6 +27,7 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include "text-input-unstable-v3-client-protocol.h"
+#include "pointer-constraints-unstable-v1-client-protocol.h"
 #include "xdg-decoration-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
@@ -38,6 +39,10 @@ static struct {
     struct xdg_wm_base *wm;
     struct zxdg_decoration_manager_v1 *deco;
     struct zwp_text_input_manager_v3 *tim;
+    struct zwp_pointer_constraints_v1 *constraints;
+    struct zwp_locked_pointer_v1 *lock;
+    struct zwp_confined_pointer_v1 *confine;
+    bool want_lock, want_confine, lock_on_key;
     struct wl_pointer *pointer;
     struct wl_keyboard *keyboard;
     struct zwp_text_input_v3 *ti;
@@ -284,6 +289,7 @@ static void k_leave(void *d, struct wl_keyboard *k, uint32_t serial, struct wl_s
 {
     emit("\"ev\":\"key_leave\",\"surface\":\"%s\"", surface_name(s));
 }
+static void apply_constraints(void);
 static void k_key(void *d, struct wl_keyboard *k, uint32_t serial, uint32_t time, uint32_t key, uint32_t state)
 {
     char utf8[64] = "", esc[128] = "", symname[64] = "";
@@ -297,6 +303,10 @@ static void k_key(void *d, struct wl_keyboard *k, uint32_t serial, uint32_t time
     json_escape(utf8, esc, sizeof(esc));
     xkb_mod_mask_t mods = g.state ? xkb_state_serialize_mods(g.state, XKB_STATE_MODS_EFFECTIVE) : 0;
     emit("\"ev\":\"key\",\"key\":%u,\"state\":%u,\"sym\":\"%s\",\"utf8\":\"%s\",\"mods\":%u", key, state, symname, esc, mods);
+    if (g.lock_on_key && state == WL_KEYBOARD_KEY_STATE_PRESSED && sym == XKB_KEY_l) {
+        g.want_lock = !g.want_lock;
+        apply_constraints();
+    }
 }
 static void k_modifiers(void *d, struct wl_keyboard *k, uint32_t serial, uint32_t dep, uint32_t lat, uint32_t lock, uint32_t group)
 {
@@ -346,11 +356,35 @@ static void ti_done(void *d, struct zwp_text_input_v3 *t, uint32_t serial)
 static const struct zwp_text_input_v3_listener ti_listener = {ti_enter, ti_leave, ti_preedit, ti_commit, ti_delete, ti_done};
 
 // ------------------------------------------------------------------------------- seat / registry
+// --lock / --confine: a persistent pointer lock or confinement on the window (like a game);
+// --lock-on-key: the key "l" toggles a pointer lock (requested, then destroyed).
+static void apply_constraints(void)
+{
+    if (!g.constraints || !g.pointer || !g.surface)
+        return;
+    if (g.want_lock && !g.lock) {
+        g.lock = zwp_pointer_constraints_v1_lock_pointer(g.constraints, g.surface, g.pointer, NULL, ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT);
+        wl_surface_commit(g.surface);
+        emit("\"ev\":\"lock\",\"on\":true");
+    } else if (!g.want_lock && g.lock) {
+        zwp_locked_pointer_v1_destroy(g.lock);
+        g.lock = NULL;
+        wl_surface_commit(g.surface);
+        emit("\"ev\":\"lock\",\"on\":false");
+    }
+    if (g.want_confine && !g.confine) {
+        g.confine = zwp_pointer_constraints_v1_confine_pointer(g.constraints, g.surface, g.pointer, NULL, ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT);
+        wl_surface_commit(g.surface);
+        emit("\"ev\":\"confine\",\"on\":true");
+    }
+}
+
 static void seat_caps(void *d, struct wl_seat *s, uint32_t caps)
 {
     if ((caps & WL_SEAT_CAPABILITY_POINTER) && !g.pointer) {
         g.pointer = wl_seat_get_pointer(s);
         wl_pointer_add_listener(g.pointer, &pointer_listener, NULL);
+        apply_constraints();
     }
     if ((caps & WL_SEAT_CAPABILITY_KEYBOARD) && !g.keyboard) {
         g.keyboard = wl_seat_get_keyboard(s);
@@ -384,6 +418,8 @@ static void reg_global(void *d, struct wl_registry *r, uint32_t name, const char
         g.deco = wl_registry_bind(r, name, &zxdg_decoration_manager_v1_interface, 1);
     else if (!strcmp(iface, zwp_text_input_manager_v3_interface.name))
         g.tim = wl_registry_bind(r, name, &zwp_text_input_manager_v3_interface, 1);
+    else if (!strcmp(iface, zwp_pointer_constraints_v1_interface.name))
+        g.constraints = wl_registry_bind(r, name, &zwp_pointer_constraints_v1_interface, 1);
 }
 static void reg_remove(void *d, struct wl_registry *r, uint32_t name)
 {
@@ -454,7 +490,8 @@ int main(int argc, char **argv)
                                    {"app-id", required_argument, 0, 'a'}, {"popup", no_argument, 0, 'p'},
                                    {"csd-move", no_argument, 0, 'm'},     {"ssd", no_argument, 0, 'd'},
                                    {"text-input", no_argument, 0, 'i'},   {"color", required_argument, 0, 'c'},
-                                   {"animate", no_argument, 0, 'n'},
+                                   {"animate", no_argument, 0, 'n'},     {"lock", no_argument, 0, 'L'},
+                                   {"confine", no_argument, 0, 'C'},     {"lock-on-key", no_argument, 0, 'K'},
                                    {0, 0, 0, 0}};
     int c;
     while ((c = getopt_long(argc, argv, "", opts, NULL)) != -1) {
@@ -486,6 +523,15 @@ int main(int argc, char **argv)
         case 'n':
             g.animate = true;
             break;
+        case 'L':
+            g.want_lock = true;
+            break;
+        case 'C':
+            g.want_confine = true;
+            break;
+        case 'K':
+            g.lock_on_key = true;
+            break;
         }
     }
     setvbuf(stdout, NULL, _IOLBF, 0);
@@ -515,6 +561,7 @@ int main(int argc, char **argv)
         zxdg_toplevel_decoration_v1_set_mode(td, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
     }
     wl_surface_commit(g.surface);
+    apply_constraints();
     emit("\"ev\":\"started\",\"pid\":%d", getpid());
     while (wl_display_dispatch(g.display) != -1) {
     }

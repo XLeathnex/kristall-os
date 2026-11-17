@@ -791,6 +791,62 @@ def test_shortcuts():
                 got = comp.get(action)
                 check(f"{fname} ▸ {action}: registered with default {', '.join(keys) or '(none)'}",
                       got is not None and all(w in got for w in want), f"got {[hex(g) for g in (got or [])]}")
+        # KRunner vs the assistant's Alt+Space: the stock KRunner file (X-KDE-Shortcuts=Alt+Space,…) is
+        # on XDG_DATA_DIRS here and no /etc/xdg default moves it, as for a user whose kglobalacceld
+        # already holds the stock keys. The helper must take Alt+Space off KRunner and own it.
+        alt_space = 0x08000000 | 0x20
+        krunner = ["org.kde.krunner.desktop", "_launch", "", ""]
+
+        def krunner_keys():
+            try:
+                v = call("/kglobalaccel", "org.kde.KGlobalAccel", "shortcutKeys", GLib.Variant("(as)", (krunner,)))[0]
+                return [k for seq in v for k in seq[0] if k]
+            except GLib.Error as e:
+                return f"error: {e.message}"
+        before = krunner_keys()
+        if isinstance(before, list) and alt_space not in before:
+            info(f"KRunner does not hold Alt+Space in this session ({[hex(k) for k in before]}); giving it the stock keys")
+            call("/kglobalaccel", "org.kde.KGlobalAccel", "doRegister", GLib.Variant("(as)", (krunner,)))
+            call("/kglobalaccel", "org.kde.KGlobalAccel", "setForeignShortcutKeys",
+                 GLib.Variant("(asa(ai))", (krunner, [([alt_space, 0, 0, 0],), ([0x08000000 | 0x01000031, 0, 0, 0],)])))
+            before = krunner_keys()
+        check("KRunner starts with the stock Alt+Space (the collision to fix)", isinstance(before, list) and alt_space in before,
+              str(before if not isinstance(before, list) else [hex(k) for k in before]))
+        helper = os.path.join(SHELL, "helper", "kristall-shell-helper")
+        for run in (1, 2):   # the second start checks that the fix is idempotent
+            env = dict(s.env(), LANG="de_DE.UTF-8")
+            env.pop("KRISTALL_SHELL_NO_SHORTCUTS", None)
+            hp = subprocess.Popen([sys.executable, helper], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            got_keys, freed = None, []
+            deadline = time.time() + 15
+            import select
+            while time.time() < deadline and got_keys is None:
+                r, _, _ = select.select([hp.stdout], [], [], 0.5)
+                if not r:
+                    continue
+                line = hp.stdout.readline()
+                if not line:
+                    break
+                try:
+                    ev = json.loads(line)
+                except ValueError:
+                    continue
+                if ev.get("event") == "shortcut.freed":
+                    freed.append(ev)
+                if ev.get("event") == "shortcut.registered" and ev.get("action") == "assistant-talk":
+                    got_keys = ev.get("keys")
+            hp.stdin.close()
+            hp.terminate()
+            try:
+                hp.wait(5)
+            except subprocess.TimeoutExpired:
+                hp.kill()
+            after = krunner_keys()
+            check(f"helper start {run}: the assistant owns Alt+Space", bool(got_keys) and alt_space in got_keys, str(got_keys))
+            check(f"helper start {run}: KRunner no longer has Alt+Space and keeps its other keys",
+                  isinstance(after, list) and alt_space not in after and len(after) >= 1, str(after if not isinstance(after, list) else [hex(k) for k in after]))
+            check(f"helper start {run}: " + ("Alt+Space was taken off KRunner" if run == 1 else "nothing left to change (idempotent)"),
+                  (len(freed) == 1) if run == 1 else (not freed), json.dumps(freed))
     finally:
         s.stop()
 

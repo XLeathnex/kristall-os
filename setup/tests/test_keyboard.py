@@ -95,8 +95,8 @@ class KeySession(bh.Session):
         os.makedirs(etc)
         os.makedirs(os.path.join(share, "kglobalaccel"))
         sw = os.path.join(REPO, "shell", "modules", "switcher")
-        merge = os.path.join(REPO, "shell", "modules", "dock", "image", "merge-ini")
-        if os.path.exists(merge):  # the image's switcher configuration (Meta+Tab = apps)
+        merge = os.path.join(REPO, "shell", "image", "merge-ini")  # shell-core's helper, as the image uses it
+        if True:  # the image's switcher configuration (Meta+Tab = apps)
             for name in ("kwinrc", "kglobalshortcutsrc"):
                 subprocess.run([sys.executable, merge, os.path.join(etc, name), os.path.join(sw, "kwin", name)], check=True)
             os.makedirs(os.path.join(share, "kwin", "tabbox"))
@@ -348,18 +348,12 @@ def test_bridge():
         wait_until(lambda: s.status().get("active"), 5)
         wins, clients = open_clients(s, b)
         def key(a, which, chord, want):
-            """agent.key into one window; an X11 window that was just (re)activated by the bridge may
-            miss the very first key (XWayland focus hand-over, a bridge matter): one retry, reported"""
+            """agent.key into one window: delivered on the first attempt, also to an X11 window the
+            bridge has just (re)activated (the bridge orders X focus and keys since 2026-11-17)"""
             p = clients[which]
-            got = "—"
-            for attempt in range(2):
-                m = p.mark()
-                a.key(chord, window_id=wins[which]["id"])
-                got = wait_until(lambda: keys_received(p, m) if keys_received(p, m) != "—" else None, 1.5) or "—"
-                if got != "—":
-                    break
-                info(f"{which}: agent.key {chord} was not delivered on attempt {attempt + 1} (bridge focus hand-over)")
-                time.sleep(0.5)
+            m = p.mark()
+            a.key(chord, window_id=wins[which]["id"])
+            got = wait_until(lambda: keys_received(p, m) if keys_received(p, m) != "—" else None, 1.5) or "—"
             check(f"agent.key {chord} arrives as {want}, untranslated ({which})", got == want, got)
 
         with b.agent_session("typing") as a:

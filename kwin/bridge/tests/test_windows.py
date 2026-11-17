@@ -309,5 +309,40 @@ def test_work_area():
         check(b.wait_event("outputs.changed", 1.0) is None, "no outputs.changed when nothing about the outputs changed")
 
 
+@test
+def test_pointer_constraint_fields():
+    """pointerLocked / pointerConstrained: a game-style pointer lock or confinement is reported, and changes live"""
+    with Session() as s:
+        b = s.bridge()
+        o = s.owner()                    # a pointer device, so clients create wl_pointer
+        o.move(400, 300)
+        s.wlprobe("--title", "plain", "--size", "300x200")
+        s.wlprobe("--title", "locked", "--size", "300x200", "--lock")
+        s.wlprobe("--title", "confined", "--size", "300x200", "--confine")
+        tog = s.wlprobe("--title", "toggle", "--size", "300x200", "--lock-on-key")
+        for title, lk, cf in (("plain", False, False), ("locked", True, False), ("confined", False, True), ("toggle", False, False)):
+            w = wait_until(lambda: (lambda x: x if x.get("pointerLocked") == lk and x.get("pointerConstrained") == cf else None)(window_by_title(b, title)), 3) \
+                or window_by_title(b, title)
+            check(w.get("pointerLocked") == lk and w.get("pointerConstrained") == cf,
+                  f"{title}: pointerLocked={w.get('pointerLocked')} pointerConstrained={w.get('pointerConstrained')} (want {lk}, {cf})")
+        wt = window_by_title(b, "toggle")
+        watcher = s.bridge("watcher")
+        watcher.subscribe("windows")
+        watcher.wait_event("windows.snapshot", 3)
+        with b.agent_session("lock") as a:
+            m = tog.mark()
+            a.key("l", window_id=wt["id"])
+            check(tog.wait(lambda e: e.get("ev") == "lock" and e.get("on") is True, 3, since=m) is not None, "the toggle window requested a lock")
+            ev = watcher.wait_event(lambda e: e["event"] == "window.changed" and e["data"]["id"] == wt["id"]
+                                    and e["data"]["changes"].get("pointerLocked") is True, 3)
+            check(ev is not None, "window.changed carries pointerLocked: true when the lock is requested")
+            m = tog.mark()
+            a.key("l", window_id=wt["id"])
+            check(tog.wait(lambda e: e.get("ev") == "lock" and e.get("on") is False, 3, since=m) is not None, "the toggle window released the lock")
+            ev = watcher.wait_event(lambda e: e["event"] == "window.changed" and e["data"]["id"] == wt["id"]
+                                    and e["data"]["changes"].get("pointerLocked") is False, 3)
+            check(ev is not None, "window.changed carries pointerLocked: false when the lock is destroyed")
+
+
 if __name__ == "__main__":
     sys.exit(run(sys.argv[1:]))

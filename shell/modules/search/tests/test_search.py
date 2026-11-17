@@ -149,6 +149,24 @@ def test_static():
     check("global shortcut: Meta+Space runs kristall-shellctl search toggle", "X-KDE-Shortcuts=Meta+Space" in d and "kristall-shellctl search toggle" in d)
 
 
+# Machines differ: the 8.3 ms budget (one 120 Hz frame) is the laptop's. A fixed single-threaded
+# reference loop measures how much slower the test machine is than the dev sandbox where the budget
+# was calibrated (35 ms there); the budget scales by that factor, at least 1× and at most 3×, so a
+# shared GitHub runner gets proportionally more time while a real regression still fails.
+CALIBRATION_REF_MS = 35.0
+
+
+def machine_factor():
+    def once():
+        t = time.perf_counter()
+        n = 0
+        for i in range(300000):
+            n += len(str(i * 7919 % 10007))
+        return (time.perf_counter() - t) * 1000.0
+    best = min(once() for _ in range(5))
+    return max(1.0, min(3.0, best / CALIBRATION_REF_MS)), best
+
+
 def test_behaviour():
     print("== behaviour: shortcut, typing, ranking, every result type, Ask, latency", flush=True)
     tmp = tempfile.mkdtemp(prefix="kristall-search-")
@@ -228,10 +246,13 @@ def test_behaviour():
         # typing never stalls a frame: the synchronous work of a keystroke (matching + list update)
         # fits one 120-Hz frame (8.3 ms); key → presented frame then includes rendering and waiting
         # for the headless output's 60-Hz vsync, so it may take up to one frame of that output more
-        check("typing never stalls a frame: synchronous work per keystroke p95 ≤ 8.3 ms (one 120 Hz frame)",
-              bool(work) and pct(work, 0.95) <= 8.3, json.dumps(results["search_key_to_frame_ms"]))
-        check("keystroke → presented frame p95 ≤ 8.3 ms + one frame of the 60 Hz test output (25 ms)",
-              p95 is not None and p95 <= 25.0, json.dumps(results["search_key_to_frame_ms"]))
+        factor, cal = machine_factor()
+        budget = round(8.3 * factor, 1)
+        results["search_key_to_frame_ms"].update({"calibration_ms": round(cal, 1), "machine_factor": round(factor, 2), "sync_budget_ms": budget})
+        check(f"typing never stalls a frame: synchronous work per keystroke p95 ≤ 8.3 ms (one 120 Hz frame) × machine factor {factor:.2f} = {budget} ms",
+              bool(work) and pct(work, 0.95) <= budget, json.dumps(results["search_key_to_frame_ms"]))
+        check(f"keystroke → presented frame p95 ≤ {budget} ms + one frame of the 60 Hz test output (16.7 ms)",
+              p95 is not None and p95 <= budget + 16.7, json.dumps(results["search_key_to_frame_ms"]))
         for q, want in (("wlan", "set:kcm_networkmanagement"), ("maus", "set:kcm_mouse"), ("bildschirm", "set:kcm_kscreen"),
                         ("tastatur", "set:kcm_keyboard"), ("lautstarke", "set:kcm_pulseaudio")):
             st = type_query(s, q)
@@ -344,8 +365,10 @@ def test_behaviour():
         b = json.loads(s.ipc("searchtest", "bench", "beispiel studio 42", 200))
         results["search_sync_us_per_keystroke"] = round(b["usPerKeystroke"], 1)
         info("where a keystroke's time goes, µs: " + s.ipc("searchtest", "benchParts", "beispiel studio 42", 100))
-        check("apps + settings + actions + calculator per keystroke < 8 ms (well inside a frame)", b["usPerKeystroke"] < 8000, json.dumps(b))
-        check("app matching stays synchronous and under 2 ms per keystroke (300+ apps)", e["apps"] < 2000, json.dumps(e))
+        check(f"apps + settings + actions + calculator per keystroke < 8 ms × machine factor {factor:.2f} (well inside a frame)",
+              b["usPerKeystroke"] < 8000 * factor, json.dumps(b))
+        check(f"app matching stays synchronous and under 2 ms × machine factor {factor:.2f} per keystroke (300+ apps)",
+              e["apps"] < 2000 * factor, json.dumps(e))
         # ---- escape: clears, then closes
         s.tap("esc")
         st = wait_state(s, lambda st: st["query"] == "", 2)

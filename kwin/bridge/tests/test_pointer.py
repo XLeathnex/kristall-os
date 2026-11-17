@@ -23,6 +23,18 @@ def final_focus(proc, mark=0):
     return inside, surface, x, y
 
 
+def settled_focus(proc, want, timeout=2.0):
+    """final_focus once the probe's log has caught up: the bridge sends the whole hover
+    restoration in one batch before it replies, but the probe is another process whose output
+    the test reads asynchronously (under CPU load that lags behind the reply). Waits until
+    want(state) holds, then checks it still holds 0.2 s later (a late, wrong event would show)."""
+    st = final_focus(proc)
+    if wait_until(lambda: want(final_focus(proc)), timeout):
+        time.sleep(0.2)
+        st = final_focus(proc)
+    return st
+
+
 def qt_hover(proc, mark=0):
     state = None
     for e in proc.since(mark):
@@ -114,9 +126,9 @@ def test_owner_pointer_and_hover_restored():
                 calls += 1
                 after = b.call("cursor.get")
                 check(before == after, f"{kind}: owner pointer unchanged {after}")
-                inside, surf, x, y = final_focus(under)
+                inside, surf, x, y = settled_focus(under, lambda f: f[0] and near(f[2], 120.25) and near(f[3], 80.5))
                 check(inside and near(x, 120.25) and near(y, 80.5), f"{kind}: 'under' is hovered again at the owner's position ({x}, {y})")
-                tin, _, _, _ = final_focus(target)
+                tin, _, _, _ = settled_focus(target, lambda f: not f[0])
                 check(not tin, f"{kind}: the agent's target does not keep pointer focus")
         # hover state for a Qt client under the owner's pointer
         qx, qy = content(wq)

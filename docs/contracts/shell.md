@@ -111,7 +111,7 @@ Rules:
   `kristall-bar-reveal` strip moves the bar to Overlay and slides it in (200 ms); it slides away
   when the pointer has left the bar and no menu of it is open. Not over games: no strip while the
   full-screen window is an Xwayland client, a known game/emulator app id, or reports
-  `pointerLocked`/`pointerConstrained` (bridge window fields, requested — not in bridge.md yet).
+  `pointerLocked`/`pointerConstrained` (bridge window fields, `docs/contracts/bridge.md` § Windows).
 * A popover that takes text input uses `WlrKeyboardFocus.Exclusive` while open and `None` when
   closed; others use `OnDemand`. Close on Escape and on a click outside (use a full-output transparent
   surface like `MenuHost`, or `HyprlandFocusGrab`-like grabs are not available on KWin).
@@ -235,7 +235,13 @@ tap-to-talk). The assistant's desktop file keeps its action without default keys
 press always fires exactly one path. Owner overrides are stored by kglobalacceld and loaded when
 the helper registers. A
 module that takes over a Plasma default (e.g. KRunner's Alt+Space) changes that default for every
-user in `/etc/xdg/kglobalshortcutsrc` (merge, never overwrite) and says so in its report.
+user in `/etc/xdg/kglobalshortcutsrc` (merge, never overwrite) and says so in its report. That
+default only reaches users whose kglobalacceld has not stored KRunner's keys yet, so the helper also
+resolves the collision at runtime: each time it registers `assistant-talk`, it asks kglobalacceld for
+KRunner's keys (`org.kde.krunner.desktop` / `_launch`, `shortcutKeys`) and, if one of them is one of
+the assistant's keys, removes just that key with `setForeignShortcutKeys` (KRunner keeps Alt+F2 and
+Search; event `shortcut.freed`). This goes through kglobalacceld, which stores it in the user's
+`kglobalshortcutsrc` itself; idempotent (`shell/tests/run.sh shortcuts`).
 shell-core registers: **Ctrl+F2** "Move focus to the menu bar"; "Close open menus" (no default);
 through the helper: the assistant's push-to-talk key (above).
 
@@ -296,7 +302,7 @@ Ops: `menu.open {key, service, path}`, `menu.close {key}`, `menu.aboutToShow {ke
 `update.refresh`, `watch.socket {path}`, `fallback.cleanup {delay}`. Events: `ready`,
 `menu.layout {key, revision, menu}`, `menu.error`, `menu.activate`, `update {status}`,
 `plasma {dark}`, `time.changed {reason}`, `socket {path, exists}`, `shortcut {action, state:
-pressed|released, heldMs}` (§6; key repeat is filtered), `shortcut.registered {action, keys}`.
+pressed|released, heldMs}` (§6; key repeat is filtered), `shortcut.registered {action, keys}`, `shortcut.freed {from, keys}` (§6).
 `KRISTALL_SHELL_NO_SHORTCUTS=1` keeps the helper from registering shortcuts. At start it asks kded to load
 its `appmenu` module (harmless if already loaded).
 

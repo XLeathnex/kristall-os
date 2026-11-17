@@ -102,6 +102,18 @@ segment (layer-shell surfaces, which have no ping: a 50 ms pause; no pong within
 The test checks raw clients (wire order), Qt and GTK 3 on Wayland (text-input + keys) and Qt under
 XWayland (keymap + clipboard) with a multi-line German letter. `hello` advertises `orderedText`.
 
+**X11 targets: focus and keys in order.** KWin sets X input focus over its X11 connection; keys reach
+Xwayland over its Wayland connection, and nothing orders the two. A key could therefore arrive before
+the activation's `SetInputFocus` was applied, or after the hand-back to the previous window, and land
+in another X window (seen as a lost Return right after a `clipboard` paste, and as lost first
+characters). The bridge now uses an X round trip as a barrier: after flushing the Wayland events it
+sends `GetInputFocus` on KWin's X11 connection and waits for the reply (non-blocking, a 1 ms timer
+only while it waits). Xwayland reads every ready socket in one wait and converts input before it runs
+requests, so the reply means every key sent before it has been routed; and its `focus` says whether
+the target has X focus yet (asked again until it does, ≤ 500 ms). Test:
+`test_x11_keys_after_clipboard_text` (six rounds of clipboard text + Return into a Qt/XCB window,
+alternating with a native window; failed every time before the fix).
+
 **Work area.** `outputs.changed` carries `workArea` per output: KWin's maximise area
 (`Workspace::clientArea(MaximizeArea, output)`), i.e. the output minus layer-shell exclusive zones
 and struts. KWin has no "client area changed" signal; the bridge marks the outputs dirty on

@@ -252,7 +252,7 @@ def _hands_decls(tmp_path):
     from kristall_assistant.brain import mcp_config
     hands = Path(__file__).resolve().parents[2] / "hands"
     if (hands / "kristall_hands").is_dir():
-        r = subprocess.run([sys.executable, "-I", "-c", "import sys; sys.path.insert(0, sys.argv[1]); "
+        r = subprocess.run([sys.executable, "-I", "-B", "-c", "import sys; sys.path.insert(0, sys.argv[1]); "
                             "from kristall_hands.__main__ import main; sys.argv = ['kristall-hands', 'dropin']; "
                             "sys.exit(main())", str(hands)],
                            capture_output=True, text=True, timeout=60)

@@ -1,8 +1,0 @@
-#!/usr/bin/python3
-# SPDX-License-Identifier: GPL-3.0-or-later
-# Moved to shell-core: shell/image/merge-ini. This forwarder only keeps old callers working
-# (setup/tests/test_keyboard.py); new code calls the core one.
-import os
-import sys
-core = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "image", "merge-ini")
-os.execv(sys.executable, [sys.executable, core] + sys.argv[1:])

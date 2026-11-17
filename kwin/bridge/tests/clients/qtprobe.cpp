@@ -108,6 +108,19 @@ protected:
 int main(int argc, char **argv)
 {
     QApplication app(argc, argv);
+    // every key press any widget receives (diagnostics for key paths), with the focused widget
+    struct KeyLog : QObject {
+        bool eventFilter(QObject *o, QEvent *e) override
+        {
+            if (e->type() == QEvent::KeyPress && o->isWidgetType()) {
+                auto *k = static_cast<QKeyEvent *>(e);
+                logj({{"ev", "keypress"}, {"key", k->key()}, {"text", k->text()}, {"mods", int(k->modifiers())}, {"widget", QString::fromLatin1(o->metaObject()->className())}});
+            }
+            return false;
+        }
+    };
+    KeyLog keyLog;
+    app.installEventFilter(&keyLog);
     app.setApplicationName(QStringLiteral("qtprobe"));
     app.setDesktopFileName(QStringLiteral("qtprobe"));
     QMainWindow win;

@@ -48,6 +48,8 @@ struct ShapeSpec
     double merge = 12.0; ///< smooth-union distance for the group, logical px
     double opacity = 1.0;
 
+    bool operator==(const ShapeSpec &) const = default;
+
     double effectiveRadius() const;
     double effectiveSmoothing() const;
     double effectiveBezel() const;

@@ -9,7 +9,7 @@ settings/        System Settings modules kcm_kristall_* (QML pages) + QML backen
 bin/             kristall-setup-helper (Wi-Fi, displays, touchpads, wallpapers, about), kristall-setup-start (unit)
 systemd/         kristall-setup.service (first login), preset
 data/            settings defaults 50-setup.json (keys keyboard, setup), /etc/xdg fragments (kwinrc, kdeglobals, kcm-about-distrorc), our mark
-image/           install.sh (builds against the image's KWin/Qt; also installs shell/modules/setup), merge-ini
+image/           install.sh (builds against the image's KWin/Qt; also installs shell/modules/setup; merges /etc/xdg files with shell-core's shell/image/merge-ini)
 tests/           run.sh, test_static.py, test_keyboard.py, test_setup.py, test_settings.py, clients/, support/, evidence/
 ../shell/modules/setup/   the Setup Assistant (Quickshell module): Module.qml (state machine), SetupWindow.qml, Step*.qml
 ```

@@ -106,6 +106,8 @@ Window object:
   "type": "normal"|"dialog"|"utility"|"popup"|"menu"|"tooltip"|"notification"|"osd"|"dock"|"desktop"|"splash"|"layer"|"other",
   "parentId": "<id>"|null,   // transient parent (dialogs)
   "xwayland": false,         // an X11 client
+  "pointerLocked": false,    // the client holds a pointer lock (zwp_locked_pointer_v1) on the window, active or not
+  "pointerConstrained": false, // the client holds a pointer confinement (zwp_confined_pointer_v1), active or not
   "content": {"x","y","w","h"},  // client area inside the frame (frame minus server-side decoration)
   "namespace": "kristall-dock"   // only for layer-shell surfaces
 }
@@ -116,7 +118,11 @@ menus) are listed with `"type": "popup"` (or `"menu"`) and `"normal": false`; th
 stacking order, bottom to top. `menu` is the window's DBusMenu (`com.canonical.dbusmenu` at
 `service`/`path`) — see `menus` above for when apps export one, and the notes below for which apps
 can. `icon` is often a generic name (`wayland`) for apps without a themed icon; use `appId` to find
-the desktop file.
+the desktop file. `pointerLocked`/`pointerConstrained` are what games and 3D tools request while they
+run (relative mouse look, a pointer kept inside the window); they change live (`window.changed`) when
+the client creates or destroys the constraint. They report the *request*: KWin activates a lock only
+while the window has pointer focus. XWayland games that grab the pointer through X11 instead are
+not covered (the shell treats every full-screen XWayland window as a game anyway).
 
 Events (topic `windows`): `windows.snapshot {"windows":[…]}`, `window.added {"window":{…}}`,
 `window.changed {"id":"…","changes":{<changed fields only>}}`, `window.removed {"id":"…"}`.
@@ -250,7 +256,13 @@ do not have pointer focus.
   "clipboard"]`.
   Keyboard focus: native Wayland targets get the seat's keyboard focus for the call without being
   activated or raised (the active window stays active); XWayland targets are activated (X11 input
-  focus follows activation) and the previous window is re-activated afterwards. With
+  focus follows activation) and the previous window is re-activated afterwards. For XWayland
+  targets `agent.key` and `agent.text` send no key before an X round trip (`GetInputFocus` on
+  KWin's X11 connection) confirms that the window has X input focus (≤ 500 ms), and hand focus back
+  only after a second round trip has shown that Xwayland routed every key sent: X focus and keys
+  travel on different connections, and without this a key right after a previous call (e.g. Return
+  after a `clipboard` paste) could reach whichever X window had focus by then (fixed 2026-11-17,
+  `test_x11_keys_after_clipboard_text`). Cost: one or two X round trips (< 1 ms) per call. With
   `restoreFocus: false` the target ends up active. If the owner presses a key during `agent.key` or
   `agent.text`, focus returns to the owner's window before that key is delivered (it is typed
   normally) and the call returns `busy`.
