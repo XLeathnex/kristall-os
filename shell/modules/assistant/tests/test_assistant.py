@@ -1050,7 +1050,9 @@ def test_realbridge():
         results["cursor_timing_real_bridge"] = r
         info("real bridge + hands: " + json.dumps(r))
         check("hands' real clicks: the cursor arrives on time (≤ 20 ms after ts + D) and before the bridge delivers the click",
-              len(pairs) == len(targets) and all(p["click_minus_arrival_ms"] >= 0 and p["arrival_minus_target_ms"] <= 20 for p in pairs), json.dumps(pairs))
+              # ≥ -1 ms, not ≥ 0: the arrival is the shell's Date.now() (1-ms resolution), the click
+              # this test's clock when the bridge event is read; CI saw a click "0.2 ms before" arrival
+              len(pairs) == len(targets) and all(p["click_minus_arrival_ms"] >= -1.0 and p["arrival_minus_target_ms"] <= 20 for p in pairs), json.dumps(pairs))
         check("click feedback (the ripple, from hands' pulse) appears within 50 ms of the real click",
               len(pairs) == len(targets) and all(abs(p.get("ripple_minus_click_ms", 999)) <= 50 for p in pairs), json.dumps(pairs))
         w = module_warnings(sess)

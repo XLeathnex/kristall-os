@@ -27,3 +27,4 @@ shots → scratchpad/polish/shots). Reinstall changed components inside the cont
 - evidence copied to docs/evidence/polish/*.jpg (688K). Docs: theme.md, setup.md 4.4/4.5, shell.md §6/§8, apps.md product_names, switcher README, image apps README. Switcher QML fixed (non-bindable warning) → rerun switcher + image (perm issue: use bash).
 - SUITES: image PASS (13 sections), panels PASS 193s, dock PASS, theme PASS (107 PASS, 3 SKIP pkg), shell PASS; setup running; switcher to re-run after setup.
 - ALL SUITES GREEN: image 13/13 sections, setup 432 PASS, shell 170, panels 132, dock 69, theme 107 (3 SKIP pkgs), switcher 16 (rerun after QML fix). Next: publish.
+- CI b7d79a1: Build OS image 44034348415 SUCCESS; Component tests 44034348089 FAIL only shell/modules/assistant (cursor-vs-click timing -0.2 ms; Date.now 1 ms resolution) → tolerance -1 ms, assistant suite 117 PASS locally; republishing.
