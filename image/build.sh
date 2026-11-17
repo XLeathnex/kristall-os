@@ -233,9 +233,14 @@ PY
     extra=$(rpm -qa 'kmod-*' 'akmod-*' '*-kmod' 2>/dev/null | grep -v -E '^kmod-(libs|devel)-[0-9]' || true)
     [[ -z $extra ]] || fail "out-of-tree kernel modules are installed ($extra); they would break Secure Boot for the owner"
     local unowned
+    local -a kpkgs
+    mapfile -t kpkgs < <(rpm -qa --queryformat '%{NAME}\n' kernel-core 'kernel-modules*' 2>/dev/null | sort -u)
+    ((${#kpkgs[@]})) || fail "no Fedora kernel packages (kernel-core, kernel-modules*) are installed"
+    # rpm records the kernel's files under /lib/modules (via the /lib -> usr/lib symlink): compare
+    # on /usr/lib. awk, not head: head would close the pipe early and SIGPIPE fails the build.
     unowned=$(comm -23 \
       <(find "/usr/lib/modules/$kver" -name '*.ko*' | sort) \
-      <(rpm -ql kernel-core kernel-modules kernel-modules-core kernel-modules-extra 2>/dev/null | grep '\.ko' | sort) | head -5)
+      <(rpm -ql "${kpkgs[@]}" 2>/dev/null | grep '\.ko' | sed 's#^/lib/#/usr/lib/#' | sort -u) | awk 'NR <= 5')
     [[ -z $unowned ]] || fail "kernel modules not from the Fedora kernel packages were found: $unowned"
   fi
 }
