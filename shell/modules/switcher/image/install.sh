@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # shell-apps / switcher: the app switcher is KWin's own (hold/release in the compositor) with our
 # layout; this installs the layout package, merges the switcher configuration into
-# /etc/xdg/kwinrc and the shortcuts (Meta+Tab, Meta+`, Ctrl+Up for Overview; Plasma's Meta+Tab
+# /etc/xdg/kwinrc and the shortcuts (Meta+Tab, Meta+`, Meta+W for Overview; Plasma's Meta+Tab
 # "walk through activities" unbound) into /etc/xdg/kglobalshortcutsrc — merged, never overwritten.
 set -euo pipefail
 PREFIX="${KRISTALL_PREFIX:-/usr}"
@@ -18,4 +18,6 @@ install -m 0644 "$here/kwin/tabbox/org.kristall.switcher/metadata.json" "$pkg/"
 install -m 0644 "$here/kwin/tabbox/org.kristall.switcher/contents/ui/main.qml" "$pkg/contents/ui/"
 python3 "$here/../../image/merge-ini" /etc/xdg/kwinrc "$here/kwin/kwinrc"
 python3 "$here/../../image/merge-ini" /etc/xdg/kglobalshortcutsrc "$here/kwin/kglobalshortcutsrc"
+# Control + ↑ → Overview (kglobalacceld reads share/kglobalaccel/ for every user)
+install -Dm0644 "$here/kglobalaccel/org.kristall.switcher.desktop" "$PREFIX/share/kglobalaccel/org.kristall.switcher.desktop"
 echo "switcher: installed to $dest and $pkg"

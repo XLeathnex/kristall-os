@@ -305,7 +305,7 @@ Singleton {
         const r = byKey[key];
         if (!r)
             return false;
-        r.entry.execute();
+        Apps.launchDesktopId(r.entry.id || key);     // in its own scope, not the shell's (Apps.qml)
         noteUse(key, "");
         launched(key);
         return true;

@@ -1,8 +1,9 @@
 # Refreshes kristall-integ:latest after component fixes: re-runs the changed components' real
 # image/install.sh (in components.list order) on top of the full build, plus base packages the
-# Kinoite base has and the first build lacked (systemd-pam: the user manager needs pam_systemd).
+# Kinoite base has and the first build lacked (systemd-pam: the user manager needs pam_systemd;
+# German and English locales).
 FROM kristall-integ:latest
-RUN dnf5 install -y --setopt=install_weak_deps=False systemd-pam >/dev/null && dnf5 clean all >/dev/null
+RUN dnf5 install -y --setopt=install_weak_deps=False systemd-pam glibc-langpack-de glibc-langpack-en >/dev/null && dnf5 clean all >/dev/null
 COPY . /ctx
 ARG COMPONENTS="kwin/glass kwin/bridge shell shell/modules/switcher assistant/hands setup"
 RUN set -e; for c in $COMPONENTS; do echo "== reinstall $c"; (cd /ctx/$c && KRISTALL_CTX=/ctx KRISTALL_COMPONENT=$c KRISTALL_STRICT=1 bash image/install.sh) 2>&1 | tail -3; done; \

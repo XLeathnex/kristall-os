@@ -48,14 +48,27 @@ Singleton {
         return tail ? tail.charAt(0).toUpperCase() + tail.slice(1) : "";
     }
 
+    // Apps are started outside the shell's own systemd unit: `kstart --application` (KIO) puts each
+    // into its own app-<id>@….service, as Plasma does. Started as the shell's children they lived in
+    // kristall-shell.service, so a shell crash or restart (Restart=always) killed every app the owner
+    // had opened from the Dock, Apps or Search, with their unsaved work (integration walkthrough).
+    readonly property string _scoped: 'id="$1"; command -v kstart >/dev/null && exec kstart --application "$id"; '
+        + 'exec systemd-run --user --scope --slice=app.slice --collect --quiet -- gtk-launch "$id"'
+    function launchDesktopId(desktopId) {
+        // case kept (Flatpak ids such as org.vinegarhq.Sober are case-sensitive file names); no
+        // ".desktop" suffix: kstart 6.8 then waits instead of returning
+        Quickshell.execDetached(["sh", "-c", _scoped, "kristall-launch", String(desktopId || "").replace(/\.desktop$/, "")]);
+    }
+    // a desktop action (e.g. "New Window") or any other command, in its own transient scope
+    function runScoped(command) {
+        if (!command || command.length === 0)
+            return;
+        Quickshell.execDetached(["systemd-run", "--user", "--scope", "--slice=app.slice", "--collect", "--quiet", "--"].concat(command));
+    }
     function launch(appIdOrDesktopId) {
         const d = desktopEntry(_norm(appIdOrDesktopId));
-        if (d) {
-            d.execute();
-            return true;
-        }
-        Quickshell.execDetached(["gtk-launch", _norm(appIdOrDesktopId)]);
-        return false;
+        launchDesktopId(d && d.id ? d.id : appIdOrDesktopId);
+        return d !== null && d !== undefined;
     }
 
     function launchKristall(kristallId) {

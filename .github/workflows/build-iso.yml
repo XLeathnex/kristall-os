@@ -109,6 +109,11 @@ jobs:
             --tag localhost/kristall-live:latest .
           df -h /
 
+      # Titanoboa moves the ISO with `realpath` (not -m) to iso-dest: the folder has to exist,
+      # otherwise the ISO stays inside the action's checkout and the job fails (run 43990164711).
+      - name: Prepare the output folder
+        run: mkdir -p "$GITHUB_WORKSPACE/output"
+
       - name: Make the ISO (Titanoboa)
         id: titanoboa
         uses: ublue-os/titanoboa@5c457c3d0518bd17e754be0fd98a60d29d26abb4 # main 2026-05-19

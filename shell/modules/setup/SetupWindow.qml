@@ -18,10 +18,16 @@ PanelWindow {
     readonly property bool welcome: ctl.step === "welcome" && ctl.mode === "full"
     readonly property var stepItem: body.item
     readonly property string side: stepItem && stepItem.side ? stepItem.side : "center"
+    // a step that sends the owner to another app (sign-in in the browser) steps aside: the card
+    // moves to the lower right, the desktop is no longer dimmed or blocked, and the keyboard goes
+    // to whatever the owner clicks — otherwise the card would cover and lock the browser
+    readonly property bool yielding: main && !welcome && stepItem !== null && stepItem.yieldToApps === true
 
     WlrLayershell.namespace: "kristall-setup-main"
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: main ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: !main ? WlrKeyboardFocus.None : (yielding ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive)
+    mask: yielding ? cardOnly : null
+    Region { id: cardOnly; item: card }
     exclusionMode: ExclusionMode.Ignore
     anchors { top: true; bottom: true; left: true; right: true }
     color: "transparent"
@@ -77,7 +83,7 @@ PanelWindow {
     Rectangle {            // the desktop behind the card, dimmed (less when the card shows the looks)
         anchors.fill: parent
         color: Qt.rgba(0, 0, 0, Theme.dark ? 0.45 : 0.28)
-        opacity: win.welcome ? 0 : (win.side === "left" ? 0.35 : 1)
+        opacity: win.welcome || win.yielding ? 0 : (win.side === "left" ? 0.35 : 1)
         Behavior on opacity { NumberAnimation { duration: Theme.duration("medium", true) } }
     }
     MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons }   // the desktop is not operated meanwhile
@@ -106,8 +112,9 @@ PanelWindow {
         visible: win.main && !win.welcome
         width: keys.cardW
         height: keys.cardH
-        x: win.side === "left" ? Math.max(32, Math.round(win.width * 0.06)) : Math.round((win.width - width) / 2)
-        y: Math.round(Theme.size.bar + (win.height - Theme.size.bar - height) / 2)
+        x: win.yielding ? win.width - width - 24 : (win.side === "left" ? Math.max(32, Math.round(win.width * 0.06)) : Math.round((win.width - width) / 2))
+        y: win.yielding ? win.height - height - 24 : Math.round(Theme.size.bar + (win.height - Theme.size.bar - height) / 2)
+        Behavior on y { NumberAnimation { duration: Theme.duration("long"); easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve("smooth") } }
         Behavior on x { NumberAnimation { duration: Theme.duration("long"); easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve("smooth") } }
         Behavior on height { NumberAnimation { duration: Theme.duration("medium"); easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve("smooth") } }
         MouseArea { anchors.fill: parent }
@@ -205,10 +212,14 @@ PanelWindow {
                 scheme: card.scheme
                 onClicked: win.ctl.back()
             }
-            Row {
-                anchors.centerIn: parent
+            Row {        // progress: centred, but never under the buttons (long German labels)
+                id: dots
+                readonly property real leftEdge: backButton.visible ? backButton.x + backButton.width + 12 : 0
+                readonly property real rightEdge: buttons.x - 12
+                x: Math.round(Math.max(leftEdge, Math.min((footer.width - width) / 2, rightEdge - width)))
+                anchors.verticalCenter: parent.verticalCenter
                 spacing: 6
-                visible: win.ctl.mode === "full"
+                visible: win.ctl.mode === "full" && rightEdge - leftEdge >= width
                 Repeater {
                     model: win.ctl.visibleSteps.length - 1      // the welcome has no dot
                     Rectangle {
@@ -222,6 +233,7 @@ PanelWindow {
                 }
             }
             Row {
+                id: buttons
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 8

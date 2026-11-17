@@ -70,3 +70,51 @@ C INSTALL.md, all suites totals.
 - integ systemd: works with private cgroup2 mount (host is cgroup v1). systemd-pam missing → Dockerfile.update adds it.
   Tools in scratchpad/integ/tools (start-container.sh, prepare.sh, start-session.sh, u.sh, shot.py).
 - smoke /var: coordinator diagnosis = the smoke script's own tool calls create /var/lib/kristall. Moved the strict check to the top (before tools run).
+- PUBLISHED 9deab88 (round 1). Watch Build OS image.
+- Session works: start-container.sh → prepare.sh (kwin shim must be named kwin_wayland; QPA checks) → start-session.sh. u = run as owner w/ session env. o.py = owner input (logical coords = shot1440 × 1.25 at scale 1.6). Scale 1.6 set via kscreen-doctor (virtual output has no EDID size).
+- WALKTHROUGH step 1 in progress (shots in scratchpad/integ/shots; copy best to docs/evidence/integration as JPEG at the end).
+  Fixes so far: StepDisplay re-queries displays when shown; SetupWindow dots no longer overlap long buttons;
+  setup steps can yieldToApps (sign-in: card to lower right, no dim, input only on card, keyboard OnDemand);
+  account.py: no double browser open (CLI opens itself) + children die with helper (PDEATHSIG, SIGTERM → exit)
+  [tests: assistant/core test_account_login_opens_the_browser_once, test_account_cancel_ends_the_cli]; image: firefox-langpacks.
+  Observed: container HAS internet (Claude installer really ran: claude 2.1.326 in ~/.local/bin). Firefox bar
+  "Speech Dispatcher library is missing" (English) on claude.ai.
+- Step 1 DONE (pass with fixes): every setup step in German via keyboard+pointer; mic test with PipeWire pipe-source
+  + Piper TTS WAV → transcript "Wie wird das Wetter morgen?" (real local ASR). Sign-in: real installer ran, OAuth URL correct
+  (claude.com/cai/oauth/authorize, client_id, PKCE S256, redirect localhost / platform.claude.com), cancel + Jetzt nicht path ok.
+  More fixes: KText property `st` shadowed setup steps' `id: st` → "{name}" shown verbatim (renamed typeStyle; setup smoke checks
+  no {placeholder}); SetupTestHooks.texts().
+  Open: setup card over a white browser shows the browser text through it (legibility); Return activates the focused
+  "Noch einmal" not Weiter; Firefox UI English until langpacks (added) + its English "Speech Dispatcher" bar; Firefox CSD
+  buttons are not traffic lights. Dock folder icon kept old accent until shell restart.
+- Step 3 findings+fixes: (1) CRITICAL: apps started from Dock/Apps/Search were children of kristall-shell.service →
+  `systemctl --user restart kristall-shell` (or a crash, Restart=always) KILLED all apps. Fix: Apps.launchDesktopId (kstart
+  --application → app-<id>@.service), runScoped (systemd-run --scope) for actions; AppCatalog/DockMenus use them; shell static
+  test; shell.md §7. Verified: dolphin/systemsettings survive shell restart. (2) Dock stuck magnified + label after Apps
+  overlay open/close: Dock resets hover on ShellBus.openChanged + sets hovering on motion. (3) kdesystemsettings.desktop
+  (NotShowIn=KDE, not evaluated by Quickshell) listed twice → hidden-apps.list. (4) container stripped translations
+  (%_install_langs) → reinstalled pkgs in session (sandbox artefact, not image).
+  Open: System Settings opens on "Plasma Systemeinstellungen" placeholder (KDE branding); kxkbrc reload didn't switch
+  layout live (owner typing US); Firefox CSD; window titles show "Dolphin"/"KWrite".
+- CI round 1 (9deab88): Build OS image 43987258165 SUCCESS, Component tests 43987257978 SUCCESS; ISO 43990164711 running (Find the published image passed → package already public).
+- Step 3 more: Cmd-Tab (physical Alt) → glass switcher PASS (03h). Minimise via yellow → tile in Dock, restore from tile PASS;
+  minimise ANIMATION not testable: KWin loads no animation effects on llvmpipe (magiclamp/scale/maximize absent from
+  loadedEffects; animationsSupported false on software GL) → unverified. Green = maximise (zoom) PASS; Ctrl+Cmd+F full screen PASS.
+  FIX: full-screen menu-bar reveal never slid away (bar moved Top→Overlay under resting pointer, no enter → no leave) →
+  Bar.qml revealWatch (bridge cursor.get, 2 Hz only while revealed & unhovered). Verified slides away.
+  FIX: Ctrl+Up Overview missing (KWin ignores extra keys for its Overview action from /etc/xdg) → switcher
+  kglobalaccel/org.kristall.switcher.desktop (invokeShortcut Overview). Overview itself works (03o) but KDE-looking
+  (desktop bar "Desktop 1" +, English "Search..." from stripped translations).
+  OPEN: maximised GTK3 CSD window (mousepad): traffic lights not vertically centred, half under the menu bar (theme gtk css).
+  kglobalaccel in real session: KRunner = [Search, Alt+F2] (no Alt+Space); assistant-talk = Alt+Space, Meta+Shift+F23, Meta+Shift+TouchpadOn.
+- Step 4 PASS: Cmd+Space search apps (dolph→Dateien), settings (tastatur→Tastatur; wlan has no page: plasma-nm absent in devenv), files (baloo: Rechnung-Fahrrad-2026.txt), Ask hand-off → assistant panel 'Melde dich ... an' (not signed in). Web search row → Firefox Google.
+- Step 5: CC opens (05a); banners for notify-send (05b) and Flatpak-style libnotify (05c); FIX NotifEntry: icon-name image (image://icon/<name>) → app icon slot, not checkerboard image (+panels test). DND via Focus page switch: no banner, in Notification Center (05e-05g), off → banner (05h). Portal (org.freedesktop.portal.Notification) from a host process: nothing shown — UNVERIFIED for real Flatpak (no Flathub here). Leftover notification 'Die Menüleiste ist ausgefallen' from my rapid manual shell restarts (StartLimitBurst counts systemctl restarts).
+- Step 6: Settings→Erscheinungsbild Dunkel+Lila: within ~2 s shell, Settings, Firefox, GTK3 mousepad, wallpaper, decorations dark (06c). OPEN: Dock/Apps folder-type icons (Files, Downloads) keep the old accent until the shell restarts — shell process's QIcon/KIconEngine pixmaps not recoloured on palette change; cache-busting URLs (tried, reverted) did not help. Lock screen check pending (step 7).
+- Step 6 more: ACCENT ONE CHANGE BEHIND in running Qt apps (sidebar/Firefox showed the previous accent): kristall-appearance
+  set_scheme pre-writes kdeglobals AccentColor (notify=False) then runs `plasma-apply-colorscheme --accent-color` → it sees no
+  change. Fix in progress: pre-write only when the scheme also switches.
+- Step 7 (partial): Ctrl+Cmd+Q locks (07a big clock, dark variant); bridge hello locked:true and `bridgectl type` → "denied: the
+  screen is locked"; unlock with password works (07b/07c). Lock screen shows KDE "Virtuelle Tastatur" button (plasma-keyboard).
+  Shift+Cmd+Q produced no log-out dialog (to check). Remaining: logout dialog, steps 8–12.
+- RESTART #2 (coordinator): containers killed. ISO run 43990164711 failed only at upload: titanoboa wrote
+  _actions/ublue-os/titanoboa/<sha>/output/KRISTALL-OS.iso (11.8 GB!) not output/Kristall-OS-Installer.iso. TODO fix path + size.

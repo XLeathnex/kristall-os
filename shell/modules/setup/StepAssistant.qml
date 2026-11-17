@@ -23,6 +23,7 @@ StepBase {
     showBack: !busyNow
 
     readonly property bool busyNow: phase === "working" || phase === "browser" || phase === "checking"
+    yieldToApps: phase === "browser"          // the owner signs in in the browser: get out of its way
     primaryText: phase === "ready" ? (signin ? Strings.t("setup.done") : Strings.t("setup.continue"))
                  : phase === "failed" ? Strings.t("setup.tryAgain")
                  : Strings.t("setup.assistant.signin")

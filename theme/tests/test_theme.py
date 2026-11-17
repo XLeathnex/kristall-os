@@ -574,6 +574,11 @@ def test_switch():
         time.sleep(4)
         st = json.loads(s.appearance("status", "--json").stdout or "{}")
         check("accent green: Plasma's AccentColor is the design token (#28CD41 light)", st.get("accentColor", "").replace(" ", "") == "40,205,65", json.dumps(st))
+        # what running Qt apps actually draw: the scheme's selection colour, re-tinted by
+        # plasma-apply-colorscheme --accent-color (before the fix it stayed one change behind)
+        sel = s.run(["kreadconfig6", "--file", "kdeglobals", "--group", "Colors:Selection", "--key", "BackgroundNormal"]).stdout.strip()
+        check("accent green reaches running Qt/KDE apps (kdeglobals Colors:Selection = accent, not the previous one)",
+              sel.replace(" ", "") == "40,205,65", sel)
         css = open(os.path.join(s.config, "gtk-4.0", "kristall.css")).read()
         check("accent green reaches GTK 4/libadwaita (--accent-bg-color) and GTK 3 (@accent_bg_color)",
               "--accent-bg-color: #28CD41" in css and "@define-color accent_bg_color #28CD41" in open(os.path.join(s.config, "gtk-3.0", "kristall.css")).read())

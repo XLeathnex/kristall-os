@@ -36,3 +36,7 @@ steam-devices
 
 # --- Desktop integration used by kristall-update / kristall-apps notifications
 libnotify
+
+# --- Firefox in the owner's language: Fedora ships its translations in a separate package that a
+#     weak-dependency-free install leaves out (the integration walkthrough saw an English Firefox).
+firefox-langpacks

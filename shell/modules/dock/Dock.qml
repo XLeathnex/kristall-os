@@ -537,6 +537,20 @@ PanelWindow {
         }
     }
 
+    // A shell overlay (Apps, Search, Control Center …) opening or closing while the pointer is on the
+    // Dock: the Dock's hover-leave can get lost (seen in the integrated session: click Apps, close it,
+    // move away — the Dock stayed magnified with its label). The Dock forgets its hover then; the next
+    // pointer motion over it brings the magnification back.
+    Connections {
+        target: ShellBus
+        function onOpenChanged() {
+            if (dockWindow.hovering && !mouse.pressed && !dockWindow.dragging) {
+                dockWindow.hovering = false;
+                dockWindow.hoverIndex = -1;
+            }
+        }
+    }
+
     MouseArea {
         id: mouse
         anchors.fill: parent
@@ -561,6 +575,8 @@ PanelWindow {
         onPositionChanged: m => {
             dockWindow.pointerX = m.x;
             dockWindow.pointerY = m.y;
+            if (!dockWindow.hovering)          // the pointer is here even if `entered` got lost (below)
+                dockWindow.hovering = true;
             if (dockWindow.dragging) {
                 dockWindow.moveDrag(m.x, m.y);
                 return;

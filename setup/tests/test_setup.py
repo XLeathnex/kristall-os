@@ -12,6 +12,7 @@ bridge and our keyboard plugin; the owner's real pointer and keys (fake input). 
   looks             screenshots: every step, light and dark, German; 1.6×, fallback, reduce motion
 """
 import json
+import re
 import os
 import signal
 import subprocess
@@ -94,10 +95,14 @@ def test_smoke():
         check("the Setup Assistant opens at the welcome", bool(st and st["open"]), json.dumps(st)[:300])
         time.sleep(1.6)
         save(s.screenshot(), "smoke-welcome.jpg")
+        unfilled = []
         for step in ORDER[1:]:
             s.ipc("setuptest", "go", step)
             time.sleep(1.0)
             save(s.screenshot(), f"smoke-{step}.jpg")
+            unfilled += [f"{step}: {t}" for t in json.loads(s.ipc("setuptest", "texts") or "[]") if re.search(r"\{\w+\}", t)]
+        # (a KText property named `st` once shadowed the steps' `id: st`: "{name}" was shown verbatim)
+        check("every text on every step is filled in (no {placeholder} left)", not unfilled, "\n".join(unfilled[:6]))
         bad = shell_problems(s)
         check("no QML warnings from the setup module", not bad, "\n".join(bad[:12]))
     finally:

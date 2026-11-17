@@ -597,6 +597,17 @@ def test_notifications():
         st = wait_ps(sess, lambda s: any(x["summary"] == "Lena" for x in s["banners"]))
         b = [x for x in st["banners"] if x["summary"] == "Lena"]
         check("with an image (raw image-data)", b and b[0]["image"].startswith("image://"), json.dumps(b))
+        # an icon *name* as app_icon (libnotify / Flatpak apps): the app icon, never the card's image
+        # (it showed the magenta "missing" checkerboard when the name did not resolve)
+        notify(sess, "-a", "Rechner", "-i", "org.example.NotInstalled", "-h", "string:desktop-entry:org.example.NotInstalled",
+               "Ergebnis kopiert", "42")
+        st = wait_ps(sess, lambda s: any(x["summary"] == "Ergebnis kopiert" for x in s["banners"]))
+        b = [x for x in st["banners"] if x["summary"] == "Ergebnis kopiert"]
+        check("an app_icon name is the app icon, not a content image (no checkerboard)", b and b[0]["image"] == "", json.dumps(b))
+        notify(sess, "-a", "Dateien", "-i", "folder", "Kopiert", "3 Dateien")
+        st = wait_ps(sess, lambda s: any(x["summary"] == "Kopiert" for x in s["banners"]))
+        b = [x for x in st["banners"] if x["summary"] == "Kopiert"]
+        check("…and a themed app_icon name shows as the app icon", b and b[0]["image"] == "" and b[0]["icon"] != "", json.dumps(b))
         # actions
         p = sess.run(["notify-send", "-a", "Kalender", "-A", "later=Später", "-A", "open=Öffnen", "--wait", "Termin", "Zahnarzt um 15 Uhr"], wait=False)
         st = wait_ps(sess, lambda s: any(x["summary"] == "Termin" for x in s["banners"]))

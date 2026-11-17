@@ -21,6 +21,7 @@ Item {
     property string side: "center"            // "left": the card moves aside to show the desktop
     property real cardWidth: 600
     property bool busy: false
+    property bool yieldToApps: false          // true: the owner works in another app now (SetupWindow.yielding)
     signal primaryRequested()
     signal secondaryRequested()
 

@@ -59,5 +59,21 @@ Scope {
             const it = w ? hooks.find(w.contentItem, name) : null;
             return it && it.text !== undefined ? String(it.text) : "";
         }
+        // every visible text on the card (JSON array): tests look for unfilled {placeholders}
+        function texts(): string {
+            const out = [];
+            const walk = item => {
+                if (!item || item.visible === false)
+                    return;
+                if (item.text !== undefined && typeof item.text === "string" && item.text !== "")
+                    out.push(item.text);
+                for (let i = 0; i < item.children.length; ++i)
+                    walk(item.children[i]);
+            };
+            const w = hooks.ctl.mainWindow;
+            if (w)
+                walk(w.contentItem);
+            return JSON.stringify(out);
+        }
     }
 }

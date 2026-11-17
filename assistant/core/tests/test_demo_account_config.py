@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -112,6 +113,51 @@ def test_account_login_with_code(aenv):
     assert rc == 0 and ev[-1]["ok"]
     rc, ev = account(["login"], dict(aenv, FAKE_CLAUDE_LOGGED_IN="0"), stdin="wrong\n")
     assert rc == 1 and ev[-1]["error"]["code"] == "not_signed_in" and ev[-1]["error"]["message"]["de"]
+
+
+def test_account_login_opens_the_browser_once(aenv, tmp_path):
+    """the CLI opens the browser itself; --open must not open its fallback URL a second time"""
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    log = tmp_path / "xdg-open.log"
+    (bindir / "xdg-open").write_text(f"#!/bin/sh\necho \"$@\" >> {log}\n")
+    (bindir / "xdg-open").chmod(0o755)
+    env = dict(aenv, PATH=f"{bindir}:{aenv.get('PATH', os.environ.get('PATH', '/usr/bin:/bin'))}")
+    rc, ev = account(["login", "--open"], env, stdin='{"code": "good-code"}\n')
+    url = next(e for e in ev if e["event"] == "open_url")
+    assert rc == 0 and url["opened"] == "cli"
+    assert not log.exists(), "the fallback URL was opened although the CLI opened the browser"
+    rc, ev = account(["login", "--open"], dict(env, FAKE_CLAUDE_NO_BROWSER="1"), stdin='{"code": "good-code"}\n')
+    url = next(e for e in ev if e["event"] == "open_url")
+    assert rc == 0 and url["opened"] == "helper"
+    for _ in range(50):
+        if log.exists():
+            break
+        time.sleep(0.05)
+    assert log.exists() and "claude.com" in log.read_text(), "a CLI that cannot open the browser: the helper opens it"
+
+
+def test_account_cancel_ends_the_cli(aenv, tmp_path):
+    """cancelling the sign-in (SIGTERM to the helper, as the Setup Assistant does) ends `claude auth login` too"""
+    p = subprocess.Popen([sys.executable, "-m", "kristall_assistant.account", "login"], env=aenv,
+                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    child = None
+    for _ in range(100):
+        r = subprocess.run(["pgrep", "-P", str(p.pid)], capture_output=True, text=True)
+        if r.stdout.strip():
+            child = int(r.stdout.split()[0])
+            break
+        time.sleep(0.05)
+    assert child, "the helper started no CLI process"
+    time.sleep(0.3)
+    p.terminate()
+    p.wait(10)
+    for _ in range(100):
+        if not os.path.exists(f"/proc/{child}") or open(f"/proc/{child}/stat").read().split()[2] == "Z":
+            break
+        time.sleep(0.05)
+    alive = os.path.exists(f"/proc/{child}") and open(f"/proc/{child}/stat").read().split()[2] != "Z"
+    assert not alive, "`claude auth login` kept running after the sign-in was cancelled"
 
 
 def test_account_logout_update_and_missing(aenv):

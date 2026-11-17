@@ -68,6 +68,14 @@ QtObject {
             .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&apos;/g, "'").replace(/&amp;/g, "&");
     }
 
+    // Quickshell reports an icon *name* sent as app_icon (libnotify/Flatpak apps) as the
+    // notification's image ("image://icon/<name>") with an empty appIcon. It is the app's icon, not
+    // content: shown as an image it became the icon theme's magenta "missing" checkerboard whenever
+    // the name did not resolve (integration walkthrough). It goes to the app-icon slot instead.
+    function _iconFromImage(img) {
+        return img.startsWith("image://icon/") ? decodeURIComponent(img.slice("image://icon/".length).split("?")[0]) : "";
+    }
+
     function sync() {
         if (!n)
             return;
@@ -77,7 +85,10 @@ QtObject {
         appIconName = n.appIcon || "";
         summary = _stripMarkup(n.summary);
         body = _stripMarkup(n.body);
-        image = n.image || "";
+        const asIcon = _iconFromImage(n.image || "");
+        if (asIcon !== "" && appIconName === "")
+            appIconName = asIcon;
+        image = asIcon !== "" ? "" : (n.image || "");
         urgency = n.urgency;
         expireTimeout = n.expireTimeout;
         resident = n.resident;

@@ -14,8 +14,10 @@ shows the layout while held, reverses with Shift, cancels with Escape.
   `ApplicationsMode=1`, no window highlighting.
 * `kwin/kglobalshortcutsrc` → merged into `/etc/xdg/kglobalshortcutsrc`: Meta+Tab / Meta+Shift+Tab
   (Alt+Tab kept), Meta+` and Meta+< (German keyboards) for the front app's windows, Overview on
-  Meta+W and Ctrl+↑ (the Mac's Mission Control key); Plasma's Meta+Tab "walk through activities"
-  is unbound.
+  Meta+W; Plasma's Meta+Tab "walk through activities" is unbound.
+* `kglobalaccel/org.kristall.switcher.desktop` → `/usr/share/kglobalaccel/`: Ctrl+↑ (the Mac's
+  Mission Control key) → KWin's Overview action (KWin ignores extra Overview keys from
+  `/etc/xdg/kglobalshortcutsrc`; found in the integrated session).
 * `Module.qml`: ShellBus target `switcher` for programs: `next` (= a quick Command-Tab), `previous`.
 
 Overview is KWin's Overview effect; its touchpad gesture is KWin's built-in four-finger swipe up

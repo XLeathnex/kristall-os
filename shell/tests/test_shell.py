@@ -157,6 +157,21 @@ def test_static():
                 used |= set(re.findall(r'Strings\.tn?\("([a-zA-Z0-9_.]+)"', open(os.path.join(root, f), encoding="utf-8").read()))
     missing = sorted(k for k in used if k not in strings["en"] and not k.endswith("."))
     check("strings: every key used in QML exists", not missing, ", ".join(missing))
+    # apps never start as the shell's own children: those live in kristall-shell.service, and a shell
+    # crash or restart would kill them (and the owner's unsaved work) — Apps.launchDesktopId/runScoped
+    direct = []
+    for root, _, files in os.walk(SHELL):
+        if "/tests" in root:
+            continue
+        for f in files:
+            if f.endswith(".qml"):
+                for n, line in enumerate(open(os.path.join(root, f), encoding="utf-8"), 1):
+                    if re.search(r"\.execute\(\)", line) and not line.strip().startswith("//"):
+                        direct.append(f"{os.path.relpath(os.path.join(root, f), SHELL)}:{n}")
+    check("apps are launched in their own scope (no DesktopEntry.execute() in the shell)", not direct, ", ".join(direct))
+    apps_qml = open(os.path.join(SHELL, "services", "Apps.qml"), encoding="utf-8").read()
+    check("Apps.launchDesktopId uses kstart --application (systemd-run --scope as fallback)",
+          "kstart --application" in apps_qml and "systemd-run --user --scope" in apps_qml)
     # settings defaults: only our top-level keys, and the QML fallbacks equal the shipped defaults
     d = json.load(open(os.path.join(SHELL, "image", "settings.json")))
     check("settings defaults own only appearance/accessibility/bar", set(d) == {"appearance", "accessibility", "bar"}, str(set(d)))

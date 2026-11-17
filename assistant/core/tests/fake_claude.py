@@ -236,7 +236,8 @@ def main():
         print("Successfully logged out from your Anthropic account.")
         return
     if argv[:2] == ["auth", "login"]:
-        print("Opening browser to sign in…")
+        if os.environ.get("FAKE_CLAUDE_NO_BROWSER") != "1":   # "1": a CLI that cannot open a browser itself
+            print("Opening browser to sign in…")
         print("If the browser didn't open, visit: https://claude.com/cai/oauth/authorize?code=true&client_id=test")
         sys.stdout.write("Paste code here if prompted > ")
         sys.stdout.flush()

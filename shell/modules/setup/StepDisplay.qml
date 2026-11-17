@@ -46,6 +46,10 @@ StepBase {
             ctl.helper.run([ctl.helper.tool, "displays"], r2 => { if (r2 && r2.outputs) ctl.helper.displays = r2.outputs; });
         });
     }
+    // the output may have changed since the Setup Assistant opened (another display, a scale set
+    // elsewhere): ask again whenever this step is shown
+    onCtlChanged: if (ctl)
+        ctl.helper.run([ctl.helper.tool, "displays"], r => { if (r && r.outputs) ctl.helper.displays = r.outputs; })
     function keyPressed(ev) {
         if (ev.key === Qt.Key_Left || ev.key === Qt.Key_Right) {
             choose(Math.max(0, Math.min(choices.length - 1, currentIndex + (ev.key === Qt.Key_Left ? -1 : 1))));

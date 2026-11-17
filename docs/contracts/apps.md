@@ -41,7 +41,7 @@ Consumers: the Dock and Apps grid (`shell`), the Setup Assistant (`setup`), the 
 | `flatpak.remote` | string | optional, default `flathub`. |
 | `flatpak.branch` | string | optional, default: the remote's single branch (`stable`). |
 | `flatpak.overrides` | string[] | optional `flatpak override --system` options applied after install. |
-| `embed_in_iso` | bool | `flatpak` only: copied onto the installer USB stick. Always `false` for proprietary apps (we do not redistribute them). |
+| `embed_in_iso` | bool | `flatpak` only: may be copied onto the installer USB stick. Always `false` for proprietary apps (we do not redistribute them). The current installer embeds **no** apps (2026-11-17: with them the ISO was 11.8 GB); every default app is installed on first start by `kristall-apps-provision` — the field marks what an offline edition would carry. |
 | `desktop_id` | string | the `.desktop` file name to launch (`gtk-launch`/`KService` ID), unique. |
 | `name.en`, `name.de` | string | display names we author (may differ from the app's own name, e.g. "Dateien"). |
 | `category` | enum | `system`, `internet`, `media`, `graphics`, `games`, `developer`, `utilities`, `productivity` |

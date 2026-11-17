@@ -11,16 +11,16 @@ Text {
     property string scheme: Theme.scheme
     property string level: "label"
     property bool tabular: false           // tabular figures (clock, percentages)
-    readonly property var st: Theme.type[textStyle] || Theme.type.body
+    readonly property var typeStyle: Theme.type[textStyle] || Theme.type.body
 
-    font.family: st.family
-    font.pixelSize: st.size
-    font.weight: emphasized ? st.emphasized : st.weight
-    font.letterSpacing: st.tracking
+    font.family: typeStyle.family
+    font.pixelSize: typeStyle.size
+    font.weight: emphasized ? typeStyle.emphasized : typeStyle.weight
+    font.letterSpacing: typeStyle.tracking
     font.features: tabular ? { "tnum": 1, "calt": 1 } : { "calt": 1 }
     font.hintingPreference: Font.PreferNoHinting
     lineHeightMode: Text.FixedHeight
-    lineHeight: st.line
+    lineHeight: typeStyle.line
     verticalAlignment: Text.AlignVCenter
     renderType: Text.NativeRendering
     color: Theme.color(scheme, level)

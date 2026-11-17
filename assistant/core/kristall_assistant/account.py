@@ -23,6 +23,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import socket
 import sys
 import tempfile
@@ -68,12 +69,23 @@ def notify_daemon() -> None:
         pass
 
 
+def _die_with_parent() -> None:
+    """Child processes (the installer, `claude auth login`) end when this helper ends — also when the
+    Setup Assistant cancels it with a signal or is killed: a cancelled sign-in left `claude auth
+    login` running (integration walkthrough 2026-11-17)."""
+    try:
+        import ctypes
+        ctypes.CDLL(None, use_errno=True).prctl(1, signal.SIGTERM)   # PR_SET_PDEATHSIG
+    except (OSError, AttributeError):
+        pass
+
+
 async def stream(argv: list[str], *, stdin_lines: asyncio.Queue | None = None, timeout: float = 900,
                  on_line=None, env: dict | None = None) -> int:
     proc = await asyncio.create_subprocess_exec(
         *argv, stdin=asyncio.subprocess.PIPE if stdin_lines else asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
-        env=env or climod.child_env(), cwd=os.path.expanduser("~"))
+        env=env or climod.child_env(), cwd=os.path.expanduser("~"), preexec_fn=_die_with_parent)
 
     async def feed():
         while True:
@@ -176,13 +188,21 @@ async def cmd_login(console: bool, open_browser: bool) -> int:
         return result(False, st.as_dict(), "cli_outdated")
     q: asyncio.Queue = asyncio.Queue()
     seen: set[str] = set()
+    # The CLI opens the browser itself ("Opening browser to sign in…", with its local callback) and
+    # then prints a fallback URL ("If the browser didn't open, visit: …"). Opening that one as well
+    # gave the owner two browser windows and two sign-ins (integration walkthrough 2026-11-17), so
+    # --open only opens it when the CLI did not say it opens the browser.
+    cli_opens = False
 
     def on_line(text: str) -> None:
+        nonlocal cli_opens
+        if "opening browser" in text.lower():
+            cli_opens = True
         for url in URL_RE.findall(text):
             if url not in seen:
                 seen.add(url)
-                out(event="open_url", url=url)
-                if open_browser and shutil.which("xdg-open"):
+                out(event="open_url", url=url, opened="cli" if cli_opens else ("helper" if open_browser else "none"))
+                if open_browser and not cli_opens and shutil.which("xdg-open"):
                     os.spawnlp(os.P_NOWAIT, "xdg-open", "xdg-open", url)
         if "code" in text.lower() and ("paste" in text.lower() or "enter" in text.lower()):
             out(event="need_code")
@@ -227,6 +247,13 @@ async def cmd_logout() -> int:
     return result(rc == 0, st.as_dict(), None if rc == 0 else "service_error")
 
 
+def _interrupt(*_args) -> None:
+    # not a KeyboardInterrupt: asyncio.run would then wait for the thread blocked reading stdin
+    result(False, None, "internal", "interrupted")
+    sys.stdout.flush()
+    os._exit(143)
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="kristall-assistant-account", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -235,6 +262,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--console", action="store_true", help="sign in with an Anthropic Console account instead")
     p.add_argument("--open", action="store_true", help="also open the sign-in page with xdg-open")
     a = p.parse_args(argv)
+    # a cancel from the Setup Assistant is a SIGTERM: report it and end at once (children follow,
+    # see _die_with_parent)
+    signal.signal(signal.SIGTERM, _interrupt)
     try:
         if a.command == "status":
             return asyncio.run(cmd_status())

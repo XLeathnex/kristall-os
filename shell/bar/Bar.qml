@@ -40,7 +40,7 @@ PanelWindow {
     // rest there reveal the bar (Overlay, slides in over 200 ms); it slides away when the pointer
     // has left the bar and no menu of this bar is open. Games keep the edge: no strip while the
     // full-screen window is an X11 (Xwayland) client, a known game/emulator app, or reports pointer
-    // lock (`pointerLocked`, bridge contract addition requested).
+    // lock (`pointerLocked`/`pointerConstrained`, bridge window fields).
     readonly property var fullscreenWin: frontHere && front.fullscreen && !front.minimized ? front : null
     readonly property bool gameLike: {
         const w = fullscreenWin;
@@ -92,6 +92,25 @@ PanelWindow {
         id: hideTimer
         interval: 250
         onTriggered: if (!barWindow.pointerOnBar && !barWindow.menuOpenHere) barWindow._hideReveal(false)
+    }
+    // The bar moves from Top to Overlay under a pointer that rests at the edge: KWin re-picks the
+    // pointer focus only on motion, so the bar may never see that pointer enter — and then never see
+    // it leave either (in the integrated session the bar stayed over the full-screen window). While
+    // revealed and not hovered, ask the bridge where the owner's pointer is (2 Hz, only in this
+    // transient state) and slide away once it is clearly below the bar.
+    Timer {
+        id: revealWatch
+        interval: 500
+        repeat: true
+        running: barWindow.revealed && !barWindow.pointerOnBar && !barWindow.menuOpenHere
+        onTriggered: Bridge.call("cursor.get", {}, (r, err) => {
+            if (err || !r || !barWindow.screen)
+                return;
+            const sy = barWindow.screen.y || 0, sx = barWindow.screen.x || 0;
+            const away = r.y > sy + Theme.size.bar + 8 || r.x < sx || r.x >= sx + barWindow.screen.width;
+            if (away && barWindow.revealed && !barWindow.pointerOnBar && !barWindow.menuOpenHere)
+                barWindow._hideReveal(false);
+        })
     }
     onPointerOnBarChanged: if (revealed && !pointerOnBar && !menuOpenHere) hideTimer.restart()
     onMenuOpenHereChanged: if (revealed && !pointerOnBar && !menuOpenHere) hideTimer.restart()

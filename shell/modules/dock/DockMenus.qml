@@ -50,7 +50,7 @@ Singleton {
             const a = acts[i];
             if (!a || !a.name)
                 continue;
-            items.push({ label: a.name, action: () => { a.execute(); AppCatalog.noteUse(key, ""); } });
+            items.push({ label: a.name, action: () => { Apps.runScoped(a.command); AppCatalog.noteUse(key, ""); } });
             nActs++;
         }
         if (nActs)

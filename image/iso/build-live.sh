@@ -30,22 +30,12 @@ mapfile -t PKGS < <(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$ISO/packages.list"
 dnf5 -y install --setopt=install_weak_deps=False \
   --exclude='kernel,kernel-core,kernel-modules,kernel-modules-core,kernel-modules-extra' "${PKGS[@]}"
 
-step "Default apps that travel on the USB stick (free software only)"
-# bubblewrap (used by flatpak's triggers) needs to write /proc/sys/user/max_user_namespaces.
-mount -o remount,rw /proc/sys 2>/dev/null || true
-flatpak remote-add --system --if-not-exists flathub /etc/flatpak/remotes.d/flathub.flatpakrepo
-mapfile -t EMBED < <(kristall-apps list --embed --flatpak-ids)
-((${#EMBED[@]})) || fail "the app manifest lists no Flatpaks to embed"
-flatpak install --system -y --noninteractive flathub "${EMBED[@]}"
-# Same per-app overrides the first-boot provisioning would apply.
-kristall-apps list --embed | python3 -c '
-import json, subprocess, sys
-for a in json.load(sys.stdin)["apps"]:
-    ov = a["flatpak"].get("overrides") or []
-    if ov:
-        subprocess.run(["flatpak", "override", "--system"] + ov + [a["flatpak"]["id"]], check=True)
-'
-flatpak list --system --app --columns=application,version
+# No apps travel on the USB stick: embedding the default Flatpaks (KDE/GNOME runtimes, Blender,
+# Wine for Vinegar …) made the ISO 11.8 GB (run 43990164711). The installed system downloads them
+# on first start (kristall-apps-provision, progress in the menu bar), which needs the internet
+# anyway for Claude and updates; docs/INSTALL.md says so. The manifest's embed_in_iso is kept for
+# a possible offline edition.
+step "Default apps: not on the USB stick (installed on first start)"
 
 step "Offline copy of the OS image to install"
 src="docker://$REF:$TAG"
@@ -55,6 +45,16 @@ mkdir -p "$(dirname "$PAYLOAD_DIR")"
 skopeo copy --retry-times 3 "$src" "oci:$PAYLOAD" ||
   fail "could not download $src. Is the package public? (GitHub → your profile → Packages → kristall-os → Package settings → Change visibility → Public)"
 du -sh "$PAYLOAD_DIR"
+
+step "Slimmer live system (the installer never uses these; the installed system gets the full image)"
+# The live system is the OS image itself, and the ISO also carries the OS image as the payload: every
+# byte removed here shrinks the ISO once. The speech models and the assistant's private Python
+# (≈1.5 GB) are not needed to install. (Packages stay: removing RPMs could take installer pieces along.)
+rm -rf /usr/share/kristall/assistant/models /usr/lib/kristall/assistant/venv
+for u in kristall-assistant.service kristall-hands-session.service; do
+  systemctl --global disable "$u" 2>/dev/null || true
+done
+du -sh /usr 2>/dev/null || true
 
 step "Live boot initramfs"
 mapfile -t KVERS < <(find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d -printf '%f\n')

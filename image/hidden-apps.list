@@ -24,6 +24,11 @@ org.kde.kdeconnect.nonplasma.desktop
 org.kde.krfb.desktop
 org.kde.krfb.virtualmonitor.desktop
 org.kde.krdpserver.desktop
+# System Settings' own second entry ("KDE-Systemeinstellungen"): it carries NotShowIn=KDE, which
+# the shell's Apps/Search (Quickshell DesktopEntries) do not evaluate, so it appeared next to
+# "Systemeinstellungen" (integration walkthrough). Hidden, it still serves its purpose (System
+# Settings opened on one page).
+kdesystemsettings.desktop
 # Duplicates of Search / System Monitor / Files
 org.kde.kfind.desktop
 org.kde.filelight.desktop
