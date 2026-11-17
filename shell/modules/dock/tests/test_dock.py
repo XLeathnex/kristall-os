@@ -453,18 +453,32 @@ def test_perf():
         # leaving: back to zero frames
         s.move(s.width / 2, 300)
         time.sleep(1.0)
-        f0 = s.dock()["frames"]
         try:
             g = s.connect()
-            g0 = g.status()["frames"]
         except OSError:
-            g, g0 = None, None
+            g = None
+        # the pointer now rests over Kate/Konsole, whose hover repaint can land late on a loaded
+        # machine: start the window once the compositor has been quiet for 1 s (at most 4 s)
+        if g:
+            last, quiet_since, give_up = g.status()["frames"], time.monotonic(), time.monotonic() + 4.0
+            while time.monotonic() - quiet_since < 1.0 and time.monotonic() < give_up:
+                time.sleep(0.25)
+                now = g.status()["frames"]
+                if now != last:
+                    last, quiet_since = now, time.monotonic()
+        # the menu bar's clock repaints once a minute, on the minute: keep the window clear of that
+        sec = time.localtime().tm_sec
+        if sec >= 54:
+            time.sleep(61 - sec)
+        f0 = s.dock()["frames"]
+        g0 = g.status()["frames"] if g else None
         c0 = A.proc_cpu_ms(pids)
         time.sleep(4.0)
         c1 = A.proc_cpu_ms(pids)
         f1 = s.dock()["frames"]
         g1 = g.status()["frames"] if g else None
-        idle = {"dock_frames": f1 - f0, "compositor_frames": None if g0 is None else g1 - g0, "shell_cpu_ms": round(c1 - c0, 1)}
+        idle = {"dock_frames": f1 - f0, "compositor_frames": None if g0 is None else g1 - g0, "shell_cpu_ms": round(c1 - c0, 1),
+                "started_at_second": sec}
         results["dock_idle_after_leave"] = idle
         check("pointer left: the Dock presents no frames, the compositor repaints nothing, ~0 CPU (4 s)",
               idle["dock_frames"] == 0 and idle["compositor_frames"] in (0, None) and idle["shell_cpu_ms"] < 30, json.dumps(idle))

@@ -60,6 +60,12 @@ def session(name, settings=None, shortcuts=False, **kw):
     s = A.AppsSession(name=name, settings=settings, global_shortcuts=shortcuts, sysconf=root, **kw)
     for did, n, icon, cats in FAKE:
         s.desktop(did, n, icon, extra=f"Categories={cats}\n")
+    # "Deinstallieren" hands off to appstream://: a stub store here. The dev container's real handler
+    # is Firefox, whose window appeared a moment later and took the keyboard (the next ↩ went to it)
+    s.desktop("kristall-test-appstore", "Test app store", extra="NoDisplay=true\nMimeType=x-scheme-handler/appstream;\n")
+    os.makedirs(s.config, exist_ok=True)
+    with open(os.path.join(s.config, "mimeapps.list"), "a") as f:
+        f.write("[Default Applications]\nx-scheme-handler/appstream=kristall-test-appstore.desktop\n")
     s.start()
     bg = os.path.join(s.tmp, "bg.png")
     Image.fromarray(pattern.busy(s.width, s.height)).save(bg)

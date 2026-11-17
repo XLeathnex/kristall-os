@@ -11,10 +11,10 @@
    "autohide"
   ],
   "failures": [],
-  "time": "2026-11-17T02:06:57"
+  "time": "2026-11-17T04:36:07"
  },
- "dolphin_launch_s": 0.74,
- "dock_layout_us_per_pass": 15,
+ "dolphin_launch_s": 0.57,
+ "dock_layout_us_per_pass": 21,
  "dock_magnify_sweep": {
   "sweep_s": 2.05,
   "pointer_events": 241,
@@ -22,13 +22,14 @@
   "fps": 59.5,
   "interval_ms_p50": 17,
   "interval_ms_p95": 18,
-  "interval_ms_max": 24,
-  "shell_cpu_ms": 460.0,
-  "cpu_ms_per_frame": 3.77
+  "interval_ms_max": 21,
+  "shell_cpu_ms": 450.0,
+  "cpu_ms_per_frame": 3.69
  },
  "dock_idle_after_leave": {
   "dock_frames": 0,
   "compositor_frames": 0,
-  "shell_cpu_ms": 0.0
+  "shell_cpu_ms": 0.0,
+  "started_at_second": 2
  }
 }

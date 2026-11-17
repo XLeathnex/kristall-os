@@ -185,3 +185,16 @@ C INSTALL.md, all suites totals.
   "no stock owner competes" via KGlobalAccel.allComponents. keyboard:system passes; full setup suite re-running.
 - Step 7 logout: no Mac chord for log out exists (none designed; ⇧⌘Q unbound) → via menu bar  menu 'kristall abmelden …' → Kristall logout dialog, German, 60 s countdown, Esc cancels (07e). Neustart … dialog also seen. (My earlier misclick came from assuming scale 1.6; this session runs at 1.0.)
 - setup suite full re-run: ALL PASSED (with the shadowing fix). Final local totals: all 15 suites green.
+- PUBLISHED round 4 bb65abb. Watching CI.
+- Step 3 window arranging: drag title bar to the left edge → KWin edge-tile preview → left half between menu bar and Dock (03q). PASS. (o.py drag must be one invocation: fake-input client disconnect releases the button.) Lock screen in this container shows English 'Password'/'Virtual Keyboard' — kscreenlocker translations missing in the sandbox (stripped %_install_langs), not checked on the image.
+- CI round 4 bb65abb: Build OS image 44012814486 SUCCESS; Component tests 44012814473 FAIL: apps (↩ opens Kate; Dock
+  tile opens Apps) and dock (pointer left: 1 compositor frame in 4 s). Both flaky, not round-4 changes.
+  apps ROOT CAUSE (reproduced 2/5 locally, timestamped): the 'Deinstallieren' check really ran xdg-open appstream://…,
+  which in the dev container is Firefox; its window mapped ~1 s later and took the keyboard, so ↩ went to Firefox.
+  FIX test: stub x-scheme-handler/appstream (NoDisplay desktop file + mimeapps.list). 10/10 behaviour runs pass.
+  (Image: Discover stays installed hidden and handles appstream:// until Bazaar is there.)
+  dock: Dock frames 0 and shell CPU 0; the one compositor frame came from Kate/Konsole under the resting pointer
+  (late hover repaint). FIX test: start the 4 s window after the compositor was quiet for 1 s (max 4 s). Looping.
+- dock idle: settle alone still failed 1/4 locally ({"compositor_frames": 1, "shell_cpu_ms": 10}): the menu bar clock
+  repaints on the minute. Added: window kept clear of the minute tick (start ≥ :54 → wait to :01) + started_at_second in
+  the result. perf section 8/8 pass, all zero.
