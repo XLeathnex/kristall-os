@@ -44,7 +44,10 @@ Singleton {
         const d = desktopEntry(appId);
         if (d && d.name)
             return d.name;
-        const tail = (appId || "").split(".").pop();
+        // Wine/Proton windows (Roblox Studio through Vinegar, …) carry the program file as app id
+        // ("notepad.exe", "RobloxStudioBeta.exe"): the program, not "Exe"
+        const id = String(appId || "").replace(/\.exe$/i, "");
+        const tail = id.split(".").pop();
         return tail ? tail.charAt(0).toUpperCase() + tail.slice(1) : "";
     }
 

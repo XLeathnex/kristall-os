@@ -141,13 +141,51 @@ client provides the clipboard (ext-data-control-v1) for the `clipboard` text pat
 
 ## Global menus
 
-Apps export their menus only while a menu *view* owns the D-Bus name `org.kde.kappmenuview`
-(kded's appmenu module then publishes `com.canonical.AppMenu.Registrar`). Plasma's panels are
-removed in Kristall, so the bridge owns that name while a client subscribes to the `menus` topic,
-and releases it when the shell goes away — apps then show their in-window menu bars again.
-Verified: Qt/KDE apps (Wayland and XWayland, KDE platform theme), GTK 3 under XWayland
-(`unity-gtk-module` + `gmenudbusmenuproxy`). Native-Wayland GTK and GTK 4/libadwaita apps
-cannot export menus (no protocol); their `menu` is `null`.
+Every app with a menu bar shows its menus only in the Kristall menu bar, and keeps a usable menu
+bar of its own while no menu bar can show them.
+
+* **Registrar from KWin's start.** Qt decides once per process, when it creates its first menu bar,
+  whether menus are exported (`QGenericUnixTheme::isDBusGlobalMenuAvailable()` is a function-local
+  static in Qt 6.11): only if `com.canonical.AppMenu.Registrar` exists at that moment. kded's appmenu
+  module publishes it while somebody owns `org.kde.kappmenuview`. The bridge owns that name for
+  KWin's whole life (`BusNameClaim`, `src/busname.cpp`) on a **private** session-bus connection:
+  KWin's decoration settings release the name on KWin's own connection at startup and at every
+  reconfigure when no title-bar menu button is configured, which used to drop the bridge's claim
+  too. (Before 2026-11-17 the name followed the shell's subscription instead: apps started before
+  the shell, during a shell restart or after any KWin reconfigure kept an in-window menu bar for
+  their whole life, and apps that did export lost their menus while the shell was away.)
+* **"A menu bar shows app menus"**: `org.kristall.AppMenuView`, owned (same connection) while a
+  client is subscribed to the `menus` topic.
+* **App side** (`appmenu/`, both loaded for the session by
+  `/usr/lib/environment.d/50-kristall-appmenu.conf`):
+  * `appmenu/qt`: Qt platform-theme plugin `kristall` (`QT_QPA_PLATFORMTHEME=kristall`). It returns
+    the KDE platform theme object itself (nothing looks or behaves differently) and adds a guard to
+    widget apps: while `org.kristall.AppMenuView` is missing for 3 s (8 s if it was never seen in
+    the process: login before the shell) native menu bars become in-window menu bars
+    (`QMenuBar::setNativeMenuBar(false)`, also for menu bars created meanwhile); when it returns
+    they become native again and are re-exported (new DBusMenu object, announced to KWin again).
+    After a KWin restart (the name goes and comes back within the grace period) the guard announces
+    the menus to the new KWin. Without plasma-integration the plugin returns nothing and Qt uses its
+    usual theme; Flatpak apps do not see it.
+  * `appmenu/gtk`: `kristall-appmenu-gtk-module` (GTK 3, Wayland only). Publishes each top-level
+    window's `GtkMenuBar` as a DBusMenu mirrored live from the widgets (labels with mnemonics,
+    enabled, visible, check/radio state, submenus, accelerators as shortcuts; `clicked` activates
+    the item), announces it to KWin through `org_kde_kwin_appmenu` on the window's `wl_surface`,
+    and while `org.kristall.AppMenuView` exists gives the in-window bar no size and unmaps it
+    (class size vfuncs + child-visible; the app's own `visible` setting is never touched). It keeps
+    `gtk-shell-shows-menubar` off in the process (Plasma's gmenudbusmenuproxy writes it to
+    settings.ini for X11), so `GtkApplicationWindow` menu bars exist and take the same path.
+* **Not covered**: GTK 3 under XWayland exports through `unity-gtk-module` + `gmenudbusmenuproxy`
+  but has no fallback; GTK 4/libadwaita, Firefox, Electron and apps that draw their own UI
+  (Blender, Wine programs) have no exportable menu bar — their `menu` is `null` and the menu bar
+  shows the app name with the standard menus. LibreOffice's gtk3 VCL plugin on Wayland hides its
+  menu bar whenever the registrar exists and announces its menu only through X11 properties and
+  GTK's own shell protocol (KWin lacks it): no menus there; the kf6 plugin works (and is what
+  LibreOffice picks under Plasma when installed).
+
+Tests: `test_windows.py` `test_application_menus`, `test_menu_view_names` (incl. KWin reconfigure),
+`test_menus_of_apps_started_before_the_shell`, `test_qt_menu_bar_fallback`, `test_gtk_wayland_menus`
+(needs gtk3-devel to build the module).
 
 ## Safety
 

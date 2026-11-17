@@ -137,6 +137,24 @@ int main(int argc, char **argv)
     });
     QMenu *edit = win.menuBar()->addMenu(QStringLiteral("&Edit"));
     edit->addAction(QStringLiteral("Copy"));
+    // the menu bar's state: in the window (visible, not native) or exported (native, hidden)
+    struct BarLog : QObject {
+        bool eventFilter(QObject *o, QEvent *e) override
+        {
+            if (e->type() == QEvent::Show || e->type() == QEvent::Hide) {
+                auto *bar = static_cast<QMenuBar *>(o);
+                QMetaObject::invokeMethod(
+                    bar,
+                    [bar] {
+                        logj({{"ev", "menubar"}, {"visible", bar->isVisible()}, {"native", bar->isNativeMenuBar()}, {"h", bar->height()}});
+                    },
+                    Qt::QueuedConnection);
+            }
+            return false;
+        }
+    };
+    BarLog barLog;
+    win.menuBar()->installEventFilter(&barLog);
 
     auto *central = new QWidget;
     auto *layout = new QVBoxLayout(central);
@@ -180,7 +198,8 @@ int main(int argc, char **argv)
         };
         logj({{"ev", "layout"}, {"platform", QGuiApplication::platformName()}, {"dpr", win.devicePixelRatioF()},
               {"menubar", geo(win.menuBar())}, {"line", geo(line)}, {"slider", geo(slider)}, {"text", geo(text)}, {"pad", geo(pad)},
-              {"window", QJsonObject{{"w", win.width()}, {"h", win.height()}}}});
+              {"window", QJsonObject{{"w", win.width()}, {"h", win.height()}}}, {"nativeMenuBar", win.menuBar()->isNativeMenuBar()},
+              {"menubarVisible", win.menuBar()->isVisible()}});
     });
     logj({{"ev", "started"}, {"pid", int(QCoreApplication::applicationPid())}});
     return app.exec();

@@ -116,6 +116,22 @@ Scope {
             Menus.dragMove(b.screenName, x, y);
             return Menus.dragRelease(b.screenName, x, y) ? "activated" : "released";
         }
+        // how a one-chord DBusMenu shortcut ("Control+Shift+N" for [["Control","Shift","N"]]) is shown
+        function shortcutText(chord: string): string {
+            return Theme.shortcutText([chord.split("+")]);
+        }
+        // a click or touchpad tap on a title: press and release in the same instant, before the
+        // menu's surface is configured (a tap delivers both at once)
+        function quickClick(index: int, output: string): string {
+            const b = hooks.bar(output);
+            const list = b.ordered();
+            if (index < 0 || index >= list.length)
+                return "no item";
+            const it = list[index];
+            const p = it.mapToItem(null, it.width / 2, it.height / 2);
+            it.openMenu(false);
+            return Menus.dragRelease(b.screenName, p.x, p.y) ? "activated" : "released";
+        }
         // press-and-drag in three steps, as the input would arrive: press on bar item, move, release
         function press(index: int, output: string): string {
             const b = hooks.bar(output);
@@ -156,6 +172,10 @@ Scope {
                 console.warn("test.itemRects:", e);
                 return "[]";
             }
+        }
+        // the app name the bar shows for a window's app id (Apps.displayName)
+        function appName(appId: string): string {
+            return Apps.displayName(appId);
         }
         // a window title as the owner reads it (Apps.windowTitle: product names → our names)
         function windowTitle(title: string): string {

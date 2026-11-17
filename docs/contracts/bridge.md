@@ -80,10 +80,15 @@ Immediately followed by a snapshot event for each subscribed topic, then deltas.
 The snapshot is taken when the reply is written, so no delta precedes its snapshot.
 Unknown topic → `invalid`. *(addition)* Topic `"menus"`: has no events; it declares "this client
 displays application menus". While at least one connection is subscribed to `menus`, the bridge
-owns the D-Bus name `org.kde.kappmenuview`, which makes kded's appmenu module publish
-`com.canonical.AppMenu.Registrar`; only then do applications export their menus (and hide their
-in-window menu bars). When the last such client disconnects, apps show their own menu bars again.
-The shell's menu bar must subscribe to `menus`.
+owns the D-Bus name `org.kristall.AppMenuView`; apps (through the app side in `kwin/bridge/appmenu/`:
+the Qt platform theme `kristall` and `kristall-appmenu-gtk-module`) hide their in-window menu bars
+while it exists and show them again about 3 s after it is gone (8 s when it was never seen in that
+process), so a shell crash or a session without the shell never leaves an app without menus.
+Independently of subscribers, the bridge owns `org.kde.kappmenuview` for KWin's whole life (on a
+private D-Bus connection), so kded's appmenu module always publishes
+`com.canonical.AppMenu.Registrar`: Qt decides once per process, at its first menu bar, whether to
+export it, and only does so if the registrar exists at that moment. The shell's menu bar must
+subscribe to `menus`.
 
 ## Windows
 
@@ -314,13 +319,25 @@ not available otherwise.
   server-side setter. The bridge runs an in-process Wayland client that maps an invisible 1×1
   layer surface per output (namespace `kristall-bridge-anchor`) and uses plasma-window-management.
   Minimise animations (squash, magic lamp) read that geometry.
-- **Global menus**: with Plasma's panels removed nobody owns `org.kde.kappmenuview`, so apps would
-  not export menus; hence the `menus` topic. Requirements on the system: kded6 with its `appmenu`
-  module (Plasma's `plasma-kded6.service`), Qt apps using the KDE platform theme. GTK 3 apps export
-  only when running under XWayland with `GTK_MODULES=unity-gtk-module` and `gmenudbusmenuproxy`
-  running on the xcb platform; GTK on native Wayland, GTK 4/libadwaita and Flatpak GTK apps cannot
-  export menus (their `menu` is `null`). Apps started while no `menus` subscriber existed may keep
-  their in-window menu bars until restarted.
+- **Global menus** (README "Global menus"): with Plasma's panels removed nobody owns
+  `org.kde.kappmenuview`; the bridge owns it from KWin's start, on a private session-bus connection
+  (`kristall-bridge-names`): KWin's decoration settings call `ApplicationMenu::setViewEnabled(false)`
+  at startup and at every reconfigure when no title-bar menu button is configured, which releases
+  the name on KWin's own connection — before 2026-11-17 that silently dropped the bridge's claim and
+  every app started afterwards kept its in-window menu bar. `org.kristall.AppMenuView` (owned while
+  `menus` has subscribers) tells apps whether a menu bar shows their menus. Requirements on the
+  system: kded6 with its `appmenu` module (Plasma's `plasma-kded6.service`), Qt apps using the KDE
+  platform theme through the `kristall` platform theme (`QT_QPA_PLATFORMTHEME=kristall` from
+  `/usr/lib/environment.d/50-kristall-appmenu.conf`; the in-window fallback needs it, export does
+  not), GTK 3 apps on Wayland `kristall-appmenu-gtk-module` (same file); GTK 3 under XWayland
+  exports through `unity-gtk-module` + `gmenudbusmenuproxy` (no in-window fallback there).
+  GTK 4/libadwaita, Firefox and apps that draw their own UI (Blender, Wine) have no exportable menu
+  bar (`menu` is `null`). Flatpak apps do not see the host plugins: Qt ones export if their sandbox
+  may see the registrar, without fallback; GTK 3 ones keep their in-window menu bar.
+  LibreOffice: the kf6 VCL plugin (Qt) exports and falls back like every Qt app; its gtk3 plugin
+  on Wayland hides its menu bar whenever the registrar exists and announces the menu only through
+  X11 properties and GTK's own shell protocol, which KWin lacks — it has no menus at all there
+  (use libreoffice-kf6).
 - **`effect.toggle`** triggers the effect's own toggle action; if the effect is not loaded (the
   overview needs `org.kde.milou`) → `unsupported`.
 - **Not supported** (`unsupported` / documented): agent input to compositor-internal windows;

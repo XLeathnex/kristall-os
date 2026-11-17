@@ -392,8 +392,12 @@ def app_specs(sess):
         ("texteditor", "kwrite" if have("kwrite") else "kate", ["kwrite", txt] if have("kwrite") else ["kate", "-n", txt], "kwrite" if have("kwrite") else "kate"),
         ("terminal", "konsole", ["konsole", "--separate", "-e", "bash", "-c", "printf '\\e[1mKristall\\e[0m  \\e[31mred \\e[32mgreen \\e[33myellow \\e[34mblue \\e[35mmagenta \\e[36mcyan\\e[0m\\n'; ls --color=always /usr; exec bash"], "konsole"),
     ]
-    if have("gtk3-widget-factory"):
+    # GTK 3 follows light/dark through the adw-gtk3 theme (an image package): without it (the plain
+    # dev container, where gtk3-widget-factory comes with gtk3-devel) the check would only test that
+    if have("gtk3-widget-factory") and os.path.isdir("/usr/share/themes/adw-gtk3"):
         specs.append(("gtk3", "gtk3-widget-factory", ["gtk3-widget-factory"], "gtk3-widget-factory"))
+    elif have("gtk3-widget-factory"):
+        skip("GTK 3 app checks: adw-gtk3 theme not installed (use kristall-devenv-theme)")
     if have("adwaita-1-demo"):
         specs.append(("gtk4-libadwaita", "adwaita-1-demo", ["adwaita-1-demo"], "adwaita"))
     if have("firefox"):
@@ -618,6 +622,9 @@ def test_switch():
                 cmd, match = ["kate", "-n"], "kate"
             if not have(cmd[0]):
                 skip(f"{key}: {cmd[0]} not installed")
+                continue
+            if key == "gtk3" and not os.path.isdir("/usr/share/themes/adw-gtk3"):
+                skip("gtk3: adw-gtk3 theme not installed (GTK 3 follows light/dark through it)")
                 continue
             s.launch(cmd, name=key)
             w = s.wait_window(match, 30)

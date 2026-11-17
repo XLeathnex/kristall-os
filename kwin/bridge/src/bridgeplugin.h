@@ -18,6 +18,7 @@ class WindowModel;
 class HelperClient;
 class Agent;
 class Screenshotter;
+class BusNameClaim;
 
 class BridgePlugin : public KWin::Plugin
 {
@@ -32,11 +33,12 @@ public:
 private:
     void registerSessionMethods();
     void setupMenuView();
-    void syncMenuView();
-    void retryMenuView();
-    int m_menuViewRetries = 0;
-    bool m_menuViewWanted = false;
-    bool m_menuViewOwned = false;
+
+    // org.kde.kappmenuview: owned for KWin's whole life (apps decide once, at their first menu
+    // bar, whether to export it). org.kristall.AppMenuView: owned while a client displays app menus
+    // (`menus` subscribers); apps watch it to show their own menu bars while nobody does.
+    BusNameClaim *m_appMenuView = nullptr;
+    BusNameClaim *m_kristallMenuView = nullptr;
 
     Server *m_server = nullptr;
     LayerScopes *m_scopes = nullptr;

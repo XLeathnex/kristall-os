@@ -315,12 +315,16 @@ pressed|released, heldMs}` (§6; key repeat is filtered), `shortcut.registered {
 `KRISTALL_SHELL_NO_SHORTCUTS=1` keeps the helper from registering shortcuts. At start it asks kded to load
 its `appmenu` module (harmless if already loaded).
 
-**Application menus end to end:** the shell's `Bridge` subscribes to the bridge topic `menus`; while
-it is subscribed the bridge owns `org.kde.kappmenuview`, kded's `appmenu` module publishes
-`com.canonical.AppMenu.Registrar`, Qt/KDE apps export their menus (and hide their in-window menu
-bars) and announce them to KWin, and the bridge reports `window.menu`. `AppMenus` mirrors the front
-window's menu through the helper (DBusMenu `GetLayout`/`AboutToShow`/`Event`). Apps started while
-no shell was subscribed may keep their own menu bars until restarted.
+**Application menus end to end:** the bridge owns `org.kde.kappmenuview` for KWin's whole life, so
+kded's `appmenu` module always publishes `com.canonical.AppMenu.Registrar` and Qt/KDE apps export
+their menus and announce them to KWin (GTK 3 apps through `kristall-appmenu-gtk-module`); the bridge
+reports `window.menu`. The shell's `Bridge` subscribes to the bridge topic `menus`; while it is
+subscribed the bridge owns `org.kristall.AppMenuView`, and apps keep their in-window menu bars
+hidden. When the shell is gone for ~3 s (crash, restart loop) apps show their own menu bars, and
+hide them again when it is back (bridge.md §subscribe, kwin/bridge README). `AppMenus` mirrors the
+front window's menu through the helper (DBusMenu `GetLayout`/`AboutToShow`/`Event`). A click or
+tap on a title opens the menu and selects nothing; only press-drag-release into the menu selects
+(`MenuHost.pointerRelease(…, fromTitle)`). Shortcuts show Mac glyphs in Mac order (⌃⌥⇧⌘).
 
 ## 10. Plasma integration
 

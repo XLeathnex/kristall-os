@@ -59,6 +59,7 @@ option(KRISTALL_BRIDGE_TEST_BROKEN "Build a plugin whose initialisation fails (t
 add_library(kristall_bridge MODULE
     src/main.cpp
     src/bridgeplugin.cpp
+    src/busname.cpp
     src/server.cpp
     src/windows.cpp
     src/agent.cpp
@@ -88,3 +89,37 @@ target_link_libraries(kristall_bridge PRIVATE
 )
 set_target_properties(kristall_bridge PROPERTIES PREFIX "")
 install(TARGETS kristall_bridge DESTINATION ${KDE_INSTALL_PLUGINDIR}/kwin/plugins)
+
+# ---- app side of the global menu bar (appmenu/, README "Global menus") ----------------------------
+# Qt platform-theme plugin "kristall": returns KDE's theme unchanged and keeps menu bars usable
+# (in the window while no Kristall menu bar shows app menus).
+add_library(kristall_appmenu_qt MODULE appmenu/qt/kristallmenutheme.cpp)
+set_target_properties(kristall_appmenu_qt PROPERTIES AUTOMOC ON PREFIX "" OUTPUT_NAME kristall_appmenu)
+target_compile_options(kristall_appmenu_qt PRIVATE -Wall -Wextra)
+target_link_libraries(kristall_appmenu_qt PRIVATE Qt6::Gui Qt6::GuiPrivate Qt6::Widgets Qt6::DBus)
+install(TARGETS kristall_appmenu_qt DESTINATION ${KDE_INSTALL_QTPLUGINDIR}/platformthemes)
+
+# GTK 3 module (Wayland): exports GtkMenuBar menus over DBusMenu and announces them to KWin.
+# Built when GTK 3's development files are there (the image installer requires it).
+pkg_check_modules(GTK3 IMPORTED_TARGET gtk+-3.0 gtk+-wayland-3.0)
+if(GTK3_FOUND)
+    find_file(PLASMA_APPMENU_XML appmenu.xml
+        PATHS /usr/share/plasma-wayland-protocols ${CMAKE_INSTALL_PREFIX}/share/plasma-wayland-protocols REQUIRED)
+    set(APPMENU_OUT ${CMAKE_CURRENT_BINARY_DIR}/appmenu-protocol)
+    file(MAKE_DIRECTORY ${APPMENU_OUT})
+    add_custom_command(
+        OUTPUT ${APPMENU_OUT}/appmenu-client-protocol.h ${APPMENU_OUT}/appmenu-protocol.c
+        COMMAND ${WAYLAND_SCANNER} client-header ${PLASMA_APPMENU_XML} ${APPMENU_OUT}/appmenu-client-protocol.h
+        COMMAND ${WAYLAND_SCANNER} private-code ${PLASMA_APPMENU_XML} ${APPMENU_OUT}/appmenu-protocol.c
+        DEPENDS ${PLASMA_APPMENU_XML} VERBATIM)
+    add_library(kristall_appmenu_gtk MODULE appmenu/gtk/kristall-appmenu-gtk.c
+        ${APPMENU_OUT}/appmenu-client-protocol.h ${APPMENU_OUT}/appmenu-protocol.c)
+    set_target_properties(kristall_appmenu_gtk PROPERTIES AUTOMOC OFF PREFIX "lib" OUTPUT_NAME kristall-appmenu-gtk-module
+        C_VISIBILITY_PRESET hidden)
+    target_include_directories(kristall_appmenu_gtk PRIVATE ${APPMENU_OUT})
+    target_compile_options(kristall_appmenu_gtk PRIVATE -Wall -Wextra -Wno-unused-parameter)
+    target_link_libraries(kristall_appmenu_gtk PRIVATE PkgConfig::GTK3 PkgConfig::WAYLAND)
+    install(TARGETS kristall_appmenu_gtk DESTINATION ${CMAKE_INSTALL_LIBDIR}/gtk-3.0/modules)
+else()
+    message(STATUS "GTK 3 development files not found: the GTK app-menu module is not built")
+endif()

@@ -143,7 +143,7 @@ Scope {
     function hit(x, y) {
         for (let l = levelModel.count - 1; l >= 0; --l) {
             const p = panelAt(l);
-            if (!p)
+            if (!p || !p.placed)    // not placed yet: its x/y are not where it will be drawn
                 continue;
             if (x >= p.x && x < p.x + p.width && y >= p.y && y < p.y + p.height)
                 return { level: l, row: p.rowAt(x, y) };
@@ -211,10 +211,18 @@ Scope {
                 t.openAt(idx, false);
         }
     }
-    // returns true when the release selected an item
-    function pointerRelease(x, y) {
+    // returns true when the release selected an item. fromTitle: the button went down on a menu
+    // title (press-drag-release from the bar); then only a drag that reached the menus selects —
+    // a click or touchpad tap on a title (press and release at once) just opens the menu.
+    function pointerRelease(x, y, fromTitle) {
         if (!open)
             return false;
+        if (fromTitle && !_dragged) {
+            const t0 = menu.tracker;
+            if (!t0 || t0.hitTest(x, y) < 0)
+                Menus.close("released");
+            return false;
+        }
         const h = hit(x, y);
         if (h && h.row >= 0) {
             const e = entryAt(h.level, h.row);
@@ -416,8 +424,15 @@ Scope {
                     level: lvl
                     host: menuHost
                     surface: gs
+                    // false until the layer surface has its size: a panel placed against a
+                    // 0×0 window would sit at the top left, under a quick click on a title
+                    property bool placed: false
                     function place() {
                         const W = win.width, H = win.height, m = 6;
+                        if (W <= 0 || H <= 0) {
+                            placed = false;
+                            return;
+                        }
                         let nx, ny;
                         if (info.anchorLevel < 0) {
                             const r = menuHost.menu ? menuHost.menu.rect : { x: 0, y: 0, w: 0, h: 0 };
@@ -438,6 +453,7 @@ Scope {
                         }
                         x = Math.round(Math.max(m, Math.min(W - m - width, nx)));
                         y = Math.round(Math.max(m, Math.min(H - m - height, ny)));
+                        placed = true;
                     }
                     onWidthChanged: place()
                     onHeightChanged: place()

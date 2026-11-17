@@ -15,6 +15,12 @@ if ! ninja -C "$out/cmake" >"$out/build.log" 2>&1; then
 fi
 grep -E "warning:" "$out/build.log" | sort -u | head -40 || true
 cp "$out/cmake/bin/kristall_bridge.so" "$out/plugins/kwin/plugins/" 2>/dev/null || cp "$out/cmake/kristall_bridge.so" "$out/plugins/kwin/plugins/"
+# the app side of global menus: Qt platform theme (QT_PLUGIN_PATH=$out/plugins for test apps)
+mkdir -p "$out/plugins/platformthemes"
+cp "$out/cmake/bin/kristall_appmenu.so" "$out/plugins/platformthemes/" 2>/dev/null || cp "$out/cmake/kristall_appmenu.so" "$out/plugins/platformthemes/"
+# …and the GTK 3 module (built when gtk3-devel is installed)
+mkdir -p "$out/gtkmodules"
+cp "$out/cmake/bin/libkristall-appmenu-gtk-module.so" "$out/gtkmodules/" 2>/dev/null || true
 # a deliberately broken build for the fail-soft test
 if [ "${KRISTALL_BRIDGE_SKIP_BROKEN:-0}" != 1 ]; then
     cmake -S "$bridge" -B "$out/cmake-broken" -G Ninja -DCMAKE_BUILD_TYPE=Release -DKRISTALL_BRIDGE_TEST_BROKEN=ON >/dev/null 2>&1

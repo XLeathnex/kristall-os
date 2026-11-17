@@ -111,11 +111,14 @@ corners off (overview's top-left corner too); open/close = scale effect 200 ms f
   and WebExtension themes cannot reach them, and `browser.tabs.inTitlebar=0` (KWin's title bar
   with our buttons) is not honoured on Wayland. The `image` component makes the first start German
   and silences the Speech Dispatcher bar (apps README).
-* **Menus to the menu bar**: Qt/KDE apps export through KWin's app-menu protocol (bridge). GTK 3 apps
-  export only under XWayland with `unity-gtk3-module` (installed and loaded for every GTK 3 app through `GTK_MODULES` in `/usr/lib/environment.d/50-kristall-theme.conf`)
-  and `gmenudbusmenuproxy` (Plasma). We do **not** force GTK 3 apps onto
-  XWayland: at the panel's fractional scale they would be blurry or wrongly sized. GTK 4/libadwaita
-  and Firefox have no exportable menu bar; the bar shows the app name and the standard menus.
+* **Menus to the menu bar**: Qt/KDE apps export through KWin's app-menu protocol; GTK 3 apps on
+  Wayland through `kristall-appmenu-gtk-module` (both from `kwin/bridge/appmenu`, README "Global
+  menus"; the in-window menu bar comes back while the menu bar is not running). GTK 3 apps under
+  XWayland export through `unity-gtk3-module` (installed and loaded for every GTK 3 app through
+  `GTK_MODULES` in `/usr/lib/environment.d/50-kristall-theme.conf`) and `gmenudbusmenuproxy`
+  (Plasma). We do **not** force GTK 3 apps onto XWayland: at the panel's fractional scale they
+  would be blurry or wrongly sized. GTK 4/libadwaita and Firefox have no exportable menu bar; the
+  bar shows the app name and the standard menus.
 * **Files** (`/etc/xdg/dolphinrc`): icon view, double-click to open (kdeglobals `SingleClick=false`),
   no remembered tabs, no status bar, no in-window menu bar (exported), git integration.
   **Terminal**: profile *Kristall* (JetBrains Mono 13 px, 80×24, Kristall colours). **Text editor**:

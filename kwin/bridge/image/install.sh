@@ -17,7 +17,9 @@ BUILD_DEPS=(gcc-c++ cmake ninja-build extra-cmake-modules kwin-devel qt6-qtbase-
     qt6-qtdeclarative-devel kdecoration-devel kf6-kconfig-devel kf6-kcoreaddons-devel wayland-devel
     wayland-protocols-devel plasma-wayland-protocols-devel libxkbcommon-devel libxcb-devel systemd-devel
     # KWinConfig.cmake's own find_dependency() list (kwin-devel does not pull these in)
-    libepoxy-devel libdrm-devel vulkan-headers vulkan-loader-devel kf6-kwindowsystem-devel)
+    libepoxy-devel libdrm-devel vulkan-headers vulkan-loader-devel kf6-kwindowsystem-devel
+    # the GTK 3 app-menu module (appmenu/gtk)
+    gtk3-devel)
 ADDED=()
 for p in "${BUILD_DEPS[@]}"; do
   rpm -q "$p" >/dev/null 2>&1 || ADDED+=("$p")
@@ -46,11 +48,19 @@ ninja -C "$BUILD"
 DESTDIR=${DESTDIR:-} ninja -C "$BUILD" install
 
 install -Dm644 "$SRC/python/kristall_bridge.py" "$PREFIX/lib/kristall/bridge/python/kristall_bridge.py"
+# app side of global menus (README "Global menus"): Qt platform theme + GTK 3 module, for the session
+install -Dm644 "$SRC/appmenu/environment.d.conf" "$PREFIX/lib/environment.d/50-kristall-appmenu.conf"
 install -Dm755 "$SRC/tools/kristall-bridgectl" "$PREFIX/bin/kristall-bridgectl"
 
 PLUGIN=$(find "$PREFIX"/lib*/qt6/plugins/kwin/plugins -name 'kristall_bridge.so' -print -quit)
 [[ -n $PLUGIN ]] || { echo "kwin/bridge: plugin was not installed" >&2; exit 1; }
 note "installed $PLUGIN"
+# app side of global menus: both are needed for menus in the menu bar (and the in-window fallback)
+for f in qt6/plugins/platformthemes/kristall_appmenu.so gtk-3.0/modules/libkristall-appmenu-gtk-module.so; do
+  found=$(find "$PREFIX"/lib*/ -path "*/$f" -print -quit 2>/dev/null)
+  [[ -n $found ]] || { echo "kwin/bridge: $f was not installed" >&2; exit 1; }
+  note "installed $found"
+done
 
 # ------------------------------------------------------------------ enable for every user
 # The plugin's metadata already says EnabledByDefault; the explicit key keeps it enabled even if

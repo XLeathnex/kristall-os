@@ -80,7 +80,7 @@ Singleton {
     }
     function dragRelease(screen, x, y) {
         const h = hosts[screen];
-        return h ? h.pointerRelease(x, y) : false;
+        return h ? h.pointerRelease(x, y, true) : false;
     }
 
     // rectangle of `item` in its output's coordinates, given its surface's offset on the output

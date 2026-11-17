@@ -5,6 +5,7 @@
 */
 #include "bridgeplugin.h"
 #include "agent.h"
+#include "busname.h"
 #include "helperclient.h"
 #include "screenshot.h"
 #include "server.h"
@@ -85,73 +86,23 @@ bool BridgePlugin::init()
     return true;
 }
 
-// Applications export their menus (and hide their own menu bars) only while a menu "view" owns
-// org.kde.kappmenuview: kded's appmenu module then publishes com.canonical.AppMenu.Registrar,
-// which Qt/KDE (and, through gmenudbusmenuproxy, GTK under X11) look for. The bridge owns the
-// name while at least one client is subscribed to the "menus" topic (the shell's menu bar), so
-// apps show their in-window menus again whenever the shell is not running.
+// Global menus (README "Global menus"). Qt decides once per process, when it creates its first
+// menu bar, whether menus are exported: only if com.canonical.AppMenu.Registrar exists at that
+// moment, which kded's appmenu module publishes while somebody owns org.kde.kappmenuview. Tying
+// that name to the shell (as before) meant that every app started while the shell was not
+// subscribed — at login before the shell, during a shell restart — kept its in-window menu bar
+// for good, and apps that did export lost their menus while the shell was away. So the bridge
+// owns org.kde.kappmenuview for KWin's whole life, and signals "a menu bar displays app menus"
+// separately with org.kristall.AppMenuView, owned while at least one client is subscribed to the
+// "menus" topic. The app side (appmenu/: Qt platform theme, GTK module) watches that name and shows
+// the app's own menu bar while it is missing.
 void BridgePlugin::setupMenuView()
 {
+    m_appMenuView = new BusNameClaim(QStringLiteral("org.kde.kappmenuview"), this);
+    m_appMenuView->setWanted(true);
+    m_kristallMenuView = new BusNameClaim(QStringLiteral("org.kristall.AppMenuView"), this);
     QObject::connect(m_server, &Server::subscribersChanged, this, [this]() {
-        syncMenuView();
-    });
-}
-
-// Owns or releases org.kde.kappmenuview to match the "menus" subscribers. A request that could not
-// be made or failed (the session bus not reachable yet: the shell subscribes within the first
-// second of KWin's life) is retried a few times instead of being forgotten — before, the first
-// session after login had no application menus until the shell restarted (integrated session).
-void BridgePlugin::syncMenuView()
-{
-    const bool want = m_server->hasSubscribers(QStringLiteral("menus"));
-    if (want == m_menuViewWanted) {
-        return;
-    }
-    QDBusConnection bus = QDBusConnection::sessionBus();
-    static const QString name = QStringLiteral("org.kde.kappmenuview");
-    if (want) {
-        if (!bus.isConnected()) {
-            retryMenuView();
-            return;
-        }
-        m_menuViewWanted = true;
-        QDBusMessage msg = QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.DBus"), QStringLiteral("/org/freedesktop/DBus"),
-                                                          QStringLiteral("org.freedesktop.DBus"), QStringLiteral("RequestName"));
-        msg << name << uint(0); // queue behind another view (e.g. KWin's own decoration button)
-        auto *watcher = new QDBusPendingCallWatcher(bus.asyncCall(msg), this);
-        QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *w) {
-            const QDBusPendingReply<uint> reply = *w;
-            w->deleteLater();
-            if (!reply.isValid()) {
-                logWarning(QStringLiteral("could not request org.kde.kappmenuview: %1").arg(reply.error().message()));
-                m_menuViewWanted = false;
-                retryMenuView();
-                return;
-            }
-            // 4 = already owned by this connection (KWin itself): never release that
-            m_menuViewOwned = reply.value() != 4;
-            m_menuViewRetries = 0;
-        });
-    } else {
-        m_menuViewWanted = false;
-        if (m_menuViewOwned && bus.isConnected()) {
-            m_menuViewOwned = false;
-            QDBusMessage msg = QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.DBus"), QStringLiteral("/org/freedesktop/DBus"),
-                                                              QStringLiteral("org.freedesktop.DBus"), QStringLiteral("ReleaseName"));
-            msg << name;
-            bus.asyncCall(msg);
-        }
-    }
-}
-
-void BridgePlugin::retryMenuView()
-{
-    if (m_menuViewRetries >= 30) { // 30 s: then the next (un)subscription tries again
-        return;
-    }
-    ++m_menuViewRetries;
-    QTimer::singleShot(1000, this, [this]() {
-        syncMenuView();
+        m_kristallMenuView->setWanted(m_server->hasSubscribers(QStringLiteral("menus")));
     });
 }
 

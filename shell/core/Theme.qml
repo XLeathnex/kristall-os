@@ -258,14 +258,18 @@ Singleton {
     }
 
     // ---- keyboard shortcut display (menus) -------------------------------------------------------
-    // Mac order and glyphs. With keyboard.commandKey = "ctrl" (the key next to the space bar sends
-    // Control, set up by the keyboard component) Control shows as ⌘.
+    // Mac glyphs in Mac order (⌃ ⌥ ⇧ ⌘, so Shift+Command+N reads ⇧⌘N). With keyboard.commandKey =
+    // "ctrl" (the key next to the space bar sends Control, set up by the keyboard component)
+    // Control shows as ⌘.
     readonly property bool ctrlIsCommand: Settings.get("keyboard.commandKey", "") === "ctrl"
     function shortcutText(chords) {
         if (!chords || chords.length === 0)
             return "";
-        const order = ["Control", "Alt", "Shift", "Super"];
         const glyph = { Control: ctrlIsCommand ? "⌘" : "⌃", Alt: "⌥", Shift: "⇧", Super: ctrlIsCommand ? "⌃" : "⌘" };
+        const glyphOrder = ["⌃", "⌥", "⇧", "⌘"];
+        const order = ["Control", "Alt", "Shift", "Super"].sort(function (a, b) {
+            return glyphOrder.indexOf(glyph[a]) - glyphOrder.indexOf(glyph[b]);
+        });
         const keys = { Return: "↩", Enter: "⌤", Escape: "⎋", BackSpace: "⌫", Delete: "⌦", Tab: "⇥", space: "Space",
                        Left: "←", Right: "→", Up: "↑", Down: "↓", Home: "↖", End: "↘", Prior: "⇞", Next: "⇟",
                        plus: "+", minus: "-", equal: "=", comma: ",", period: ".", slash: "/" };

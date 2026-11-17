@@ -239,16 +239,16 @@
  },
  "switch": {
   "dark": {
-   "files": 0.4,
-   "texteditor": 0.4,
+   "files": 0.44,
+   "texteditor": 0.44,
    "terminal": 0.51,
-   "firefox": 0.66
+   "firefox": 0.65
   },
   "light": {
-   "files": 0.48,
-   "texteditor": 0.48,
-   "terminal": 0.65,
-   "firefox": 0.89
+   "texteditor": 0.39,
+   "files": 0.42,
+   "terminal": 0.51,
+   "firefox": 0.77
   }
  },
  "failures_last_run": []

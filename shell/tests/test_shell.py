@@ -70,6 +70,15 @@ def busy_bg(sess, w, h):
     sess.background(bg)
 
 
+def wait_until_value(get, ok, timeout=5.0):
+    end = time.monotonic() + timeout
+    v = get()
+    while not ok(v) and time.monotonic() < end:
+        time.sleep(0.1)
+        v = get()
+    return v
+
+
 def settings_set(sess, path, value):
     env = sess.env()
     env.update(sess.shell_env())
@@ -261,6 +270,10 @@ def test_core():
               titles == {"Persönlicher Ordner — Dolphin": "Persönlicher Ordner — Dateien", "Unbenannt — KWrite": "Unbenannt — Texteditor",
                          "Erscheinungsbild — Systemeinstellungen": "Erscheinungsbild — Systemeinstellungen", "Dolphin": "Dateien",
                          "Neuer Tab — Mozilla Firefox": "Neuer Tab — Mozilla Firefox", "Bericht — Entwurf": "Bericht — Entwurf"}, json.dumps(titles, ensure_ascii=False))
+        names = {a: sess.ipc("test", "appName", a) for a in ("notepad.exe", "RobloxStudioBeta.exe", "org.example.Unknown", "org.kde.dolphin")}
+        check("app names without a desktop entry: Wine programs by their file name (not \"Exe\"), others by the id's last part",
+              names == {"notepad.exe": "Notepad", "RobloxStudioBeta.exe": "RobloxStudioBeta", "org.example.Unknown": "Unknown",
+                        "org.kde.dolphin": "Dateien"}, json.dumps(names, ensure_ascii=False))
         check("battery from UPower", st["power"]["battery"] and st["power"]["percent"] == 76, json.dumps(st["power"]))
         check("audio from PipeWire", st["audio"]["available"], json.dumps(st["audio"]))
         check("Wi-Fi from NetworkManager", st["network"]["wifi"] and st["network"]["name"] == "Zuhause" and st["network"]["bars"] == 3, json.dumps(st["network"]))
@@ -447,6 +460,26 @@ def test_appmenu():
         r, _, _ = select.select([app.stdout], [], [], 4)
         said = app.stdout.readline().strip() if r else ""
         check("press-drag-release selects an item", res == "activated" and said == "TRIGGERED Ausschneiden", f"{res} {said}")
+        # a click or touchpad tap on a title (press + release at once, before the menu surface has
+        # its size) opens the menu and selects nothing (it used to select the first item: "Neu")
+        sess.ipc("test", "close")
+        time.sleep(0.4)
+        idx = [r["text"] for r in sess.rects()].index("Datei")
+        res = sess.ipc("test", "quickClick", idx, "")
+        r, _, _ = select.select([app.stdout], [], [], 1.5)
+        said = app.stdout.readline().strip() if r else ""
+        st = wait_state(sess, lambda s: s["levels"] and any("Neu" in i for i in s["levels"][0]["items"]))
+        check("quick click / tap on a title opens the menu and triggers nothing", res == "released" and said == "" and bool(st["levels"]),
+              f"{res} {said!r} levels={len(st['levels'])}")
+        sess.ipc("test", "close")
+        # Mac order of modifier glyphs (⌃⌥⇧⌘): with the Mac keyboard Control is ⌘ and comes last
+        plain = sess.ipc("test", "shortcutText", "Control+Shift+N")
+        settings_set(sess, "keyboard.commandKey", "ctrl")
+        mac = wait_until_value(lambda: sess.ipc("test", "shortcutText", "Control+Shift+N"), lambda v: "⌘" in v)
+        allmods = sess.ipc("test", "shortcutText", "Super+Shift+Alt+Control+Q")
+        settings_set(sess, "keyboard.commandKey", "")
+        check("shortcuts in Mac order: ⇧⌘N with the Mac keyboard, ⌃⇧N without; ⌃⌥⇧⌘Q", plain == "⌃⇧N" and mac == "⇧⌘N" and allmods == "⌃⌥⇧⌘Q",
+              f"{plain} {mac} {allmods}")
         # the app-name menu proxies the app's own About / Quit entries
         sess.ipc("test", "openMenu", 1, "")
         st = wait_state(sess, lambda s: s["levels"])

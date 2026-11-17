@@ -116,6 +116,41 @@ def test_geometry_coalescing():
             check(0 < len(moves) <= span * 60 + 2, f"interactive move: {len(moves)} events over {span * 1000:.0f} ms")
 
 
+def bus_owner(s, name):
+    """the owning process's command name, or None when nobody owns `name`"""
+    r = subprocess.run(["busctl", "--user", "status", name], env=s.env(), capture_output=True, text=True)
+    if r.returncode != 0:
+        return None
+    return next((l[5:] for l in r.stdout.splitlines() if l.startswith("Comm=")), "?")
+
+
+def dbusmenu(service, path):
+    """(revision, layout) of a DBusMenu, layout as nested (id, props, children) with plain values"""
+    from gi.repository import Gio, GLib
+    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    v = bus.call_sync(service, path, "com.canonical.dbusmenu", "GetLayout", GLib.Variant("(iias)", (0, -1, [])),
+                      GLib.VariantType("(u(ia{sv}av))"), Gio.DBusCallFlags.NONE, 3000, None)
+    return v.unpack()
+
+
+def dbusmenu_items(layout, out=None):
+    """{label without mnemonic: (id, props)} for every item"""
+    out = {} if out is None else out
+    item_id, props, children = layout
+    if "label" in props:
+        out[props["label"].replace("_", "")] = (item_id, props)
+    for c in children:
+        dbusmenu_items(c, out)
+    return out
+
+
+def dbusmenu_click(service, path, item_id):
+    from gi.repository import Gio, GLib
+    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    bus.call_sync(service, path, "com.canonical.dbusmenu", "Event", GLib.Variant("(isvu)", (item_id, "clicked", GLib.Variant("i", 0), 0)),
+                  None, Gio.DBusCallFlags.NONE, 3000, None)
+
+
 @test
 def test_application_menus():
     """menu service/path for Qt (Wayland and XWayland) and GTK 3 (XWayland) while the shell shows menus"""
@@ -125,26 +160,183 @@ def test_application_menus():
         shell = s.bridge("shell")
         shell.subscribe("windows", "menus")
         gm = s.spawn(["gmenudbusmenuproxy"], "gmenu", env={"QT_QPA_PLATFORM": "xcb"}, merge_stderr=True)
-        reg = wait_until(lambda: "com.canonical.AppMenu.Registrar" in subprocess.run(["busctl", "--user", "list", "--no-pager"], env=s.env(),
-                                                                                 capture_output=True, text=True).stdout, 10)
-        check(reg, "kded's appmenu module published the registrar once the bridge owns org.kde.kappmenuview")
+        reg = wait_until(lambda: bus_owner(s, "com.canonical.AppMenu.Registrar"), 10)
+        check(reg, "kded's appmenu module published the registrar (the bridge owns org.kde.kappmenuview)")
         qn = s.qtprobe("qt-menu", env={"QT_QPA_PLATFORMTHEME": "kde"})
         qx = s.qtprobe("qtx-menu", platform="xcb", env={"QT_QPA_PLATFORMTHEME": "kde"})
         g = s.spawn(["python3", GTKPROBE, "gtk-menu"], "gtk", env={"GDK_BACKEND": "x11", "GTK_MODULES": "unity-gtk-module"})
-        gw = s.spawn(["python3", GTKPROBE, "gtk-wl"], "gtkwl", env={"GDK_BACKEND": "wayland", "GTK_MODULES": "unity-gtk-module"})
         for title, label in (("qt-menu", "Qt Wayland"), ("qtx-menu", "Qt XWayland"), ("gtk-menu", "GTK 3 XWayland")):
             w = find_window(b, lambda v: v["title"] == title and v["menu"], 10)
             check(w is not None, f"{label}: menu {w and w['menu']}")
             layout = subprocess.run(["busctl", "--user", "call", "--", w["menu"]["service"], w["menu"]["path"], "com.canonical.dbusmenu", "GetLayout",
                                      "iias", "0", "-1", "0"], env=s.env(), capture_output=True, text=True)
             check("ile" in layout.stdout and "File" in layout.stdout.replace("_", ""), f"{label}: the DBusMenu at that service/path has the File menu")
-        w = window_by_title(b, "gtk-wl")
-        check(w is not None and w["menu"] is None, "GTK on native Wayland exports no menu (no protocol for it)")
-        # the shell goes away: the view name is released and apps fall back to in-window menu bars
+        # the shell goes away: only its "menu bar is showing app menus" name goes; the registrar stays
+        # (apps decide once, at their first menu bar, whether to export)
+        check(bus_owner(s, "org.kristall.AppMenuView") is not None, "org.kristall.AppMenuView owned while the shell is subscribed")
         shell.close()
-        gone = wait_until(lambda: "com.canonical.AppMenu.Registrar" not in subprocess.run(["busctl", "--user", "list", "--no-pager"], env=s.env(),
-                                                                                       capture_output=True, text=True).stdout, 10)
-        check(gone, "without a menu-displaying client the registrar disappears (apps show their own menu bars)")
+        gone = wait_until(lambda: bus_owner(s, "org.kristall.AppMenuView") is None, 10)
+        check(gone, "without a menu-displaying client org.kristall.AppMenuView is released (apps show their own menu bars)")
+        check(bus_owner(s, "com.canonical.AppMenu.Registrar") is not None, "…and the registrar stays, so apps started now still export their menus")
+
+
+@test
+def test_menu_view_names():
+    """org.kde.kappmenuview for KWin's whole life, also after a reconfigure; org.kristall.AppMenuView only while menus are shown"""
+    with Session() as s:
+        b = s.bridge()
+        check(wait_until(lambda: bus_owner(s, "org.kde.kappmenuview"), 5), "org.kde.kappmenuview owned without any menu-displaying client")
+        check(bus_owner(s, "org.kristall.AppMenuView") is None, "org.kristall.AppMenuView not owned without a `menus` subscriber")
+        shell = s.bridge("shell")
+        shell.subscribe("menus")
+        check(wait_until(lambda: bus_owner(s, "org.kristall.AppMenuView"), 5), "org.kristall.AppMenuView owned while a client is subscribed to `menus`")
+        # KWin's decoration settings release org.kde.kappmenuview on KWin's own D-Bus connection at
+        # every reconfigure (no title-bar menu button): the bridge's claim must not depend on it
+        for _ in range(2):
+            r = subprocess.run(["busctl", "--user", "call", "org.kde.KWin", "/KWin", "org.kde.KWin", "reconfigure"], env=s.env(),
+                               capture_output=True, text=True)
+            check(r.returncode == 0, f"KWin reconfigure {r.stderr.strip()}")
+            time.sleep(1.0)
+            check(bus_owner(s, "org.kde.kappmenuview") is not None, "org.kde.kappmenuview still owned after a KWin reconfigure")
+        shell.close()
+        check(wait_until(lambda: bus_owner(s, "org.kristall.AppMenuView") is None, 5), "org.kristall.AppMenuView released with the last subscriber")
+        check(bus_owner(s, "org.kde.kappmenuview") is not None, "org.kde.kappmenuview kept")
+
+
+@test
+def test_menus_of_apps_started_before_the_shell():
+    """a Qt app started before any menu bar exists (login, shell restart) still exports its menus"""
+    with Session() as s:
+        b = s.bridge()
+        kded = s.spawn(["kded6"], "kded", merge_stderr=True)
+        check(wait_until(lambda: bus_owner(s, "com.canonical.AppMenu.Registrar"), 10), "the registrar exists with no shell running")
+        q = s.qtprobe("early", env={"QT_QPA_PLATFORMTHEME": "kde"})
+        lay = q.wait("layout", 8)
+        check(lay is not None and lay["nativeMenuBar"], f"the early app's menu bar is native (exported) {lay}")
+        w = find_window(b, lambda v: v["title"] == "early" and v["menu"], 10)
+        check(w is not None, "KWin knows its DBusMenu")
+        shell = s.bridge("shell")
+        shell.subscribe("windows", "menus")
+        items = dbusmenu_items(dbusmenu(w["menu"]["service"], w["menu"]["path"])[1])
+        check("File" in items and "New" in items, f"its menus can be read once the shell is there: {sorted(items)[:6]}")
+        m = q.mark()
+        dbusmenu_click(w["menu"]["service"], w["menu"]["path"], items["New"][0])
+        check(q.wait(lambda e: e.get("ev") == "action" and e.get("name") == "New", 5, since=m), "File > New activates the app's action")
+
+
+@test
+def test_qt_menu_bar_fallback():
+    """Qt apps with the kristall platform theme: own menu bar while no menu bar shows app menus, exported again after"""
+    with Session() as s:
+        b = s.bridge()
+        kded = s.spawn(["kded6"], "kded", merge_stderr=True)
+        check(wait_until(lambda: bus_owner(s, "com.canonical.AppMenu.Registrar"), 10), "registrar")
+        env = {"QT_QPA_PLATFORMTHEME": "kristall", "KRISTALL_APPMENU_FALLBACK_MS": "400"}
+        # 1. an app started while no shell runs: native first, then its own menu bar after the grace period
+        q1 = s.qtprobe("alone", env=env, name="qt-alone")
+        lay = q1.wait("layout", 8)
+        check(lay is not None and "nativeMenuBar" in lay, f"the kristall theme loads (the app runs) {lay}")
+        ev = q1.wait(lambda e: e.get("ev") == "menubar" and e["visible"] and not e["native"] and e["h"] > 0, 6)
+        check(ev is not None, f"no menu bar shows app menus: the app shows its own menu bar {ev}")
+        # 2. the shell starts: both apps export, nothing in the windows
+        m1 = q1.mark()
+        shell = s.bridge("shell")
+        shell.subscribe("windows", "menus")
+        ev = q1.wait(lambda e: e.get("ev") == "menubar" and not e["visible"] and e["native"], 6, since=m1)
+        check(ev is not None, "the shell arrives: the menu bar is exported again and hidden in the window")
+        w1 = find_window(b, lambda v: v["title"] == "alone" and v["menu"], 8)
+        check(w1 is not None, f"KWin knows the app's DBusMenu again {w1 and w1['menu']}")
+        q2 = s.qtprobe("guarded", env=env, name="qt-guarded")
+        lay = q2.wait("layout", 8)
+        check(lay is not None and lay["nativeMenuBar"] and not lay["menubarVisible"], f"app started with the shell: exported, not in the window {lay}")
+        w2 = find_window(b, lambda v: v["title"] == "guarded" and v["menu"], 8)
+        check(w2 is not None, "…and KWin knows its DBusMenu")
+        # 3. the shell crashes: after the grace period both show their own menu bars
+        m1, m2 = q1.mark(), q2.mark()
+        shell.close()
+        for q, m, name in ((q1, m1, "alone"), (q2, m2, "guarded")):
+            ev = q.wait(lambda e: e.get("ev") == "menubar" and e["visible"] and not e["native"] and e["h"] > 0, 6, since=m)
+            check(ev is not None, f"shell gone: '{name}' shows its own menu bar ({ev})")
+        # 4. the shell is back: exported again, the menus work through DBusMenu
+        m2 = q2.mark()
+        shell = s.bridge("shell")
+        shell.subscribe("windows", "menus")
+        ev = q2.wait(lambda e: e.get("ev") == "menubar" and not e["visible"] and e["native"], 6, since=m2)
+        check(ev is not None, "shell back: hidden in the window, exported again")
+        w = find_window(b, lambda v: v["title"] == "guarded" and v["menu"] and v["menu"]["path"] != w2["menu"]["path"], 8)
+        check(w is not None, f"KWin knows the new DBusMenu {w and w['menu']}")
+        items = dbusmenu_items(dbusmenu(w["menu"]["service"], w["menu"]["path"])[1])
+        check(all(k in items for k in ("File", "New", "Open", "Quit", "Edit", "Copy")), f"the exported menu is complete again: {sorted(items)}")
+        m2 = q2.mark()
+        dbusmenu_click(w["menu"]["service"], w["menu"]["path"], items["Open"][0])
+        check(q2.wait(lambda e: e.get("ev") == "action" and e.get("name") == "Open", 5, since=m2), "File > Open from the exported menu runs the app's action")
+        check(q1.alive() and q2.alive(), "both apps still run")
+
+
+GTKMODULE = os.path.join(BUILD, "gtkmodules", "libkristall-appmenu-gtk-module.so")
+
+
+@test
+def test_gtk_wayland_menus():
+    """GTK 3 on native Wayland (kristall-appmenu-gtk-module): menus in the menu bar, own menu bar as fallback"""
+    check(os.path.exists(GTKMODULE), f"the GTK module was built (needs gtk3-devel): {GTKMODULE}")
+    with Session() as s:
+        b = s.bridge()
+        env = {"GDK_BACKEND": "wayland", "GTK_MODULES": GTKMODULE, "KRISTALL_APPMENU_FALLBACK_MS": "400"}
+        # as on the OS: Plasma's gmenudbusmenuproxy wrote gtk-shell-shows-menubar=1 (meant for X11)
+        os.makedirs(os.path.join(s.config, "gtk-3.0"), exist_ok=True)
+        with open(os.path.join(s.config, "gtk-3.0", "settings.ini"), "w") as f:
+            f.write("[Settings]\ngtk-shell-shows-menubar=1\n")
+        plain = s.spawn(["python3", GTKPROBE, "gtk-plain"], "gtkplain", env={"GDK_BACKEND": "wayland"})
+        shell = s.bridge("shell")
+        shell.subscribe("windows", "menus")
+        check(wait_until(lambda: bus_owner(s, "org.kristall.AppMenuView"), 5), "a menu bar shows app menus")
+        g = s.spawn(["python3", GTKPROBE, "gtk-wl"], "gtkwl", env=env)
+        w = find_window(b, lambda v: v["title"] == "gtk-wl" and v["menu"], 10)
+        check(w is not None, f"KWin knows the GTK window's DBusMenu {w and w['menu']}")
+        lay = g.wait("layout", 8)
+        bars = [e for e in g.snapshot() if e.get("ev") == "menubar"]
+        check(lay is not None and lay["menubar"]["h"] == 0 and lay["line"]["y"] == 0 and bars and not bars[-1]["mapped"],
+              f"its own menu bar takes no space and is not shown in the window {lay} {bars[-3:]}")
+        lay = plain.wait("layout", 8)
+        check(lay is not None and lay["menubar"]["h"] > 0, "control: without the module the menu bar stays in the window")
+        check(find_window(b, lambda v: v["title"] == "gtk-plain", 3)["menu"] is None, "…and nothing is exported")
+        items = dbusmenu_items(dbusmenu(w["menu"]["service"], w["menu"]["path"])[1])
+        check(all(k in items for k in ("File", "Open", "Wrap")), f"File menu with its items {sorted(items)}")
+        check(items["Open"][1].get("shortcut") == [["Control", "O"]], f"accelerator exported as shortcut {items['Open'][1]}")
+        check(items["Wrap"][1].get("toggle-type") == "checkmark" and items["Wrap"][1].get("toggle-state") == 0, f"check item {items['Wrap'][1]}")
+        m = g.mark()
+        dbusmenu_click(w["menu"]["service"], w["menu"]["path"], items["Open"][0])
+        check(g.wait(lambda e: e.get("ev") == "action" and e.get("name") == "Open", 5, since=m), "clicking Open runs the app's handler")
+        dbusmenu_click(w["menu"]["service"], w["menu"]["path"], items["Wrap"][0])
+        check(g.wait(lambda e: e.get("ev") == "toggled" and e.get("active") is True, 5, since=m), "clicking Wrap toggles it")
+        state = wait_until(lambda: dbusmenu_items(dbusmenu(w["menu"]["service"], w["menu"]["path"])[1])["Wrap"][1].get("toggle-state") == 1, 3)
+        check(state, "the exported check state follows")
+        # the shell crashes: after the grace period the menu bar is back in the window
+        m = g.mark()
+        shell.close()
+        ev = g.wait(lambda e: e.get("ev") == "menubar" and e.get("mapped") and e.get("h", 0) >= 10, 6, since=m)
+        check(ev is not None, f"no menu bar shows app menus: the GTK app shows its own {ev}")
+        m = g.mark()
+        shell = s.bridge("shell")
+        shell.subscribe("windows", "menus")
+        ev = g.wait(lambda e: e.get("ev") == "menubar" and not e.get("mapped"), 6, since=m)
+        check(ev is not None, "shell back: hidden in the window again")
+        # GtkApplication menu bar (GMenu model), with gtk-shell-shows-menubar=1 in settings.ini
+        ga = s.spawn(["python3", GTKPROBE, "gtk-app", "--app"], "gtkapp", env=env)
+        w = find_window(b, lambda v: v["title"] == "gtk-app" and v["menu"], 10)
+        check(w is not None, f"GtkApplicationWindow: its menu bar is created and exported {w and w['menu']}")
+        items = dbusmenu_items(dbusmenu(w["menu"]["service"], w["menu"]["path"])[1])
+        check("File" in items and "Open" in items and items["Open"][1].get("shortcut") == [["Control", "O"]], f"GMenu items {items}")
+        m = ga.mark()
+        dbusmenu_click(w["menu"]["service"], w["menu"]["path"], items["Open"][0])
+        check(ga.wait(lambda e: e.get("ev") == "action" and e.get("name") == "Open", 5, since=m), "app.open runs")
+        lay = ga.wait("layout", 5)
+        check(lay is not None and lay["content_y"] == 0, f"…and its menu bar takes no space in the window {lay}")
+        m = ga.mark()
+        shell.close()
+        ev = ga.wait(lambda e: e.get("ev") == "content" and e.get("y", 0) > 0, 6, since=m)
+        check(ev is not None, f"shell gone: the GtkApplicationWindow shows its menu bar {ev}")
 
 
 ICON_SCRIPT = r"""

@@ -50,6 +50,11 @@ RUN for p in plasma-milou kf6-baloo-file firefox pipewire-utils; do \
       rpm -q "$p" >/dev/null 2>&1 || dnf5 install -y "$p" >/tmp/dnf.log 2>&1 \
         || { echo "$p" >> /devenv-missing.txt; tail -2 /tmp/dnf.log; }; \
     done; dnf5 clean all >/dev/null 2>&1; rm -f /tmp/dnf.log; rpm -q plasma-milou kf6-baloo-file firefox || true
+# Added 2026-11-17 (own layer): gtk3-devel (kwin/bridge builds and tests its GTK 3 app-menu module).
+RUN for p in gtk3-devel; do \
+      rpm -q "$p" >/dev/null 2>&1 || dnf5 install -y "$p" >/tmp/dnf.log 2>&1 \
+        || { echo "$p" >> /devenv-missing.txt; tail -2 /tmp/dnf.log; }; \
+    done; dnf5 clean all >/dev/null 2>&1; rm -f /tmp/dnf.log; rpm -q gtk3-devel || true
 # The assistant daemon's hash-pinned Python environment (assistant/core/image/*requirements.txt,
 # copied into the build context by build.sh), exactly as its image installer builds it, so that
 # assistant/core/tests/run.sh and the daemon's demo mode (`python -m kristall_assistant.daemon
