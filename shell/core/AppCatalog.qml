@@ -122,17 +122,35 @@ Singleton {
     Component.onCompleted: rebuild()
 
     // ---- icons -------------------------------------------------------------------------------
+    // Theme icons follow the accent: folder icons (Files, Downloads) draw their body in the
+    // palette's highlight colour (KIconLoader renders the SVG with the application palette). The
+    // palette changes at run time (kristall-appearance → plasma-apply-colorscheme → KDE platform
+    // theme), but an Image never asks its provider again for a URL it already has. So every theme
+    // icon URL carries `iconRevision`, bumped when the palette changes: each icon is requested
+    // once more and rendered in the new colours, without a shell restart (polish round, item 1).
+    // The suffix is a `?fallback=` that Quickshell's icon provider only reads if the icon itself
+    // is missing; it never is (hasThemeIcon above).
+    property int iconRevision: 0
+    SystemPalette {
+        id: palette
+        onPaletteChanged: {
+            root._iconCache = {};
+            root.iconRevision++;
+        }
+    }
     function iconUrl(nameOrPath) {
         const n = nameOrPath || "";
         if (n.startsWith("/"))
             return "file://" + n;
+        const rev = iconRevision;
         if (n !== "" && Quickshell.hasThemeIcon(n))
-            return Quickshell.iconPath(n);
+            return Quickshell.iconPath(n) + (rev > 0 ? "?fallback=" + n + "&palette=" + rev : "");
         return Quickshell.iconPath("application-x-executable", true) || "";
     }
     // icon URLs looked up once per app (theme lookups are file-system work; Search asks per keystroke)
     property var _iconCache: ({})
     function iconFor(key) {
+        iconRevision;
         const c = _iconCache[key];
         if (c !== undefined)
             return c;

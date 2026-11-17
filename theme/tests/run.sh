@@ -5,7 +5,7 @@
 # (kristall-devenv-theme = kristall-devenv plus GTK 3/4 demos, libadwaita, Firefox, KWrite,
 #  kde-gtk-config, adw-gtk3, JetBrains Mono, Plymouth/dracut/kernel — theme/tests/Dockerfile.)
 # In the plain kristall-devenv the sections needing those packages report SKIP.
-# Sections: static install decoration apps menus switch screens pointer fallback plymouth
+# Sections: static install decoration apps csd menus switch screens pointer fallback plymouth
 # (default: all). Evidence goes to theme/tests/evidence/ (kept under 6 MB).
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"

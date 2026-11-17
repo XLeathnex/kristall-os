@@ -48,6 +48,25 @@ Singleton {
         return tail ? tail.charAt(0).toUpperCase() + tail.slice(1) : "";
     }
 
+    // A window title as the owner should read it: the app's own product name that Qt appends
+    // ("Home — Dolphin", "Unbenannt — KWrite") becomes our name ("Home — Dateien"); a title that
+    // is only the product name becomes our name. Product names: the manifest's product_names
+    // (apps.md). Everything else is returned unchanged.
+    readonly property string _titleSep: " \u2014 "
+    function windowTitle(title) {
+        const t = String(title || "");
+        if (t === "")
+            return t;
+        const cut = t.lastIndexOf(_titleSep);
+        const tail = cut >= 0 ? t.substring(cut + _titleSep.length) : t;
+        const a = _byProduct[tail];
+        if (!a)
+            return t;
+        const ours = Strings.pick(a.name);
+        return cut >= 0 ? t.substring(0, cut) + _titleSep + ours : ours;
+    }
+    property var _byProduct: ({})      // "Dolphin" -> entry
+
     // Apps are started outside the shell's own systemd unit: `kstart --application` (KIO) puts each
     // into its own app-<id>@….service, as Plasma does. Started as the shell's children they lived in
     // kristall-shell.service, so a shell crash or restart (Restart=always) killed every app the owner
@@ -84,9 +103,14 @@ Singleton {
                 const m = JSON.parse(text());
                 root.apps = m.apps || [];
                 const map = {};
-                for (const a of root.apps)
+                const products = {};
+                for (const a of root.apps) {
                     map[root._norm(a.desktop_id)] = a;
+                    for (const p of (a.product_names || []))
+                        products[p] = a;
+                }
                 root._byDesktop = map;
+                root._byProduct = products;
             } catch (e) {
                 console.warn("apps: invalid manifest", root.manifestPath, e);
             }

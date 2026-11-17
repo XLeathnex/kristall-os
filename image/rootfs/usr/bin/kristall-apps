@@ -130,6 +130,9 @@ def validate(doc):
         if not isinstance(name, dict) or not all(isinstance(name.get(l), str) and name.get(l)
                                                   for l in ("en", "de")):
             errs.append("%s: name needs non-empty \"en\" and \"de\"" % where)
+        pn = a.get("product_names", [])
+        if not isinstance(pn, list) or not all(isinstance(x, str) and x.strip() for x in pn):
+            errs.append("%s: product_names must be a list of non-empty strings" % where)
         if a.get("category") not in CATEGORIES:
             errs.append("%s: category must be one of %s" % (where, sorted(CATEGORIES)))
         for b in ("default", "show_in_apps", "proprietary"):

@@ -11,28 +11,28 @@
    "idle"
   ],
   "failures": [],
-  "time": "2026-11-17T02:05:07"
+  "time": "2026-11-17T06:23:30"
  },
  "notifications_groups": 7,
  "idle_panels_closed": {
   "seconds": 5.0,
   "frames": 0,
   "cpu_ms": 0.0,
-  "wakeups": 1,
+  "wakeups": 0,
   "processes": 4
  },
  "idle_after_panels": {
   "seconds": 5.0,
   "frames": 0,
   "cpu_ms": 0.0,
-  "wakeups": 1,
+  "wakeups": 0,
   "processes": 4
  },
  "idle_cc_open": {
   "seconds": 4.0,
   "frames": 0,
   "cpu_ms": 0.0,
-  "wakeups": 0,
+  "wakeups": -5,
   "processes": 4
  }
 }

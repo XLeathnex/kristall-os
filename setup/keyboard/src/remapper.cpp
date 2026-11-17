@@ -484,6 +484,10 @@ void Remapper::onKey(quint32 key, KeyboardKeyState state, std::chrono::microseco
 void Remapper::onPress(quint32 key)
 {
     const bool on = enabled();
+    if (key == KEY_F23 && (physical(KEY_LEFTMETA) || physical(KEY_RIGHTMETA)) && (physical(KEY_LEFTSHIFT) || physical(KEY_RIGHTSHIFT))) {
+        copilotKey(key);
+        return;
+    }
     if (on && key == KEY_LEFTALT) {
         QString id;
         const AppClass cls = classify(&id);
@@ -771,6 +775,41 @@ void Remapper::optionChord(quint32 key)
     default:
         break;
     }
+    h.keys = {key};
+    m_held.insert(key, h);
+    down(key);
+}
+
+// The Copilot key: the keyboard sends Meta+Shift+F23. xkeyboard-config (2.44 and later, Fedora
+// 45) gives F23 with Shift+Super the keysym XF86Assistant (type PC_SHIFT_SUPER_LEVEL2), and Qt
+// has no key for that keysym, so KWin hands its global shortcuts key 0 and no binding can match:
+// measured in the integrated session, Meta+Shift+F23, Meta+Shift+TouchpadOff and …TouchpadOn
+// never fire, Meta+F23 does. So KWin is shown Meta+F23: Shift is let go downstream while F23 is
+// down, and the Meta key stands for Meta (with Mac shortcuts on it is Option = Alt otherwise).
+// Independent of the Mac-shortcuts setting: a fix for a key, not a preference. The shell helper
+// binds Meta+F23 to the assistant's hold-to-talk (docs/contracts/shell.md §6).
+void Remapper::copilotKey(quint32 key)
+{
+    qCInfo(KRISTALL_KEYBOARD) << "Copilot key (Meta+Shift+F23) -> Meta+F23 for the assistant; option" << m_opt
+                              << "optionMod" << int(m_optMod) << "shift down" << isDown(KEY_LEFTSHIFT) << isDown(KEY_RIGHTSHIFT);
+    if (m_opt && m_optMod != Mod::Meta) {
+        if (m_optModDown) {
+            up(modKey(m_optMod));
+            m_optModDown = false;
+        }
+        m_optMod = Mod::Meta;
+        syncOption();
+    }
+    for (quint32 shift : {KEY_LEFTSHIFT, KEY_RIGHTSHIFT}) {
+        while (isDown(shift)) {
+            up(shift);
+        }
+    }
+    if (!isDown(KEY_LEFTMETA) && !isDown(KEY_RIGHTMETA)) {
+        qCWarning(KRISTALL_KEYBOARD) << "Copilot key: no Meta downstream; the assistant's shortcut will not match";
+    }
+    Held h;
+    h.kind = Kind::Mapped;
     h.keys = {key};
     m_held.insert(key, h);
     down(key);

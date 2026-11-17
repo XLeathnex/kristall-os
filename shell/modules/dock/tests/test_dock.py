@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Dock tests (run inside the dev container under dbus-run-session; see run.sh).
 
-Sections (argv selects; default all): static behaviour perf looks autohide
+Sections (argv selects; default all): static kwinconfig behaviour perf looks contrast settingsapp autohide accent
 Against the REAL bridge plugin and real apps (Dolphin, Kate, Konsole), driven by the owner's
 pointer and keyboard through KWin's fake-input protocol. Screenshots go to tests/evidence/.
 """
@@ -16,6 +16,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "support"))
 import appsession as A  # noqa: E402
 from PIL import Image  # noqa: E402
+import numpy as np  # noqa: E402
 
 sys.path.insert(0, os.path.join(A.REPO, "kwin", "glass", "tests", "support"))
 import pattern  # noqa: E402
@@ -653,7 +654,66 @@ def test_kwinconfig():
         s.stop()
 
 
-SECTIONS = {"static": test_static, "kwinconfig": test_kwinconfig, "behaviour": test_behaviour, "perf": test_perf, "looks": test_looks, "contrast": test_contrast, "settingsapp": test_settingsapp, "autohide": test_autohide}
+def test_accent():
+    print("== accent: folder icons (Downloads) follow a palette change without a shell restart", flush=True)
+    # Under the KDE platform theme (as in the session) KIconLoader draws Breeze's folder body in
+    # the palette's highlight colour. kristall-appearance re-tints kdeglobals and announces the
+    # palette change (theme suite: `switch`); here the same happens by hand: the Dock's Downloads
+    # tile must be redrawn in the new colour within 2 s (polish round, item 1).
+    s = new_session("dock-accent", bg_kind="white")
+    kde = {"QT_QPA_PLATFORMTHEME": "kde", "KDE_FULL_SESSION": "true", "KDE_SESSION_VERSION": "6", "XDG_CURRENT_DESKTOP": "KDE"}
+    # as in the session: no QS_ICON_THEME. With it, Quickshell sets a "user" icon theme and Qt 6
+    # then loads icons itself instead of through the platform theme (KIconLoader), uncoloured.
+    env0, shell_env0 = s.env, s.shell_env
+    s.env = lambda: {k: v for k, v in env0().items() if k != "QS_ICON_THEME"}
+    s.shell_env = lambda extra=None: {k: v for k, v in shell_env0(extra).items() if k != "QS_ICON_THEME"}
+    env = s.env()
+    env.update(s.shell_env(kde))
+
+    def scheme(*args):
+        return subprocess.run(["plasma-apply-colorscheme"] + list(args), env=env, capture_output=True, text=True, timeout=30)
+
+    def announce():
+        subprocess.run(["gdbus", "emit", "--session", "--object-path", "/KGlobalSettings", "--signal",
+                        "org.kde.KGlobalSettings.notifyChange", "0", "0"], env=env, capture_output=True, timeout=10)
+    try:
+        r1, r2 = scheme("BreezeLight"), scheme("--accent-color", "#007AFF")
+        info(f"plasma-apply-colorscheme: {r1.stdout.strip()} {r1.stderr.strip()[:200]} / {r2.stdout.strip()} {r2.stderr.strip()[:200]}")
+        s.start_shell(extra_env=kde)
+        st = dock_state(s, lambda st: st["catalog"] > 0 and (tile(st, "downloads") or {}).get("presence", 0) >= 0.999, 20)
+        time.sleep(1.0)
+        st = dock_state(s)
+        t = tile(st, "downloads")
+
+        def body():
+            # the folder's body: a patch below the tab, in the middle of the icon
+            img = s.screenshot()
+            x, y = centre(t)
+            w = t["w"]
+            p = img[int(y + w * 0.05):int(y + w * 0.25), int(x - w * 0.25):int(x + w * 0.25), :3].reshape(-1, 3).astype(int)
+            return tuple(int(v) for v in np.median(p, axis=0)), img
+        before, img0 = body()
+        info(f"Downloads folder body before: {before}")
+        check("accent blue: the Downloads folder is drawn blue", before[2] > before[0] + 60, str(before))
+        scheme("--accent-color", "#FF9500")
+        announce()
+        t0 = time.monotonic()
+        orange = wait_until(lambda: (lambda c: c if c[0] > c[2] + 60 else None)(body()[0]), 2.0, 0.1)
+        dt = time.monotonic() - t0
+        after, img1 = body()
+        check("accent orange: the Downloads folder in the Dock turns orange within 2 s, without a shell restart",
+              orange is not None, f"after {after} ({dt:.1f} s)")
+        info(f"Downloads folder body after: {after}, {dt:.2f} s")
+        x0 = int(st["capsule"]["x"]) - 20
+        save(img0, "dock-accent-blue.jpg", crop=(x0, s.height - 120, int(st["capsule"]["x"] + st["capsule"]["w"]) + 20, s.height))
+        save(img1, "dock-accent-orange.jpg", crop=(x0, s.height - 120, int(st["capsule"]["x"] + st["capsule"]["w"]) + 20, s.height))
+        w = [x for x in warnings(s) if "kf.config" not in x]
+        check("accent: zero QML warnings", not w, "\n".join(w[:6]))
+    finally:
+        s.stop()
+
+
+SECTIONS = {"static": test_static, "kwinconfig": test_kwinconfig, "behaviour": test_behaviour, "perf": test_perf, "looks": test_looks, "contrast": test_contrast, "settingsapp": test_settingsapp, "autohide": test_autohide, "accent": test_accent}
 
 if __name__ == "__main__":
     wanted = sys.argv[1:] or list(SECTIONS)

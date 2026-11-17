@@ -16,10 +16,11 @@
    "restart",
    "plasma",
    "gallery",
+   "notifyreclaim",
    "realbridge"
   ],
   "failures": [],
-  "time": "2026-11-17T02:01:45"
+  "time": "2026-11-17T06:36:20"
  },
  "idle_bar": {
   "seconds": 5.0,
@@ -37,6 +38,6 @@
  },
  "restart_seconds": 1.6,
  "scale16_bar_device_px": 38,
- "reconnect_helper_s": 3.77,
- "reconnect_backoff_s": 3.72
+ "reconnect_helper_s": 3.84,
+ "reconnect_backoff_s": 3.75
 }

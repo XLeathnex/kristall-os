@@ -38,7 +38,7 @@ Singleton {
         // the app's windows (◆ marks minimised ones, a check the front window — as on the Mac)
         for (const w of ws) {
             const front = Bridge.frontId === w.id;
-            items.push({ label: (w.minimized ? "◆ " : "") + (w.title || AppCatalog.displayName(key)), toggle: front ? "checkmark" : "", checked: front,
+            items.push({ label: (w.minimized ? "◆ " : "") + (Apps.windowTitle(w.title) || AppCatalog.displayName(key)), toggle: front ? "checkmark" : "", checked: front,
                          action: () => AppCatalog.activateWindow(w.id) });
         }
         if (ws.length)
@@ -90,7 +90,7 @@ Singleton {
         const w = Bridge.windows[e.windowId];
         const items = [];
         if (w)
-            items.push({ type: "header", label: w.title || AppCatalog.displayName(e.key) });
+            items.push({ type: "header", label: Apps.windowTitle(w.title) || AppCatalog.displayName(e.key) });
         items.push({ label: Strings.t("dock.restore"), action: () => AppCatalog.activateWindow(e.windowId) });
         if (w && w.closeable !== false)
             items.push({ label: Strings.t("dock.closeWindow"), action: () => Bridge.call("window.close", { id: e.windowId }) });

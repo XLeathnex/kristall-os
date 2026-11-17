@@ -154,8 +154,8 @@ def notify(sess, *args, wait=True):
 
 
 def full_session(name, w=1280, h=800, scale=1.0, settings=None, media=True, plasma=False, system_opts=(), session_opts=(), glass=True,
-                 audio=True):
-    sess = ps.PanelsSession(width=w, height=h, scale=scale, name=name, glass=glass,
+                 audio=True, lang="de_DE"):
+    sess = ps.PanelsSession(width=w, height=h, scale=scale, name=name, glass=glass, lang=lang,
                             settings=settings or {"appearance": {"theme": "light", "glass": 0.3}})
     sess.start(wait_glass=glass)
     sess.start_system(*system_opts)
@@ -273,6 +273,8 @@ def test_cc():
         check("Control Center opens with its modules", all(x in c for x in ("cc.wifi", "cc.bt", "cc.focus", "cc.display", "cc.sound", "cc.kbd",
                                                                             "cc.energy.open", "cc.media.toggle", "cc.screenshot", "cc.nightlight")), str(c))
         check("the bar's Control Center button knows it is open", st["open"].get("control-center") == "Virtual-0", str(st["open"]))
+        cut = {n: sess.ipc("panelstest", "truncated", n) for n in ("cc.focus.open", "cc.wifi.open", "cc.bt.open")}
+        check("German: the Control Center's module names are not cut off", all(v == "[]" for v in cut.values()), json.dumps(cut))
 
         # ---- Wi-Fi on/off
         sess.pt("click", "cc.wifi")
@@ -870,9 +872,17 @@ def test_looks():
     print("== looks: light/dark, 1.0/1.6, reduce transparency/motion, no glass effect", flush=True)
     for theme in ("light", "dark"):
         W, H = 1280, 800
-        sess = full_session("looks-" + theme, W, H, settings={"appearance": {"theme": theme, "glass": 0.3}})
+        lang = "en_US" if theme == "dark" else "de_DE"      # the dark set is the English one
+        sess = full_session("looks-" + theme, W, H, settings={"appearance": {"theme": theme, "glass": 0.3}}, lang=lang)
         try:
             sess.mocksys("SetApStrength", "Nachbar", 60)
+            if lang == "en_US":
+                open_cc(sess)
+                time.sleep(0.5)
+                cut = {n: sess.ipc("panelstest", "truncated", n) for n in ("cc.focus.open", "cc.wifi.open", "cc.bt.open")}
+                check("English: 'Do Not Disturb' and the other module names are not cut off (two lines at most)",
+                      all(v == "[]" for v in cut.values()), json.dumps(cut))
+                close_all(sess)
             shoot_set(sess, W, H, f"{theme}-1.0x")
             warns = warnings(sess)
             check(f"{theme}: zero warnings while drawing everything", not warns, "\n".join(warns[:10]))

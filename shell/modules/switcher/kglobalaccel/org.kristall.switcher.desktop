@@ -2,17 +2,17 @@
 # Control + ↑ (the Mac's Mission Control key) opens Overview. KWin registers its own Overview action
 # without loading defaults from /etc/xdg/kglobalshortcutsrc, so an extra key there never reached a
 # new user (integrated session: only Meta+W worked). This file adds the key as an action of its own
-# that asks KWin's Overview action to run. NoDisplay must not be set (see org.kristall.search.desktop).
+# that asks the Overview action to run (Kristall's Overview effect, kwin/effects/kristall_overview). NoDisplay must not be set (see org.kristall.search.desktop).
 Type=Application
 Name=Kristall Overview
 Name[de]=Kristall-Übersicht
 Icon=view-app-grid
-Exec=dbus-send --session --type=method_call --dest=org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component.invokeShortcut string:Overview
+Exec=dbus-send --session --type=method_call --dest=org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component.invokeShortcut "string:Kristall Overview"
 X-KDE-GlobalAccel-CommandShortcut=false
 Actions=Overview
 
 [Desktop Action Overview]
 Name=Overview
 Name[de]=Übersicht
-Exec=dbus-send --session --type=method_call --dest=org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component.invokeShortcut string:Overview
+Exec=dbus-send --session --type=method_call --dest=org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component.invokeShortcut "string:Kristall Overview"
 X-KDE-Shortcuts=Ctrl+Up

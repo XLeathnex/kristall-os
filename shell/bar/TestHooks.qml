@@ -157,6 +157,10 @@ Scope {
                 return "[]";
             }
         }
+        // a window title as the owner reads it (Apps.windowTitle: product names → our names)
+        function windowTitle(title: string): string {
+            return Apps.windowTitle(title);
+        }
         function state(output: string): string {
             const b = hooks.bar(output);
             const host = b ? Menus.hosts[b.screenName] : null;

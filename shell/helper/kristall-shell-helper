@@ -13,7 +13,8 @@ It does the things Quickshell 0.2.1 has no native service for, without polling:
   * wall-clock jumps (resume from suspend, time zone change) so the clock re-aligns
   * session actions (lock, sleep, restart, shut down, log out, restart-to-update)
   * loads KDE's appmenu kded module so KWin advertises the app-menu protocol to apps
-  * removes the last-resort fallback panel once the shell runs again
+  * removes the last-resort fallback panel once the shell runs again, and takes the notification
+    service back from plasmashell (which keeps it after such an episode)
   * owns the assistant's global shortcut as a kglobalaccel D-Bus component action, so key
     *releases* are seen too (push-to-talk): events `shortcut {action, state: pressed|released, heldMs}`
 Spec: docs/contracts/shell.md §7. Exits when stdin closes (the shell went away).
@@ -185,11 +186,18 @@ class MenuClient:
 # Shortcuts (kglobalacceld stores that, and loads it again when we register).
 QT_ALT, QT_SHIFT, QT_META = 0x08000000, 0x02000000, 0x10000000
 SHORTCUTS = {
-    # Alt+Space (Option+Space on the Mac-style keyboard), the Copilot key (Meta+Shift+F23; with
-    # the stock xkb keymap kglobalacceld sees that key as Meta+Shift+TouchpadOn)
+    # Alt+Space (Option+Space on the Mac-style keyboard) and the Copilot key. The keyboard sends
+    # Meta+Shift+F23; Fedora 45's keymap turns F23 with Shift+Super into XF86Assistant, which Qt
+    # has no key for, so the keyboard plugin (setup/keyboard: Remapper::copilotKey) shows KWin
+    # Meta+F23 instead. Meta+Shift+F23 and Meta+Shift+TouchpadOff are what the key gives without
+    # the plugin under older keymaps (F23 = F23, or F23 = XF86TouchpadOff only).
     "assistant-talk": {"name": "Talk to the assistant (hold to talk)", "name_de": "Mit dem Assistenten sprechen (gedrückt halten zum Sprechen)",
-                       "keys": [QT_ALT | 0x20, QT_META | QT_SHIFT | 0x01000046, QT_META | QT_SHIFT | 0x01100111]},
+                       "keys": [QT_ALT | 0x20, QT_META | 0x01000046, QT_META | QT_SHIFT | 0x01000046, QT_META | QT_SHIFT | 0x01000112]},
 }
+# Keys stored for owners from before 2026-11-17 (kglobalacceld keeps an action's keys once it has
+# seen them, so a new default never reaches them by itself): the old Copilot entry was an invalid
+# key (stored as 0x12001bc0) and Meta+F23 was missing. Only that exact leftover is changed.
+LEGACY_KEYS = {"assistant-talk": {"drop": [0x12001bc0], "if_present": QT_META | QT_SHIFT | 0x01000046, "add": [QT_META | 0x01000046]}}
 COMPONENT = "kristall-shell"
 COMPONENT_NAME = "Kristall Shell"
 KGA = "org.kde.kglobalaccel"
@@ -269,6 +277,15 @@ class GlobalShortcuts:
     def got_keys(self, action, v):
         # a(ai): one key sequence per entry, up to four key combinations each (we use the first)
         keys = [seq[0][0] for seq in (v[0] if v else []) if seq and seq[0] and seq[0][0]]
+        mig = LEGACY_KEYS.get(action)
+        if mig and mig["if_present"] in keys and any(k not in keys for k in mig["add"]):
+            new = [k for k in keys if k not in mig["drop"]] + [k for k in mig["add"] if k not in keys]
+            log(f"shortcut {action}: updating keys stored before the Copilot fix {[hex(k) for k in keys]} -> {[hex(k) for k in new]}")
+            self.call("setShortcutKeys", GLib.Variant.new_tuple(GLib.Variant("as", self.action_id(action)),
+                                                                 GLib.Variant("a(ai)", [([k],) for k in new]),
+                                                                 GLib.Variant("u", SET_PRESENT | NO_AUTOLOADING)),
+                      lambda v2, a=action: self.got_keys(a, v2))
+            return
         self.active_keys[action] = keys
         log(f"shortcut {action}: keys {[hex(k) for k in keys]}" + ("" if keys else " (none: taken by another action?)"))
         emit({"event": "shortcut.registered", "action": action, "keys": keys})
@@ -570,6 +587,7 @@ class Helper:
     def cleanup_fallback(self):
         marker = os.path.join(self.state_home, "kristall", "shell", "fallback-panel")
         if not os.path.exists(marker):
+            self.reclaim_notifications()
             return False
         script = "panels().forEach(function (p) { p.remove(); });"
         log("shell is running again: removing the fallback panel")
@@ -578,6 +596,38 @@ class Helper:
             os.unlink(marker)
         except OSError:
             pass
+        # once Plasma has written its layout without the panel
+        GLib.timeout_add_seconds(3, lambda: (self.reclaim_notifications(), False)[1])
+        return False
+
+    def reclaim_notifications(self):
+        """The fallback panel's notifications applet makes plasmashell take
+        org.freedesktop.Notifications while the shell is down, and Plasma keeps that name for as
+        long as plasmashell runs: removing the panel does not release it, and it does not allow
+        replacement (RequestName with REPLACE_EXISTING → "exists", measured). So when the shell
+        runs stably again and plasmashell still holds the name, plasmashell is restarted once — it
+        then draws only the desktop, as Kristall's layout says — and the shell's panels module
+        claims the free name (Notifs.qml). Banners and the Notification Centre are ours again."""
+        try:
+            v = self.session.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "GetConnectionUnixProcessID",
+                                       GLib.Variant("(s)", ("org.freedesktop.Notifications",)), None, Gio.DBusCallFlags.NONE, 2000, None)
+            pid = v.unpack()[0]
+            with open(f"/proc/{pid}/comm") as f:
+                comm = f.read().strip()
+        except (GLib.Error, OSError):
+            return False
+        if comm != "plasmashell" or getattr(self, "_reclaimed", False):
+            return False
+        self._reclaimed = True
+        log(f"plasmashell (pid {pid}) holds org.freedesktop.Notifications after a fallback episode: restarting it so the shell gets them back")
+        emit({"event": "notifications.reclaim", "from": pid})
+        cmd = os.environ.get("KRISTALL_PLASMASHELL_RESTART")       # tests: the fake plasmashell
+        if cmd:
+            self.spawn(["sh", "-c", cmd])
+        elif subprocess.run(["systemctl", "--user", "is-active", "--quiet", "plasma-plasmashell.service"]).returncode == 0:
+            self.spawn(["systemctl", "--user", "restart", "plasma-plasmashell.service"])
+        else:
+            self.spawn(["sh", "-c", "kquitapp6 plasmashell; exec kstart plasmashell"])
         return False
 
 

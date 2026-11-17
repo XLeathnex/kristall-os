@@ -3,15 +3,16 @@
 # <action>=<active shortcuts, tab-separated>,<default>,<description>.
 # Command (the key next to the space bar, Meta here) + Tab: app switcher; the PC habit Alt+Tab
 # stays. Command + ` (and Command + < on German keyboards): windows of the front app.
-# Meta+W: Overview (Control + ↑ is kglobalaccel/org.kristall.switcher.desktop: KWin does not load
-# extra keys for its Overview action from this file). Meta+Tab was Plasma's "walk
+# Meta+W: Overview — Kristall's Overview effect (KWin's own is switched off, its action unbound);
+# Control + ↑ is kglobalaccel/org.kristall.switcher.desktop. Meta+Tab was Plasma's "walk
 # through activities"; that is unbound (Kristall does not use activities).
 [kwin]
 Walk Through Windows=Meta+Tab\tAlt+Tab,Alt+Tab,Walk Through Windows
 Walk Through Windows (Reverse)=Meta+Shift+Tab\tAlt+Shift+Tab,Alt+Shift+Tab,Walk Through Windows (Reverse)
 Walk Through Windows of Current Application=Meta+`\tMeta+<\tAlt+`,Alt+`,Walk Through Windows of Current Application
 Walk Through Windows of Current Application (Reverse)=Meta+~\tMeta+>\tAlt+~,Alt+~,Walk Through Windows of Current Application (Reverse)
-Overview=Meta+W,Meta+W,Toggle Overview
+Overview=none,none,Toggle Overview
+Kristall Overview=Meta+W,Meta+W,Übersicht
 
 [plasmashell]
 next activity=none,none,Walk through activities

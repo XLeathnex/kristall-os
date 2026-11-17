@@ -53,6 +53,17 @@ for f in kwinrc kdeglobals kcm-about-distrorc; do
     python3 "$repo/shell/image/merge-ini" "/etc/xdg/$f" "$here/data/xdg/$f"
 done
 
+# System Settings opens on Kristall's first page ("Über diesen Computer"), not on Plasma's empty
+# placeholder: its start page is hard-wired to kcm_landingpage (Plasma's quick settings, hidden for
+# the owner in data/xdg/kdeglobals) and the only other way to choose the first page is the program's
+# argument. Only the main entry's Exec line changes (its actions already name their pages).
+ss="$PREFIX/share/applications/systemsettings.desktop"
+if [[ -f $ss ]] && grep -q '^Exec=systemsettings$' "$ss"; then
+    sed -i '0,/^Exec=systemsettings$/s//Exec=systemsettings kcm_kristall_about/' "$ss"
+elif [[ -f $ss ]] && ! grep -q '^Exec=systemsettings kcm_kristall_about$' "$ss"; then
+    echo "setup: WARNING systemsettings.desktop has no plain Exec=systemsettings; System Settings keeps its own first page" >&2
+fi
+
 # the Setup Assistant's shell module
 KRISTALL_PREFIX="$PREFIX" bash "$repo/shell/modules/setup/image/install.sh"
 

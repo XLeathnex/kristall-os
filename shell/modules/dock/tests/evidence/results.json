@@ -8,28 +8,29 @@
    "looks",
    "contrast",
    "settingsapp",
-   "autohide"
+   "autohide",
+   "accent"
   ],
   "failures": [],
-  "time": "2026-11-17T04:36:07"
+  "time": "2026-11-17T06:25:27"
  },
- "dolphin_launch_s": 0.57,
- "dock_layout_us_per_pass": 21,
+ "dolphin_launch_s": 0.7,
+ "dock_layout_us_per_pass": 23.5,
  "dock_magnify_sweep": {
   "sweep_s": 2.05,
   "pointer_events": 241,
   "frames": 122,
-  "fps": 59.5,
+  "fps": 59.4,
   "interval_ms_p50": 17,
-  "interval_ms_p95": 18,
-  "interval_ms_max": 21,
-  "shell_cpu_ms": 450.0,
-  "cpu_ms_per_frame": 3.69
+  "interval_ms_p95": 19,
+  "interval_ms_max": 22,
+  "shell_cpu_ms": 500.0,
+  "cpu_ms_per_frame": 4.1
  },
  "dock_idle_after_leave": {
   "dock_frames": 0,
   "compositor_frames": 0,
   "shell_cpu_ms": 0.0,
-  "started_at_second": 2
+  "started_at_second": 15
  }
 }

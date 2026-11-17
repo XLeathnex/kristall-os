@@ -65,6 +65,19 @@ echo "no users -> wizard stays enabled: $([[ $r1 == 0 ]] && echo yes || echo NO)
 echo "existing user -> wizard skipped: $([[ $r2 == 0 ]] && echo yes || echo NO)"
 record "plasma-setup guard" $((r1 + r2))
 
+section "Firefox defaults (install.sh block on a fake Firefox tree)"
+f=$(mktemp -d)
+mkdir -p "$f/usr/lib64/firefox/browser/defaults/preferences" "$f/usr/lib64/firefox/langpacks"
+: >"$f/usr/lib64/firefox/langpacks/langpack-de@firefox.mozilla.org.xpi"
+block=$(sed -n '/^# Firefox: make sure hardware video decoding/,/^# Sanity:/p' "$REPO/image/image/install.sh" | sed '$d')
+# shellcheck disable=SC2329  # warn is called by the evaluated block
+(warn() { echo "WARN $*"; }; eval "${block//\/usr\/lib/$f\/usr\/lib}")
+rc=0
+test -f "$f/usr/lib64/firefox/distribution/extensions/langpack-de@firefox.mozilla.org.xpi" || { echo "German language pack is not a distribution add-on"; rc=1; }
+grep -q 'media.webspeech.synth.dont_notify_on_error", true' "$f/usr/lib64/firefox/browser/defaults/preferences/kristall-default-prefs.js" || { echo "speech bar pref missing"; rc=1; }
+rm -rf "$f"
+record "Firefox: German on first start, no Speech Dispatcher bar" $rc
+
 section "JSON / YAML / desktop files"
 rc=0
 for j in "$REPO/image/apps/apps.json" "$REPO/image/rootfs/etc/skel/.var/app/com.visualstudio.code/config/Code/User/settings.json"; do

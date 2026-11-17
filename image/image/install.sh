@@ -158,14 +158,34 @@ done
 note "hid $hidden desktop entries"
 command -v update-desktop-database >/dev/null && update-desktop-database -q /usr/share/applications || true
 
-# Firefox: make sure hardware video decoding (VA-API on Intel) is used.
+# Firefox: make sure hardware video decoding (VA-API on Intel) is used. No notification bar about
+# speech synthesis: Firefox shows "Speech Dispatcher library is missing" (English, with a support
+# link) the first time a page asks for voices; the image has no speech-dispatcher, and Firefox's
+# own "Don't show again" button sets exactly this preference.
 for d in /usr/lib64/firefox/browser/defaults/preferences /usr/lib/firefox/browser/defaults/preferences; do
   if [[ -d $d ]]; then
     cat >"$d/kristall-default-prefs.js" <<'EOF'
 // Kristall OS: hardware video decoding (VA-API) on Intel graphics.
 pref("media.hardware-video-decoding.enabled", true);
 pref("media.ffmpeg.vaapi.enabled", true);
+// Kristall OS: no "Speech Dispatcher library is missing" notification bar.
+pref("media.webspeech.synth.dont_notify_on_error", true);
 EOF
+  fi
+done
+# Firefox speaks the owner's language from the very first start. Fedora's wrapper (/usr/bin/firefox)
+# only links the matching language pack into the profile when Firefox starts, so the first start
+# was English (with a "Firefox speaks your language" page) and German from the second. A language
+# pack in Firefox's distribution/extensions is installed into every new profile before its first
+# window; intl.locale.requested stays "" (Fedora's default: follow the system language), so an
+# English owner keeps English. Kristall's languages: German (English is built in).
+for fx in /usr/lib64/firefox /usr/lib/firefox; do
+  lp="$fx/langpacks/langpack-de@firefox.mozilla.org.xpi"
+  if [[ -f $lp ]]; then
+    install -d "$fx/distribution/extensions"
+    ln -sfn ../../langpacks/langpack-de@firefox.mozilla.org.xpi "$fx/distribution/extensions/langpack-de@firefox.mozilla.org.xpi"
+  elif [[ -d $fx ]]; then
+    warn "Firefox has no German language pack ($lp): its first start will be English"
   fi
 done
 

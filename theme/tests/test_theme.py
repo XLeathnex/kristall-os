@@ -21,6 +21,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "support"))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "tools"))
 import themesession as ts  # noqa: E402
+from harness import wait_until  # noqa: E402
 import kristall_colors as kc  # noqa: E402
 import kini  # noqa: E402
 import numpy as np  # noqa: E402
@@ -228,6 +229,9 @@ def test_install():
     ov = json.load(open(os.path.join(P["overlay"], "plasma", "shells", "org.kde.plasma.desktop", "contents", "kristall-overlay.json")))
     check("shell-package overlay: lock screen patched, log-out dialog replaced (with stock fallbacks kept)",
           ov["lockscreen"] == "kristall" and ov["logout"] == "kristall", json.dumps(ov))
+    klock = os.path.join(P["overlay"], "plasma", "shells", "org.kde.plasma.desktop", "contents", "lockscreen", "KristallLockScreenUi.qml")
+    check("lock screen: the 'Virtual Keyboard' button is shown only when KWin has an on-screen keyboard (a touchscreen)",
+          os.path.exists(klock) and "visible: Keyboards.KWinVirtualKeyboard.available" in open(klock).read())
     stock = "/usr/share/plasma/shells/org.kde.plasma.desktop"
     same = all(open(os.path.join(stock, rel), "rb").read() == open(os.path.join(P["overlay"], "plasma", "shells", "org.kde.plasma.desktop", rel), "rb").read()
                for rel in ("contents/views/Desktop.qml", "contents/lockscreen/LockScreenUi.qml", "metadata.json") if os.path.exists(os.path.join(stock, rel)))
@@ -266,6 +270,21 @@ def is_close(c, ref, tol=40):
 
 def test_decoration():
     print("== window decoration: buttons, corners, outline, shadow, active/inactive, hover", flush=True)
+    # titles: KDE's product names become ours (titles.cpp, the manifest's product_names)
+    exe = "/tmp/kristall-titles-test"
+    flags = subprocess.run(["pkg-config", "--cflags", "--libs", "Qt6Core"], capture_output=True, text=True).stdout.split()
+    b = subprocess.run(["g++", "-std=c++20", "-fPIC", "-o", exe, os.path.join(HERE, "support", "titles_test.cpp"),
+                        os.path.join(THEME, "decoration", "titles.cpp")] + flags, capture_output=True, text=True)
+    if check("decoration titles: the title helper builds", b.returncode == 0, b.stderr[-600:]):
+        cases = ["Persönlicher Ordner — Dolphin", "Unbenannt — KWrite", "~ : bash — Konsole", "KWrite", "Neuer Tab — Mozilla Firefox", "A — B — Dolphin"]
+        env = dict(os.environ, KRISTALL_APPS_MANIFEST=os.path.join(REPO, "image", "apps", "apps.json"))
+        de = subprocess.run([exe] + cases, env=dict(env, KRISTALL_LANG="de"), capture_output=True, text=True).stdout.splitlines()
+        en = subprocess.run([exe] + cases, env=dict(env, KRISTALL_LANG="en"), capture_output=True, text=True).stdout.splitlines()
+        check("decoration titles (German): Dolphin/KWrite/Konsole in titles become Dateien/Texteditor/Terminal, other titles unchanged",
+              de == ["Persönlicher Ordner — Dateien", "Unbenannt — Texteditor", "~ : bash — Terminal", "Texteditor", "Neuer Tab — Mozilla Firefox", "A — B — Dateien"], str(de))
+        check("decoration titles (English): … become Files/Text Editor/Terminal", en[:2] == ["Persönlicher Ordner — Files", "Unbenannt — Text Editor"], str(en))
+        nomani = subprocess.run([exe] + cases[:1], env=dict(os.environ, KRISTALL_APPS_MANIFEST="/nonexistent"), capture_output=True, text=True).stdout.splitlines()
+        check("decoration titles: without the manifest the app's own title is shown", nomani == cases[:1], str(nomani))
     ensure_stage()
     for mode in ("light", "dark"):
         s = ts.ThemeSession(mode=mode, name=f"deco-{mode}")
@@ -450,6 +469,76 @@ def test_apps():
     results["apps"] = shots
 
 
+def test_csd():
+    print("== GTK 3 client-side title bars (headerbar apps, GTK_CSD=1): 28 px, buttons centred, normal and maximised", flush=True)
+    ensure_stage()
+    s = ts.ThemeSession(mode="light", name="csd")
+    try:
+        bar = start_with_bar(s, "light")
+        check("csd: the Kristall menu bar runs", bar)
+        s.launch([sys.executable, os.path.join(HERE, "support", "gtk3csd.py"), "CSD-Test"], name="gtk3csd", extra={"GTK_CSD": "1"})
+        w = s.wait_window("CSD-Test", 20)
+        if not check("csd: the GTK 3 test window opens", bool(w)):
+            return
+        s.place("CSD-Test", 200, 150, 640, 420)
+        time.sleep(1.5)
+
+        def close_button(img, win):
+            # the red close circle: centroid of saturated red pixels in the window's top-left corner
+            k = s.scale
+            x0, y0 = int(win["x"] * k), int(max(0, win["y"] - 20) * k)
+            patch = img[y0:y0 + int(70 * k), x0:x0 + int(80 * k), :3].astype(int)
+            red = (patch[..., 0] > 200) & (patch[..., 1] < 120) & (patch[..., 2] < 120)
+            if red.sum() < 10:
+                return None
+            ys, xs = np.nonzero(red)
+            return ((xs.mean() + x0) / k, (ys.mean() + y0) / k)
+
+        def title_centre(img, win):
+            # the bold title "CSD-Test": dark pixels in the middle of the window's top 60 px
+            k = s.scale
+            cx = win["x"] + win["w"] / 2
+            x0, y0 = int((cx - 60) * k), int(win["y"] * k)
+            patch = img[y0:y0 + int(60 * k), x0:x0 + int(120 * k), :3].astype(int)
+            dark = patch.sum(axis=2) < 200
+            if dark.sum() < 10:
+                return None
+            ys = np.nonzero(dark)[0]
+            return (ys.mean() + y0) / k
+
+        def bar_bottom():
+            st = s.state()
+            return st["bar"].get("height", 24) if st and st.get("bar") else 24
+        for label in ("normal", "maximised"):
+            if label == "maximised":
+                s.kwin_script("var ws=workspace.windowList();for(var i=0;i<ws.length;i++){var c=ws[i];"
+                              "if(c.normalWindow&&c.caption.indexOf('CSD-Test')>=0){c.setMaximize(true,true);}}", name="kristall-max")
+                time.sleep(2.0)
+            win = s.wait_window("CSD-Test", 5)
+            img = s.screenshot()
+            c = close_button(img, win)
+            path = s.save_jpg(img, f"gtk3-csd-{label}-light-1.0x.jpg", crop=(max(0, int(win["x"]) - 10), 0, int(win["x"]) + 420, int(win["y"]) + 90), quality=82)
+            t = title_centre(img, win)
+            info(f"csd {label}: window {win}, close button centre {c}, title text centre {t}")
+            # GTK centres the title text in the bar: the buttons must sit on the same line, and the
+            # bar is at least the Mac's 28 px (the button centre at least 14 px below the top)
+            ok = c is not None and t is not None and abs(c[1] - t) <= 2.0 and c[1] - win["y"] >= 13.5
+            check(f"csd {label}: the buttons are vertically centred in the title bar, on the title's line "
+                  f"(button {c and round(c[1] - win['y'], 1)} px, title {t and round(t - win['y'], 1)} px below the window top)",
+                  ok, os.path.basename(path))
+            if label == "maximised":
+                top = bar_bottom()
+                check("csd maximised: the window starts below the menu bar and the buttons are fully below it",
+                      win["y"] >= top - 0.5 and c is not None and c[1] - 7 >= top, f"window y {win['y']} bar {top} button {c}")
+            # GTK 3 left black wedges in the window's left corners below the title bar
+            k = s.scale
+            strip = img[int((win["y"] + 8) * k):int((win["y"] + 50) * k), int(win["x"] * k):int((win["x"] + 6) * k), :3].astype(int)
+            darkest = int(strip.sum(axis=2).min()) if strip.size else 0
+            check(f"csd {label}: no black wedge in the window's corner below the title bar (darkest {darkest})", darkest > 150)
+    finally:
+        s.stop()
+
+
 # ======================================================================== menus (glass)
 def glass_status(sess):
     sys.path.insert(0, os.path.join(REPO, "kwin", "glass", "tests", "support"))
@@ -573,7 +662,18 @@ def test_switch():
                 pass
             time.sleep(2)
         s.save_jpg(light, "switch-all-light-1.0x.jpg", quality=80)
-        # accent
+        # accent; a Qt process that keeps running (the shell is one) must draw the new accent too
+        probe_dir = os.path.join(HERE, "support", "palette-probe")
+        s.launch(["quickshell", "-p", probe_dir], name="palette-probe")
+
+        def probe_highlight():
+            r = s.run(["quickshell", "ipc", "-p", probe_dir, "call", "probe", "highlight"], timeout=10)
+            try:
+                return json.loads(r.stdout.strip())
+            except ValueError:
+                return {}
+        wait_until(lambda: probe_highlight().get("highlight"), 10)
+        before = probe_highlight()
         s.settings("appearance.accent", "green")
         time.sleep(4)
         st = json.loads(s.appearance("status", "--json").stdout or "{}")
@@ -584,6 +684,13 @@ def test_switch():
         rgb = [int(x) for x in sel.replace(" ", "").split(",")[:3]] if sel.count(",") >= 2 else [0, 0, 0]
         check("accent green reaches running Qt/KDE apps (kdeglobals Colors:Selection is green now, not the previous blue)",
               rgb[1] > rgb[0] + 40 and rgb[1] > rgb[2] + 40, sel)
+        after = probe_highlight()
+        hl = after.get("highlight", "#000000")
+        hr, hg, hb = (int(hl[i:i + 2], 16) for i in (1, 3, 5))
+        # plasma-apply-colorscheme announces the palette before it writes kdeglobals; without our
+        # second announcement a running process reloads the old (blue) colours
+        check("accent green reaches a running Qt Quick process's palette (not one change behind; the shell's folder icons use it)",
+              hg > hr + 40 and hg > hb + 40, f"before {before} after {after}")
         css = open(os.path.join(s.config, "gtk-4.0", "kristall.css")).read()
         check("accent green reaches GTK 4/libadwaita (--accent-bg-color) and GTK 3 (@accent_bg_color)",
               "--accent-bg-color: #28CD41" in css and "@define-color accent_bg_color #28CD41" in open(os.path.join(s.config, "gtk-3.0", "kristall.css")).read())
@@ -903,7 +1010,7 @@ SECTIONS = {}
 
 
 def main(argv):
-    order = ["static", "install", "decoration", "apps", "menus", "switch", "screens", "pointer", "fallback", "plymouth"]
+    order = ["static", "install", "decoration", "apps", "csd", "menus", "switch", "screens", "pointer", "fallback", "plymouth"]
     funcs = {n: globals().get("test_" + n) for n in order}
     wanted = argv[1:] or order
     os.makedirs(ts.EVIDENCE, exist_ok=True)

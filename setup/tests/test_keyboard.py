@@ -5,7 +5,7 @@ the real bridge; the owner's physical keys played through org_kde_kwin_fake_inpu
 input pipeline). Logging clients record exactly what each kind of application receives:
 a native Wayland app, an XWayland app, a terminal-class window, a Wine game window; a real foot
 terminal shows what reaches the program behind it. Writes the chord table to
-tests/evidence/keyboard-table.txt. Sections: table altgr bridge system terminal live failsafe."""
+tests/evidence/keyboard-table.txt. Sections: table altgr bridge system terminal live failsafe osk."""
 import json
 import os
 import shutil
@@ -31,7 +31,8 @@ K = {"esc": 1, "1": 2, "2": 3, "3": 4, "4": 5, "5": 6, "6": 7, "7": 8, "8": 9, "
      "p": 25, "ü": 26, "+": 27, "enter": 28, "ctrl": 29, "a": 30, "s": 31, "d": 32, "f": 33, "g": 34, "h": 35, "j": 36,
      "k": 37, "l": 38, "ö": 39, "ä": 40, "^": 41, "shift": 42, "#": 43, "y": 44, "x": 45, "c": 46, "v": 47, "b": 48,
      "n": 49, "m": 50, ",": 51, ".": 52, "-": 53, "rshift": 54, "alt": 56, "space": 57, "f4": 62, "home": 102, "up": 103,
-     "left": 105, "right": 106, "end": 107, "down": 108, "delete": 111, "altgr": 100, "win": 125, "<": 86, "rctrl": 97}
+     "left": 105, "right": 106, "end": 107, "down": 108, "delete": 111, "altgr": 100, "win": 125, "<": 86, "rctrl": 97,
+     "f23": 193}
 # the physical keys by their role on the owner's keyboard
 CMD, OPT = "alt", "win"
 MODBITS = [(4, "Ctrl"), (8, "Alt"), (64, "Meta"), (1, "Shift"), (128, "AltGr")]
@@ -107,7 +108,7 @@ class KeySession(bh.Session):
         os.chmod(log, 0o755)
         acts = [("Search", "Meta+Space", "search"), ("ShotScreen", "Shift+Print", "screenshot-screen"),
                 ("ShotRegion", "Meta+Shift+Print", "screenshot-region"), ("ShotTool", "Print", "screenshot-tool"),
-                ("Emoji", "Meta+.", "emoji"), ("Assistant", "Alt+Space", "assistant")]
+                ("Emoji", "Meta+.", "emoji"), ("Assistant", "Alt+Space", "assistant"), ("Copilot", "Meta+F23", "copilot")]
         with open(os.path.join(share, "kglobalaccel", "org.kristall.keytest.desktop"), "w") as f:
             f.write("[Desktop Entry]\nType=Application\nName=Kristall key test\nExec=%s none\nActions=%s\n" % (log, ";".join(a for a, _, _ in acts)))
             for a, keys, word in acts:
@@ -401,7 +402,9 @@ def test_system():
               "keytest" in comps and not any(c in comps for c in ("spectacle", "emojier", "krunner")), comps.strip()[:300])
         focus(s, b, wins["native"])
         for keys, word in (((CMD, "space"), "search"), ((CMD, "shift", "3"), "screenshot-screen"), ((CMD, "shift", "4"), "screenshot-region"),
-                           ((CMD, "shift", "5"), "screenshot-tool"), (("ctrl", CMD, "space"), "emoji"), ((OPT, "space"), "assistant")):
+                           ((CMD, "shift", "5"), "screenshot-tool"), (("ctrl", CMD, "space"), "emoji"), ((OPT, "space"), "assistant"),
+                           # the Copilot key sends Meta+Shift+F23; KWin is shown Meta+F23 (Remapper::copilotKey)
+                           ((OPT, "shift", "f23"), "copilot")):
             n = len(s.shortcuts_seen())
             m = clients["native"].mark()
             s.chord(*keys)
@@ -507,6 +510,11 @@ def test_live():
         m = p.mark()
         s.chord(OPT, "left")
         check("off: Windows key + ← is Meta+Left", keys_received(p, m) == "Meta+Left", keys_received(p, m))
+        m = p.mark()
+        s.chord(OPT, "shift", "f23")
+        got = keys_received(p, m)
+        check("off too: the Copilot key (Meta+Shift+F23) arrives as Meta+F23 (no Shift: Qt has no key for XF86Assistant)",
+              got.startswith("Meta+") and "Shift" not in got, got)
         # switched while Command is held: the release still balances
         s.press(CMD, True)
         write_json(s.settings_file, {"keyboard": {"macShortcuts": True}})
@@ -546,6 +554,63 @@ def test_failsafe():
         check("crash guard: keys are stock", keys_received(clients["native"], m) == "Alt+c", keys_received(clients["native"], m))
 
 
+def test_osk():
+    print("== on-screen keyboard: only with a touchscreen (plasma-keyboard not started, no lock-screen button otherwise)", flush=True)
+    fedora = "/usr/share/kde-settings/kde-profile/default/xdg"      # Fedora's kde-settings: InputMethod = plasma-keyboard
+
+    def session(name, ours, touch):
+        s = KeySession(name=name, shortcuts=False)
+        if ours:     # the image merges setup/data/xdg/kwinrc into /etc/xdg/kwinrc
+            subprocess.run([sys.executable, os.path.join(REPO, "shell", "image", "merge-ini"), os.path.join(s.sysconf, "etc", "xdg", "kwinrc"),
+                            os.path.join(SETUP, "data", "xdg", "kwinrc")], check=True)
+        s.extra_env["XDG_CONFIG_DIRS"] = os.path.join(s.sysconf, "etc", "xdg") + ":/etc/xdg:" + fedora
+        if touch:
+            s.extra_env["KRISTALL_KEYBOARD_TEST_TOUCH"] = "1"    # fake input stands in for a touchscreen
+        return s
+
+    def available(s):
+        r = subprocess.run(["gdbus", "call", "--session", "--dest", "org.kde.KWin", "--object-path", "/VirtualKeyboard", "--method",
+                            "org.freedesktop.DBus.Properties.Get", "org.kde.kwin.VirtualKeyboard", "available"],
+                           env=s.env(), capture_output=True, text=True, timeout=10)
+        return "true" in r.stdout
+
+    def osk_procs(s):
+        out = subprocess.run(["ps", "-o", "pid=,rss=,comm=", "--ppid", str(s.kwin.pid)], capture_output=True, text=True).stdout
+        return [(int(p), int(r)) for p, r, c in (l.split(None, 2) for l in out.splitlines() if l.strip()) if c.strip() == "plasma-keyboard"]
+
+    if not os.path.exists("/usr/share/applications/org.kde.plasma.keyboard.desktop") or not os.path.isdir(fedora):
+        info("plasma-keyboard or kde-settings not installed: skipped")
+        return
+    with session("osk-stock", ours=False, touch=False) as s:
+        procs = wait_until(lambda: osk_procs(s), 8) or []
+        time.sleep(2.0)
+        rss = sum(r for _, r in osk_procs(s))
+        check("stock Fedora settings: KWin starts plasma-keyboard in every session (the lock screen's 'Virtual Keyboard')",
+              bool(procs) and available(s), f"procs {procs} available {available(s)}")
+        info(f"plasma-keyboard resident after start (headless KWin): {rss // 1024} MB")
+    with session("osk-notouch", ours=True, touch=False) as s:
+        time.sleep(3.0)
+        check("ours, no touchscreen (only fake input): no input method, nothing started", not available(s) and not osk_procs(s),
+              f"available {available(s)} procs {osk_procs(s)}")
+    with session("osk-touch", ours=True, touch=True) as s:
+        ok = wait_until(lambda: available(s) and osk_procs(s), 8)
+        check("ours, touchscreen present: the on-screen keyboard is available and plasma-keyboard runs", bool(ok),
+              f"available {available(s)} procs {osk_procs(s)}")
+        check("… the plugin says so in KWin's log", "touchscreen present: on-screen keyboard available" in s.log_text())
+        s.stop_proc(s.default_owner)        # the only touch device goes away (unplugged)
+        s.default_owner = None
+        gone = wait_until(lambda: not available(s) and not osk_procs(s), 8)
+        check("… touchscreen unplugged: input method off again, plasma-keyboard ended", bool(gone),
+              f"available {available(s)} procs {osk_procs(s)}")
+    s = session("osk-owner", ours=True, touch=False)
+    # the owner picked the on-screen keyboard in System Settings (~/.config/kwinrc): respected
+    with open(os.path.join(s.config, "kwinrc"), "a") as f:
+        f.write("\n[Wayland]\nInputMethod[$e]=/usr/share/applications/org.kde.plasma.keyboard.desktop\n")
+    with s:
+        ok = wait_until(lambda: available(s), 8)
+        check("owner's own choice in ~/.config/kwinrc wins (keyboard available without a touchscreen)", bool(ok))
+
+
 def write_table():
     if not ROWS:
         return
@@ -560,7 +625,7 @@ def write_table():
 
 
 SECTIONS = {"table": test_table, "altgr": test_altgr, "bridge": test_bridge, "system": test_system, "terminal": test_terminal,
-            "live": test_live, "failsafe": test_failsafe}
+            "live": test_live, "failsafe": test_failsafe, "osk": test_osk}
 
 if __name__ == "__main__":
     want = sys.argv[1:] or list(SECTIONS)

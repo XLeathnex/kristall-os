@@ -79,6 +79,10 @@ for f in org.kde.discover.desktop org.kde.kate.desktop htop.desktop; do
   fi
 done
 
+# Firefox: German from the first start (the language pack is a distribution add-on), no speech bar
+check "Firefox German language pack is a distribution add-on" test -f /usr/lib64/firefox/distribution/extensions/langpack-de@firefox.mozilla.org.xpi
+check "Firefox: no Speech Dispatcher notification bar" grep -q 'media.webspeech.synth.dont_notify_on_error", true' /usr/lib64/firefox/browser/defaults/preferences/kristall-default-prefs.js
+
 # Nothing in /usr/local, /opt, /var (beyond the base's skeleton)
 check "/usr/local empty" test -z "$(find -L /usr/local -mindepth 1 -type f 2>/dev/null | head -1)"
 

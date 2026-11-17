@@ -74,6 +74,7 @@ private:
     void onRelease(quint32 key);
     void commandChord(quint32 key, AppClass cls, const QString &id);
     void optionChord(quint32 key);
+    void copilotKey(quint32 key);
 
     // downstream (what KWin sees); reference-counted so two sources of one key stay balanced
     void down(quint32 key);

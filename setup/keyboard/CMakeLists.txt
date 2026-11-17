@@ -35,6 +35,7 @@ add_library(kristall_keyboard MODULE
     src/main.cpp
     src/remapper.cpp
     src/keysettings.cpp
+    src/onscreenkeyboard.cpp
 )
 target_compile_definitions(kristall_keyboard PRIVATE QT_NO_CAST_FROM_ASCII)
 if(KRISTALL_KEYBOARD_TEST_BROKEN)

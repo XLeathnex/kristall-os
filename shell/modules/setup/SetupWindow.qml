@@ -104,11 +104,19 @@ PanelWindow {
                                            Math.max(460, header.height + body.height + footerH + pad + 24))
     GlassShape {
         id: card
+        objectName: "setup.card"
         shapeId: "setup-card"
         surface: gs
         role: "panel"
-        // a card full of text over any wallpaper: more tint than a Control Center panel
-        tintAmount: Math.max(Theme.glassTint("panel"), 0.9)
+        // a card full of text over any background: more tint than a Control Center panel, and
+        // almost solid while it sits over the owner's apps (sign-in next to the browser: no dim
+        // there, and a white page of text showed through and fought with the card's own text)
+        tintAmount: win.yielding ? 0.97 : Math.max(Theme.glassTint("panel"), 0.93)
+        KGlassRim {            // a crisp edge where the card meets a white window
+            radius: card.radius
+            scheme: card.scheme
+            visible: card.glassDrawn
+        }
         visible: win.main && !win.welcome
         width: keys.cardW
         height: keys.cardH
@@ -261,6 +269,22 @@ PanelWindow {
     }
 
     }
+    // Return is the step's primary action (the Mac's default button) whichever button has the
+    // keyboard focus — after a click on "Noch einmal" the focus stays on that button, and Return
+    // used to press it again instead of Weiter. Space still presses the focused button. A text
+    // field keeps Return (it uses it itself: the name, the Wi-Fi password). A shortcut runs before
+    // the focused control sees the key; the key handler above stays for the welcome.
+    readonly property bool _textFocused: {
+        const fi = keys.Window.activeFocusItem;
+        return fi !== null && fi.cursorPosition !== undefined;
+    }
+    Shortcut {
+        sequences: ["Return", "Enter"]
+        context: Qt.WindowShortcut
+        enabled: win.main && !win.welcome && !win._textFocused && win.stepItem !== null && win.stepItem.primaryEnabled
+        onActivated: win.stepItem.primary()
+    }
+
     // keep keyboard focus in the window when the step changes
     Connections {
         target: win.ctl

@@ -125,6 +125,31 @@ re-read on change (inotify, 50 ms coalescing). If the plugin is not loaded, cann
 or KWin started more than three times within three minutes with it loaded (`keyboard.guard`), keys are
 stock. Unloading releases every key it holds and gives the devices back. Log category `kristall.keyboard`.
 
+### 4.4 On-screen keyboard only with a touchscreen *(added 2026-11-17)*
+
+Fedora's kde-settings make KWin start the input method `plasma-keyboard` in every session (measured
+in the integrated session: RSS 369 MB / PSS 254 MB; system memory in use 174 MB lower without it)
+and the lock screen then offers "Virtual Keyboard". Our `/etc/xdg/kwinrc` sets `[Wayland]
+InputMethod` to nothing (KWin starts none) and names the one for touch in
+`[Wayland] KristallTouchInputMethod` (`org.kde.plasma.keyboard.desktop`). The keyboard plugin
+(`onscreenkeyboard.cpp`) gives KWin that input method while a real touchscreen is attached — a
+libinput touch device with a sysfs path (KWin also counts every fake-input client as touch) — and
+takes it away when the last one goes. An `InputMethod` in the owner's `~/.config/kwinrc` (System
+Settings ▸ Virtual Keyboard) or any non-empty system value is left to KWin. Without the plugin there
+is no on-screen keyboard (touch devices then need a hardware keyboard to type). Tests: `keyboard:osk`
+(headless KWin; `KRISTALL_KEYBOARD_TEST_TOUCH=1` lets fake input stand in for a touchscreen).
+Not exercised on real touch hardware.
+
+### 4.5 The Copilot key *(added 2026-11-17)*
+
+The key sends Meta+Shift+F23. Fedora 45's xkeyboard-config gives F23 with Shift+Super the keysym
+XF86Assistant (`PC_SHIFT_SUPER_LEVEL2`), for which Qt has no key, so KWin hands its global shortcuts
+key 0 and nothing can be bound. The plugin shows KWin Meta+F23 instead (Shift released downstream,
+Meta kept as Meta), with Mac shortcuts on or off; the shell helper binds Meta+F23 to the assistant
+(`shell.md` §6). Every press is logged (`journalctl --user -t kwin_wayland … kristall.keyboard`:
+"Copilot key (Meta+Shift+F23) -> Meta+F23 …") so a laptop whose key sends something else can be
+diagnosed. Verified with KWin's fake input (the same pipeline), not with a physical Copilot key.
+
 ## 5. `kristall-setup-helper`
 
 JSON lines on stdout, the last `{"event":"result","ok":…}`; exit 0 iff ok.

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // One connectivity row in Control Center: round toggle, name and state. The round button
-// switches; the name opens the module's list (as on the Mac).
+// switches; the name opens the module's list (as on the Mac). A name too long for one line
+// ("Do Not Disturb", "Nicht stören" in larger text) wraps to two lines instead of being cut.
 import QtQuick
 import qs.core
 
@@ -46,7 +47,16 @@ Item {
         Column {
             anchors.verticalCenter: parent.verticalCenter
             width: parent.width
-            KText { width: parent.width; text: row.title; textStyle: "callout"; emphasized: true; elide: Text.ElideRight; scheme: row.scheme }
+            KText {
+                width: parent.width
+                text: row.title
+                textStyle: "callout"
+                emphasized: true
+                wrapMode: Text.WordWrap
+                maximumLineCount: 2
+                elide: Text.ElideRight
+                scheme: row.scheme
+            }
             KText { width: parent.width; text: row.subtitle; textStyle: "subheadline"; level: "secondaryLabel"; elide: Text.ElideRight; scheme: row.scheme }
         }
         KFocusRing { targetRadius: 6; scheme: row.scheme }

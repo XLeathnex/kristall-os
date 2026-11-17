@@ -18,6 +18,7 @@ SW = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(os.path.dirname(SW), "dock", "tests", "support"))
 import appsession as A  # noqa: E402
 from PIL import Image  # noqa: E402
+import numpy as np  # noqa: E402
 sys.path.insert(0, os.path.join(A.REPO, "kwin", "glass", "tests", "support"))
 import pattern  # noqa: E402
 
@@ -36,6 +37,7 @@ def sysconf(tmp):
         subprocess.run([sys.executable, os.path.join(A.DOCK, "..", "..", "image", "merge-ini"), os.path.join(root, "etc", "xdg", name),
                         os.path.join(SW, "kwin", name)], check=True)
     shutil.copytree(os.path.join(SW, "kwin", "tabbox", "org.kristall.switcher"), os.path.join(root, "usr", "share", "kwin", "tabbox", "org.kristall.switcher"))
+    shutil.copytree(os.path.join(SW, "kwin", "effects", "kristall_overview"), os.path.join(root, "usr", "share", "kwin", "effects", "kristall_overview"))
     return root
 
 
@@ -187,10 +189,78 @@ def test_dark():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_overview():
+    print("== Overview (Control + ↑): Kristall's Mission Control effect, no desktop bar, no search field", flush=True)
+    tmp = tempfile.mkdtemp(prefix="kristall-overview-")
+    s = A.AppsSession(name="overview", global_shortcuts=True, sysconf=sysconf(tmp))
+    s.extra_env["QT_LOGGING_RULES"] = s.extra_env.get("QT_LOGGING_RULES", "") + ";qml.debug=true;js.debug=true;kwin_scripting.debug=true"
+    s.start()
+    try:
+        bg = os.path.join(s.tmp, "bg.png")
+        Image.fromarray(pattern.busy(s.width, s.height)).save(bg)
+        s.background(bg)
+        s.start_shell()
+        wait_until(lambda: "module switcher loaded" in s.shell_log(), 15)
+        b = s.bridge_client()
+        kons = open_app(s, ["konsole"], "org.kde.konsole")
+        dol = open_app(s, ["dolphin", "--new-window"], "org.kde.dolphin")
+        for i, w in enumerate((kons, dol)):
+            b.call("window.setGeometry", id=w["id"], x=100 + 300 * i, y=120 + 80 * i, w=760, h=500)
+        time.sleep(1.0)
+
+        def gd(*args):
+            return subprocess.run(["gdbus", "call", "--session"] + list(args), env=s.env(), capture_output=True, text=True, timeout=10).stdout
+        loaded = gd("--dest", "org.kde.KWin", "--object-path", "/Effects", "--method", "org.kde.kwin.Effects.isEffectLoaded", "kristall_overview")
+        stock = gd("--dest", "org.kde.KWin", "--object-path", "/Effects", "--method", "org.kde.kwin.Effects.isEffectLoaded", "overview")
+        check("KWin loads Kristall's Overview effect instead of its own", "true" in loaded and "false" in stock, f"kristall {loaded} stock {stock}")
+        before = s.screenshot()
+        names = gd("--dest", "org.kde.kglobalaccel", "--object-path", "/component/kwin", "--method", "org.kde.kglobalaccel.Component.shortcutNames")
+        info("kwin shortcuts with 'overview': " + str([n for n in names.split("'") if "verview" in n]))
+        s.key("leftmeta", True)
+        s.tap("w")
+        s.key("leftmeta", False)
+        time.sleep(1.2)
+        img = s.screenshot()
+        os.makedirs(EVIDENCE, exist_ok=True)
+        Image.fromarray(img[..., :3]).save(os.path.join(EVIDENCE, "overview-light-1.0x.jpg"), quality=84)
+        diff = np.abs(img[..., :3].astype(int) - before[..., :3].astype(int)).mean()
+        top = img[0:60, :, :3].astype(int)
+        check("Meta+W opens Overview (the screen changes: windows arranged over the dimmed wallpaper)", diff > 8, f"mean change {diff:.1f}")
+        info("kwin log (overview): " + "\n".join(l for l in s.log_text().splitlines() if "overview" in l.lower() or "qml" in l.lower())[-1500:])
+        s.key("esc", True)
+        s.key("esc", False)
+        time.sleep(1.0)
+        after = s.screenshot()
+        back = np.abs(after[..., :3].astype(int) - before[..., :3].astype(int)).mean()
+        check("Escape closes Overview (the desktop is back as it was)", back < 3, f"mean difference {back:.1f}")
+        bad = [l for l in s.log_text().splitlines() if "kristall_overview" in l and ("rror" in l or "arning" in l or "TypeError" in l)]
+        check("the Overview effect runs without QML errors", not bad, "\n".join(bad[:6]))
+    finally:
+        s.stop()
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_names():
+    print("== names: the switcher names apps as the Dock does (names.js from the app manifest)", flush=True)
+    ui = os.path.join(SW, "kwin", "tabbox", "org.kristall.switcher", "contents", "ui")
+    out = os.path.join(tempfile.mkdtemp(prefix="kristall-switcher-names-"), "names.js")
+    subprocess.run([sys.executable, os.path.join(SW, "tools", "gen-names.py"), os.path.join(A.REPO, "image", "apps", "apps.json"), out], check=True)
+    check("names.js is up to date with image/apps/apps.json (run tools/gen-names.py after changing the manifest)",
+          open(out, encoding="utf-8").read() == open(os.path.join(ui, "names.js"), encoding="utf-8").read())
+    text = open(os.path.join(ui, "names.js"), encoding="utf-8").read()
+    check("names.js: Dolphin's window is 'Dateien'/'Files', a '— Konsole' title is 'Terminal'",
+          '"org.kde.dolphin": {"de": "Dateien", "en": "Files"}' in text and '"Konsole": {"de": "Terminal", "en": "Terminal"}' in text)
+
+
 if __name__ == "__main__":
     try:
-        test_switcher()
-        test_dark()
+        test_names()
+        if sys.argv[1:] == ["overview"]:
+            test_overview()
+        else:
+            test_switcher()
+            test_dark()
+            test_overview()
     except Exception as e:  # noqa: BLE001
         import traceback
         traceback.print_exc()

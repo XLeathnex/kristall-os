@@ -198,3 +198,6 @@ C INSTALL.md, all suites totals.
 - dock idle: settle alone still failed 1/4 locally ({"compositor_frames": 1, "shell_cpu_ms": 10}): the menu bar clock
   repaints on the minute. Added: window kept clear of the minute tick (start ≥ :54 → wait to :01) + started_at_second in
   the result. perf section 8/8 pass, all zero.
+- PUBLISHED round 5.
+- CI round 5 e02d225: Component tests 44018331785 SUCCESS (15/15). Session container removed; kristall-integ:latest image kept for reproduction.
+- CI round 5: Build OS image 44018331818 SUCCESS. Final report delivered.

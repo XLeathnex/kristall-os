@@ -39,7 +39,7 @@ as they receive the change — KWin cross-fades the screen over 300 ms, `BlendCh
 
 | Target | Mechanism |
 |---|---|
-| Qt/KDE apps, window decoration, plasmashell, lock screen | `plasma-apply-colorscheme` (KConfig notify) |
+| Qt/KDE apps, window decoration, plasmashell, lock screen | `plasma-apply-colorscheme` (KConfig notify), then once more `KGlobalSettings.notifyChange(PaletteChanged)`: Plasma 6.8's tool announces the palette ~20 ms *before* it writes kdeglobals, so running Qt processes reloaded the previous colours (one change behind; the shell's folder icons kept the old accent until a restart). *Added 2026-11-17.* |
 | Wallpaper variant (desktop, lock screen, login splash) | our wallpaper packages carry `images/` and `images_dark/`; Plasma picks by colour scheme — nothing to do |
 | GTK 3 and GTK 4/libadwaita | `~/.config/gtk-{3,4}.0/kristall.css` (+ glyphs in `kristall/`), imported from `gtk.css` (the line is added, the file is otherwise left to kde-gtk-config); GTK theme `adw-gtk3`/`adw-gtk3-dark` via kde-gtk-config's D-Bus `org.kde.GtkConfig.setGtkTheme` (settings.ini, gsettings, xsettings); gsettings `color-scheme`, `accent-color`, `gtk-theme`, `button-layout`. Open GTK 3 windows reload `kristall.css` through our GTK module `kristall-reload-gtk-module` (`GTK_MODULES`, like kde-gtk-config's colorreload module); GTK 4 reloads user CSS itself |
 | Portal (Flatpak apps, Firefox) | xdg-desktop-portal-kde derives `org.freedesktop.appearance` `color-scheme`, `accent-color` (exact RGB), `reduced-motion` from kdeglobals; xdg-desktop-portal-gtk serves the GNOME keys |
@@ -65,6 +65,7 @@ KDecoration; `/etc/xdg/kwinrc [org.kde.kdecoration2] library=org.kristall.decora
 | outline | one device pixel, black 15 % (light) / white 20 % (dark) |
 | shadow | design.md §7 window (48/16/0.32, dark ×1.6) + contact layer (3/1/0.18); inactive 55 %, 70 % size |
 | resize | 6 px invisible margin outside the window |
+| title text | the app's own title, except that a trailing ` — <product name>` Qt appends for the apps we rename ("Home — Dolphin") shows our name ("Home — Dateien"): the app manifest's `product_names` (apps.md), read once per KWin start (`titles.cpp`). *Added 2026-11-17.* |
 
 **Zoom** maximises and restores (left click only). Mac's green button enters full screen; here the
 menu bar is our shell and full-screen windows cover it, the bar's "dims when maximised" behaviour
@@ -90,7 +91,11 @@ corners off (overview's top-left corner too); open/close = scale effect 200 ms f
   (kdeglobals fonts in pt: 9.75), monochrome toolbar icons, no icons on buttons or in menus.
 * **GTK 3**: `adw-gtk3` + our CSS; **GTK 4/libadwaita**: libadwaita + our CSS (user CSS is the only
   hook libadwaita honours: colours/accent as CSS variables and named colours, window radius 20, title
-  buttons as 12-px circles with glyphs on hover, 8-px controls, 12-px popovers). Flatpak apps see
+  buttons as 12-px circles with glyphs on hover, 8-px controls, 12-px popovers). GTK 3 client-side
+  title bars (header-bar apps, `GTK_CSD=1`) are at least 28 px with the buttons centred, and GTK 3
+  windows round only the corners GTK 3 actually draws (title bar top, window bottom; square when
+  maximised or tiled — GTK 3's maximised CSD window is opaque, a radius left black wedges). Checked:
+  theme `csd` section. Flatpak apps see
   the CSS through a system Flatpak override (`kristall-theme-flatpak.service` runs `flatpak override
   --system --filesystem=xdg-config/gtk-3.0:ro --filesystem=xdg-config/gtk-4.0:ro` at boot, because
   `/var/lib/flatpak/overrides` is not part of the image) and the colour scheme/accent through the portal.
@@ -99,7 +104,13 @@ corners off (overview's top-left corner too); open/close = scale effect 200 ms f
 * **Firefox**: `/usr/lib64/firefox/browser/defaults/preferences/kristall-theme-prefs.js` (supported
   prefs only): tabs in the title bar, compact density, overlay scroll bars, KDE file dialog via portal,
   system light/dark. Its window buttons follow the GTK button layout (left, Mac order) but Firefox
-  draws them itself (grey circles with symbols); no userChrome.
+  draws them itself (grey circles with symbols); no userChrome. They cannot be traffic lights
+  through a supported route (checked with Firefox 160, 2026-11-17): Firefox styles them in its own
+  chrome CSS (`appearance: none`, `-moz-symbolic-icon(window-close-symbolic)` …); the pref that used
+  GTK's own drawing (`widget.gtk.non-native-titlebar-buttons.enabled`) is gone, enterprise policies
+  and WebExtension themes cannot reach them, and `browser.tabs.inTitlebar=0` (KWin's title bar
+  with our buttons) is not honoured on Wayland. The `image` component makes the first start German
+  and silences the Speech Dispatcher bar (apps README).
 * **Menus to the menu bar**: Qt/KDE apps export through KWin's app-menu protocol (bridge). GTK 3 apps
   export only under XWayland with `unity-gtk3-module` (installed and loaded for every GTK 3 app through `GTK_MODULES` in `/usr/lib/environment.d/50-kristall-theme.conf`)
   and `gmenudbusmenuproxy` (Plasma). We do **not** force GTK 3 apps onto
@@ -134,7 +145,7 @@ Packages `/usr/share/wallpapers/{Kristall,Kristall-Welle,Kristall-Horizont}/` (P
 | initramfs | rebuilt as Universal Blue images do (`dracut --no-hostonly --kver K --reproducible --add ostree`), to a temp file, replacing the original only if it lists our theme, the two-step plugin, `ostree`, every dracut module of the original and ≥ 98 % of its kernel modules; otherwise original and stock theme stay (`theme/image/plymouth.sh`) | |
 | Login | plasma-login-manager 6.8's greeter is compiled-in QML (clock, user list with picture, password field, power buttons) and offers no theming beyond wallpaper, colours, font and pointer; we set the wallpaper (`/usr/lib/plasmalogin/plasmalogin.conf.d/50-kristall.conf`), the rest comes from `/etc/xdg` | |
 | Login splash | KSplash `org.kristall.desktop/contents/splash/Splash.qml`: blurred default wallpaper + thin progress bar | look-and-feel package |
-| Lock screen, log-out dialog | Plasma 6.8 loads them from the **shell** package `org.kde.plasma.desktop` (not the look-and-feel package). We ship a copy of the installed package with two changes in `/usr/share/kristall/theme/overlay/plasma/shells/` and put that directory first in `XDG_DATA_DIRS` (`/usr/lib/environment.d/50-kristall-theme.conf`). Lock screen: Plasma's `LockScreenUi.qml` patched by exact-text anchors (date + 96-px time at the top, picture/name/password lower, no sleep/hibernate/switch-user buttons, media controls kept; authentication code untouched); anchors not matching → stock; patched file failing to load → stock (Loader); both failing → kscreenlocker's built-in locker. Log-out: our alert (`KristallLogout.qml`, de/en, 60-s countdown) with the stock dialog as Loader fallback. Report of what was applied: `…/contents/kristall-overlay.json`. | |
+| Lock screen, log-out dialog | Plasma 6.8 loads them from the **shell** package `org.kde.plasma.desktop` (not the look-and-feel package). We ship a copy of the installed package with two changes in `/usr/share/kristall/theme/overlay/plasma/shells/` and put that directory first in `XDG_DATA_DIRS` (`/usr/lib/environment.d/50-kristall-theme.conf`). Lock screen: Plasma's `LockScreenUi.qml` patched by exact-text anchors (date + 96-px time at the top, picture/name/password lower, no sleep/hibernate/switch-user buttons, the "Virtual Keyboard" button only when KWin has an on-screen keyboard — i.e. a touchscreen, `setup.md` §4.4 —, media controls kept; authentication code untouched); anchors not matching → stock; patched file failing to load → stock (Loader); both failing → kscreenlocker's built-in locker. Log-out: our alert (`KristallLogout.qml`, de/en, 60-s countdown) with the stock dialog as Loader fallback. Report of what was applied: `…/contents/kristall-overlay.json`. | |
 
 ## 7. For `setup`
 

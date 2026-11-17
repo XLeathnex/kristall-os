@@ -1,3 +1,12 @@
 # Merged into /etc/xdg/kwinrc: the Mac keyboard plugin (fail-safe: without it keys are stock).
 [Plugins]
 kristall_keyboardEnabled=true
+
+# The on-screen keyboard (plasma-keyboard, ~330 MB resident) only with a touchscreen. Fedora's
+# kde-settings make KWin start it in every session and the lock screen then shows "Virtual
+# Keyboard"; here KWin starts no input method by itself, and the keyboard plugin gives it this one
+# while a touchscreen is attached (setup/keyboard/src/onscreenkeyboard.h). An InputMethod the
+# owner picks in System Settings (~/.config/kwinrc) still wins.
+[Wayland]
+InputMethod[$e]=
+KristallTouchInputMethod=/usr/share/applications/org.kde.plasma.keyboard.desktop

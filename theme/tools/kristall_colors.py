@@ -281,8 +281,28 @@ def gtk_css(tokens, mode, accent, version):
         return ", ".join(x + suffix for x in lst)
     L += [
         "/* window corners (design.md §5: windows 20 px) */",
-        f"window.csd, window.csd decoration {{ border-radius: {rad['window']}px; }}",
-        f"window.csd > headerbar, window.csd > .titlebar {{ border-top-left-radius: {rad['window']}px; border-top-right-radius: {rad['window']}px; }}",
+    ]
+    if version == 4:
+        L += [
+            f"window.csd, window.csd decoration {{ border-radius: {rad['window']}px; }}",
+            f"window.csd > headerbar, window.csd > .titlebar {{ border-top-left-radius: {rad['window']}px; border-top-right-radius: {rad['window']}px; }}",
+        ]
+    else:
+        # GTK 3 draws the window background only *below* the title bar, and a maximised or tiled
+        # CSD window is opaque: a radius on all of window.csd left black wedges under the title bar
+        # and in the corners of a maximised window (polish round, item 2)
+        tiled = ("maximized", "fullscreen", "tiled", "tiled-top", "tiled-bottom", "tiled-left", "tiled-right")
+        L += [
+            f"window.csd decoration {{ border-radius: {rad['window']}px; }}",
+            f"window.csd {{ border-radius: 0 0 {rad['window']}px {rad['window']}px; }}",
+            f"window.csd > headerbar, window.csd > .titlebar {{ border-top-left-radius: {rad['window']}px; border-top-right-radius: {rad['window']}px; }}",
+            ", ".join(f"window.csd.{t}, window.csd.{t} decoration, window.csd.{t} > headerbar, window.csd.{t} > .titlebar" for t in tiled)
+            + " { border-radius: 0; }",
+            # at least the Mac's 28-px title bar: compact header bars (Mousepad's is 18 px) let the
+            # 16-px buttons stick out at the top, half under the menu bar when maximised
+            "window.csd > headerbar, window.csd > .titlebar { min-height: 28px; }",
+        ]
+    L += [
         "",
         "/* window buttons: the Mac's three 12-px circles on the left (gtk-decoration-layout comes from",
         "   KWin's ButtonsOnLeft through kde-gtk-config); symbols while the pointer is over them */",

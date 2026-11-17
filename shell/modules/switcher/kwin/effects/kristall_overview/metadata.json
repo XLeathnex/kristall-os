@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "KWin/Effect",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Kristall OS contributors"
+            }
+        ],
+        "Category": "Window Management",
+        "Description": "All open windows side by side over the dimmed wallpaper, without desktop bar or search field",
+        "Description[de]": "Alle offenen Fenster nebeneinander über dem abgedunkelten Hintergrundbild, ohne Arbeitsflächenleiste und Suchfeld",
+        "EnabledByDefault": false,
+        "Id": "kristall_overview",
+        "License": "GPL-3.0-or-later",
+        "Name": "Kristall Overview",
+        "Name[de]": "Kristall-Übersicht"
+    },
+    "X-KDE-Ordering": 60,
+    "X-Plasma-API": "declarativescript"
+}

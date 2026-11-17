@@ -145,7 +145,7 @@ Singleton {
             if (wins.length) {
                 items.push({ type: "separator" });
                 for (const x of wins)
-                    items.push({ label: x.title || Apps.displayName(x.appId), toggle: "checkmark", checked: x.id === Bridge.frontId,
+                    items.push({ label: Apps.windowTitle(x.title) || Apps.displayName(x.appId), toggle: "checkmark", checked: x.id === Bridge.frontId,
                                  action: () => Bridge.call("window.activate", { id: x.id }) });
             }
             return items;

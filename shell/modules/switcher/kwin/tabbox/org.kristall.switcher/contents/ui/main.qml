@@ -12,6 +12,7 @@
 import QtQuick
 import org.kde.kwin as KWin
 import org.kde.kirigami as Kirigami
+import "names.js" as Names
 
 KWin.TabBoxSwitcher {
     id: tabBox
@@ -30,10 +31,25 @@ KWin.TabBoxSwitcher {
     readonly property real cell: iconSize + 24
     readonly property real pad: 14
 
-    // the app name for an entry: the title's last part ("Report — Kate" → "Kate")
-    function appName(caption) {
+    // the app name for an entry, as the Dock and menu bar name it: our manifest name for the
+    // window's app (names.js, generated from the app manifest), else the title's last part with
+    // KDE's product names replaced ("Report — Kate" → "Kate", "Home — Dolphin" → "Dateien")
+    readonly property string lang: Qt.locale().name.substring(0, 2) === "de" ? "de" : "en"
+    function pick(n) {
+        return n ? (n[lang] || n.en) : "";
+    }
+    function appName(wid, caption) {
+        for (const w of KWin.Workspace.windows) {
+            if (String(w.internalId) !== String(wid))
+                continue;
+            const id = String(w.desktopFileName || w.resourceClass || "").toLowerCase();
+            if (Names.byDesktop[id])
+                return pick(Names.byDesktop[id]);
+            break;
+        }
         const parts = String(caption || "").split(/ [—–-] /);
-        return parts.length > 1 ? parts[parts.length - 1] : String(caption || "");
+        const tail = parts.length > 1 ? parts[parts.length - 1] : String(caption || "");
+        return pick(Names.byProduct[tail]) || tail;
     }
     // every window of the app the entry stands for
     function windowsLike(wid) {
@@ -131,8 +147,12 @@ KWin.TabBoxSwitcher {
                             anchors.fill: parent
                             onClicked: tabBox.model.activate(entry.index)
                         }
+                        // looked up once, not bound: KWin's window properties are not bindable
+                        property string appLabel: ""
+                        function relabel() { appLabel = tabBox.appName(entry.model.windowId, entry.model.caption); }
+                        Component.onCompleted: relabel()
                         Accessible.role: Accessible.ListItem
-                        Accessible.name: tabBox.appName(entry.model.caption)
+                        Accessible.name: entry.appLabel
                     }
                     onCurrentIndexChanged: tabBox.currentIndex = currentIndex
                     Connections {
@@ -147,7 +167,7 @@ KWin.TabBoxSwitcher {
                     x: Math.max(tabBox.pad, Math.min(parent.width - tabBox.pad - width, centre - width / 2))
                     horizontalAlignment: Text.AlignHCenter
                     elide: Text.ElideRight
-                    text: row.currentItem ? tabBox.appName(row.currentItem.model.caption) : ""
+                    text: row.currentItem ? row.currentItem.appLabel : ""
                     color: tabBox.label
                     font.family: "Inter"
                     font.pixelSize: 13

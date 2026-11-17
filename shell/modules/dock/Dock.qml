@@ -374,7 +374,7 @@ PanelWindow {
         case "trash": return Strings.t("dock.trash");
         case "window": {
             const w = Bridge.windows[e.windowId];
-            return w ? (w.title || AppCatalog.displayName(e.key)) : "";
+            return w ? (Apps.windowTitle(w.title) || AppCatalog.displayName(e.key)) : "";
         }
         }
         return "";

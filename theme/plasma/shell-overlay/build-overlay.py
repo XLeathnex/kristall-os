@@ -58,6 +58,18 @@ LOCK_PATCHES = [
     ("no sleep button on the lock screen", "visible: sessionManagement.canSuspend", "visible: false && sessionManagement.canSuspend"),
     ("no hibernate button", "visible: sessionManagement.canHibernate", "visible: false && sessionManagement.canHibernate"),
     ("no switch-user button (one owner)", "visible: sessionManagement.canSwitchUser", "visible: false && sessionManagement.canSwitchUser"),
+    # stock shows the button always; KWin has an input method only with a touchscreen on Kristall
+    # (setup/keyboard: onscreenkeyboard.h), so without one there is no "Virtual Keyboard" button
+    ("'Virtual Keyboard' button only when there is an on-screen keyboard",
+     """                id: virtualKeyboardButton
+
+                focusPolicy: Qt.TabFocus
+""",
+     """                id: virtualKeyboardButton
+
+                visible: Keyboards.KWinVirtualKeyboard.available
+                focusPolicy: Qt.TabFocus
+"""),
 ]
 
 LOCK_ROOT_ANCHOR = """    LockScreenUi {

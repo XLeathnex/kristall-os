@@ -4,6 +4,7 @@
     SPDX-License-Identifier: GPL-3.0-or-later
 */
 #include "keysettings.h"
+#include "onscreenkeyboard.h"
 #include "remapper.h"
 
 #include "plugin.h"
@@ -18,12 +19,14 @@ public:
     KeyboardPlugin()
         : m_settings(new KeySettings(this))
         , m_remapper(new Remapper(m_settings, this))
+        , m_osk(new OnScreenKeyboard(this))
     {
     }
     ~KeyboardPlugin() override
     {
         // give every device back to KWin and release whatever we hold before anything else goes
         m_remapper->stop();
+        m_osk->stop();
     }
     bool init()
     {
@@ -32,12 +35,18 @@ public:
         Remapper::writeStatus(false, false, QStringLiteral("not-loaded"));
         return false;
 #endif
-        return m_remapper->start();
+        if (!m_remapper->start()) {
+            return false;
+        }
+        // the on-screen keyboard only with a touchscreen (independent of the Mac shortcuts)
+        m_osk->start();
+        return true;
     }
 
 private:
     KeySettings *m_settings;
     Remapper *m_remapper;
+    OnScreenKeyboard *m_osk;
 };
 
 class KeyboardPluginFactory : public KWin::PluginFactory

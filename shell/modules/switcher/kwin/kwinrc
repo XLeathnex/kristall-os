@@ -18,3 +18,9 @@ LayoutName=org.kristall.switcher
 ApplicationsMode=0
 HighlightWindows=false
 ShowTabBox=true
+
+# Overview is Kristall's own effect (kwin/effects/kristall_overview: Mission Control without
+# KWin's desktop bar and search field); KWin's Overview is switched off.
+[Plugins]
+kristall_overviewEnabled=true
+overviewEnabled=false

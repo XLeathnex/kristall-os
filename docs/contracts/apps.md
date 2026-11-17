@@ -44,6 +44,7 @@ Consumers: the Dock and Apps grid (`shell`), the Setup Assistant (`setup`), the 
 | `embed_in_iso` | bool | `flatpak` only: may be copied onto the installer USB stick. Always `false` for proprietary apps (we do not redistribute them). The current installer embeds **no** apps (2026-11-17: with them the ISO was 11.8 GB); every default app is installed on first start by `kristall-apps-provision` — the field marks what an offline edition would carry. |
 | `desktop_id` | string | the `.desktop` file name to launch (`gtk-launch`/`KService` ID), unique. |
 | `name.en`, `name.de` | string | display names we author (may differ from the app's own name, e.g. "Dateien"). |
+| `product_names` | string[] | optional *(added 2026-11-17, additive)*: the names the app itself puts into its window titles — Qt appends its display name ("Home — Dolphin", "Unbenannt — KWrite", in German also "… — Systemeinstellungen"). Whoever shows a window title to the owner replaces a trailing ` — <product name>` (or a title that is only the product name) with `name.<lang>`: the window decoration (`theme`), the Dock's and menu bar's window lists (`shell`), the app switcher (`shell`), Overview (`kwin`/`shell` override). The app's own title is never changed. |
 | `category` | enum | `system`, `internet`, `media`, `graphics`, `games`, `developer`, `utilities`, `productivity` |
 | `default` | bool | part of the default installation. |
 | `show_in_apps` | bool | `false`: works (file associations) but is not listed in Apps/Search; such entries also carry `NoDisplay=true`. |

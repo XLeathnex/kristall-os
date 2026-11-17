@@ -228,8 +228,10 @@ Desktop-file actions run on key *press* only; kglobalacceld signals press and re
 (`globalShortcutPressed`/`Released` on `org.kde.kglobalaccel.Component`) only for actions a D-Bus
 client registered itself. A shortcut that needs the release is therefore registered by the shell
 helper as component `kristall-shell` (friendly name "Kristall Shell"): today
-`assistant-talk` — Alt+Space, Meta+Shift+F23 and Meta+Shift+TouchpadOn (the Copilot key under
-the stock xkb keymap) — press → `assistant invoke shortcut`, release → `assistant release
+`assistant-talk` — Alt+Space and the Copilot key: Meta+F23 (what the keyboard plugin shows KWin
+for the key's Meta+Shift+F23, because Fedora 45's keymap makes that XF86Assistant, a keysym Qt has
+no key for; *revised 2026-11-17*), plus Meta+Shift+F23 and Meta+Shift+TouchpadOff for older
+keymaps without the plugin — press → `assistant invoke shortcut`, release → `assistant release
 <held ms>` (the assistant ends the utterance when held ≥ `assistant.ui.holdMs`, a tap keeps
 tap-to-talk). The assistant's desktop file keeps its action without default keys, so one key
 press always fires exactly one path. Owner overrides are stored by kglobalacceld and loaded when
@@ -284,7 +286,12 @@ StatusNotifierItem (`Quickshell.Services.SystemTray`), `SystemClock`, `DesktopEn
   restarting) adds a plain Plasma
   panel (launcher, task manager, clock, log out) through `org.kde.PlasmaShell.evaluateScript`,
   writes `~/.local/state/kristall/shell/fallback-panel` and notifies the owner. The next time the
-  shell runs for 20 s it removes all Plasma panels again and deletes the marker.
+  shell runs for 20 s it removes all Plasma panels again and deletes the marker. *(2026-11-17)* The
+  fallback panel's notifications applet takes `org.freedesktop.Notifications` while the shell is
+  down, and plasmashell keeps that name until it exits (removing the panel does not release it; it
+  refuses `REPLACE_EXISTING`). So the helper then checks the name's owner and, if it is plasmashell,
+  restarts plasmashell once (`systemctl --user restart plasma-plasmashell.service`; it comes back
+  drawing only the desktop) and the panels module claims the free name. Test: `notifyreclaim`.
 * Glass, bridge or helper missing: the shell keeps working (fallback material, no app menus /
   window actions, minimal menus). Sockets are watched with inotify (helper) — no retry polling.
   Without the helper (or when a socket refuses), `Bridge` and `GlassClient` retry with backoff

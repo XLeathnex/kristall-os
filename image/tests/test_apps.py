@@ -55,6 +55,13 @@ class ManifestTest(unittest.TestCase):
             if a["kind"] == "flatpak":
                 self.assertIn(a["flatpak"]["id"], verified, "not verified on Flathub")
 
+    def test_kde_apps_name_their_window_title_suffix(self):
+        # Qt appends the app's display name to every window title ("Home — Dolphin"): the KDE apps
+        # we rename must say which name to replace (apps.md, product_names)
+        for a in load_manifest()["apps"]:
+            if a["desktop_id"].startswith("org.kde.") or a["desktop_id"] == "systemsettings.desktop":
+                self.assertTrue(a.get("product_names"), a["id"])
+
     def test_validator_catches_mistakes(self):
         base = load_manifest()
         cases = {
@@ -65,6 +72,8 @@ class ManifestTest(unittest.TestCase):
             "embed proprietary": lambda d: [a.__setitem__("embed_in_iso", True)
                                             for a in d["apps"] if a.get("proprietary")],
             "hidden but docked": lambda d: d["apps"][0].__setitem__("show_in_apps", False),
+            "product_names not a list": lambda d: d["apps"][0].__setitem__("product_names", "Dolphin"),
+            "empty product name": lambda d: d["apps"][0].__setitem__("product_names", [""]),
         }
         for name, mutate in cases.items():
             doc = copy.deepcopy(base)

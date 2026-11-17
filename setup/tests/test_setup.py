@@ -23,6 +23,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "support"))
 import setupsession as S  # noqa: E402
 from PIL import Image  # noqa: E402
+import numpy as np  # noqa: E402
 
 sys.path.insert(0, os.path.join(S.REPO, "kwin", "glass", "tests", "support"))
 import pattern  # noqa: E402
@@ -73,6 +74,54 @@ def boot(s, wallpaper="calm"):
     if not st:
         raise RuntimeError("setup module did not come up:\n" + s.shell_log()[-3000:])
     return st
+
+
+def text_page(w, h):
+    """a white app window full of black text (a web page): the worst background for a glass card"""
+    img = np.full((h, w, 3), 255, np.uint8)
+    rng = np.random.default_rng(7)
+    for y in range(40, h - 30, 22):
+        x = 60
+        while x < w - 120:
+            n = int(rng.integers(20, 90))
+            img[y:y + 11, x:x + n] = 20
+            x += n + int(rng.integers(8, 16))
+    return img
+
+
+def card_show_through(s):
+    """luminance spread inside the card's empty left margin: how much of what is behind shows through"""
+    r = s.rect("setup.card")
+    img = s.screenshot()[..., :3].astype(float)
+    x0, x1 = int(r["x"] + 10), int(r["x"] + 30)
+    y0, y1 = int(r["y"] + 50), int(r["y"] + r["h"] - 50)
+    lum = (img[y0:y1, x0:x1] * [0.299, 0.587, 0.114]).sum(axis=2)
+    return float(lum.std()), float(lum.mean()), r
+
+
+def test_legible():
+    print("== legibility: the card stays readable over a white page full of text (sign-in over the browser)", flush=True)
+    s = S.SetupSession(name="setup-legible", account="abandon", account_start="signed_out", settings={"setup": {"done": True}})
+    try:
+        s.start()
+        bg = os.path.join(s.tmp, "bg.png")
+        Image.fromarray(text_page(s.width, s.height)).save(bg)
+        s.background(bg)
+        s.start_shell()
+        s.wait_st(lambda st: st.get("liveChecked"), 15)
+        s.request("claude-signin", "sign_in")
+        s.wait_st(lambda st: st["open"] and st["account"]["phase"] == "idle" and st["account"]["status"] != "", 8)
+        time.sleep(0.4)
+        primary(s)
+        st = s.wait_st(lambda st: st["account"]["phase"] == "browser", 6)
+        time.sleep(1.5)                     # the card has moved aside (lower right), no dim
+        std, mean, r = card_show_through(s)
+        info(f"card over a text page: margin luminance std {std:.1f}, mean {mean:.0f}, card {r}")
+        shot(s, "signin-over-text-page.jpg", small=False)
+        check("over a white page of text the card's own surface stays calm (text behind does not show through: spread < 4 grey levels)",
+              std < 4.0, f"std {std:.1f}")
+    finally:
+        s.stop()
 
 
 def shell_problems(s):
@@ -252,8 +301,10 @@ def walk(lang):
               json.dumps(st.get("mic") if st else None))
         time.sleep(0.6)
         shot(s, f"walk-{lang}-microphone-heard.jpg")
-        primary(s)
-        check(f"[{lang}] → privacy", at(s, "privacy"))
+        # the keyboard focus is still on the button just clicked ("Noch einmal"): Return must be
+        # Continue (the primary action), not that button
+        s.tap("enter")
+        check(f"[{lang}] Return after clicking 'Try Again' → Continue (the primary action), not Try Again → privacy", at(s, "privacy"))
         s.tap("enter")
         check(f"[{lang}] Return → energy", at(s, "energy"))
         if de:
@@ -540,7 +591,7 @@ def test_looks():
 
 SECTIONS = {"looks": test_looks, "smoke": test_smoke, "walk-de": test_walk_de, "walk-en": test_walk_en, "offline": test_offline,
             "signin-fail": test_signin_fail, "signin-abandon": test_signin_abandon, "resume": test_resume,
-            "skip": test_skip, "live": test_live}
+            "skip": test_skip, "live": test_live, "legible": test_legible}
 
 if __name__ == "__main__":
     want = sys.argv[1:] or [k for k in SECTIONS if k != "smoke"]

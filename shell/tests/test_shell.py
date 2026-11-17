@@ -8,6 +8,7 @@ Screenshots go to tests/evidence/.
 """
 import json
 import os
+import re
 import select
 import shutil
 import signal
@@ -254,6 +255,12 @@ def test_core():
         check("bar: glass bound and drawn", st["bar"]["glassDrawn"] and st["glass"] == "active", json.dumps(st["bar"]))
         check("shell subscribes to the bridge's 'menus' topic", sess.ctl({"cmd": "state"}).get("menuClients") == 1)
         check("locale: German strings and Mac clock format", st["lang"] == "de" and "." in st["clock"].split(" ")[0], st["clock"])
+        titles = {t: sess.ipc("test", "windowTitle", t) for t in ("Persönlicher Ordner — Dolphin", "Unbenannt — KWrite", "Erscheinungsbild — Systemeinstellungen",
+                                                                  "Dolphin", "Neuer Tab — Mozilla Firefox", "Bericht — Entwurf")}
+        check("window titles: KDE product names become ours (Dateien, Texteditor), other titles stay as they are",
+              titles == {"Persönlicher Ordner — Dolphin": "Persönlicher Ordner — Dateien", "Unbenannt — KWrite": "Unbenannt — Texteditor",
+                         "Erscheinungsbild — Systemeinstellungen": "Erscheinungsbild — Systemeinstellungen", "Dolphin": "Dateien",
+                         "Neuer Tab — Mozilla Firefox": "Neuer Tab — Mozilla Firefox", "Bericht — Entwurf": "Bericht — Entwurf"}, json.dumps(titles, ensure_ascii=False))
         check("battery from UPower", st["power"]["battery"] and st["power"]["percent"] == 76, json.dumps(st["power"]))
         check("audio from PipeWire", st["audio"]["available"], json.dumps(st["audio"]))
         check("Wi-Fi from NetworkManager", st["network"]["wifi"] and st["network"]["name"] == "Zuhause" and st["network"]["bars"] == 3, json.dumps(st["network"]))
@@ -878,6 +885,8 @@ def test_shortcuts():
                 hp.kill()
             after = krunner_keys()
             check(f"helper start {run}: the assistant owns Alt+Space", bool(got_keys) and alt_space in got_keys, str(got_keys))
+            check(f"helper start {run}: … and the Copilot key as the keyboard plugin shows it (Meta+F23)", bool(got_keys) and 0x11000046 in got_keys,
+                  str([hex(k) for k in got_keys or []]))
             check(f"helper start {run}: KRunner no longer has Alt+Space and keeps its other keys",
                   isinstance(after, list) and alt_space not in after and len(after) >= 1, str(after if not isinstance(after, list) else [hex(k) for k in after]))
             check(f"helper start {run}: " + ("Alt+Space was taken off KRunner" if run == 1 else "nothing left to change (idempotent)"),
@@ -1279,8 +1288,69 @@ def test_realbridge():
         sess.stop()
 
 
+FAKE_PLASMA_NOTIFY = """
+import sys
+from gi.repository import Gio, GLib
+XML = '<node><interface name="org.freedesktop.Notifications"><method name="GetServerInformation"><arg type="s" direction="out"/><arg type="s" direction="out"/><arg type="s" direction="out"/><arg type="s" direction="out"/></method></interface></node>'
+bus = Gio.bus_get_sync(Gio.BusType.SESSION)
+node = Gio.DBusNodeInfo.new_for_xml(XML)
+def call(conn, sender, path, iface, method, params, inv):
+    inv.return_value(GLib.Variant("(ssss)", ("Plasma", "KDE", "6.8", "1.2")))
+bus.register_object("/org/freedesktop/Notifications", node.interfaces[0], call, None, None)
+r = bus.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "RequestName",
+                  GLib.Variant("(su)", ("org.freedesktop.Notifications", 4)), None, 0, 2000, None).unpack()[0]
+print("owner" if r == 1 else "not-owner", flush=True)
+GLib.MainLoop().run()
+"""
+
+
+def test_notifyreclaim():
+    print("== notifications back from plasmashell after a fallback-panel episode", flush=True)
+    W, H = 1280, 800
+    sess = ss.ShellSession(width=W, height=H, name="notifyreclaim")
+    sess.start()
+    fake = None
+    try:
+        sess.start_system()
+        # plasmashell's notifications applet (the fallback panel) took the name while the shell was
+        # down; Plasma keeps it and does not allow replacement. A stand-in whose process is called
+        # "plasmashell" does the same here.
+        exe = os.path.join(sess.tmp, "plasmashell")
+        shutil.copy(sys.executable, exe)
+        script = os.path.join(sess.tmp, "fake-plasma-notify.py")
+        open(script, "w").write(FAKE_PLASMA_NOTIFY)
+        env = sess.env()
+        fake = subprocess.Popen([exe, script], env=env, stdout=subprocess.PIPE, text=True)
+        check("stand-in plasmashell owns org.freedesktop.Notifications", fake.stdout.readline().strip() == "owner")
+        marker = os.path.join(sess.tmp, "state", "kristall", "shell", "fallback-panel")
+        os.makedirs(os.path.dirname(marker), exist_ok=True)
+        open(marker, "w").write("2026-11-17T00:00:00Z\n")
+        restarted = os.path.join(sess.tmp, "plasmashell-restarted")
+        sess.start_shell(extra_env={"KRISTALL_PLASMASHELL_RESTART": f"touch {restarted}; kill {fake.pid}"})
+        sess.wait_ready()
+
+        def owner():
+            r = subprocess.run(["gdbus", "call", "--session", "--dest", "org.freedesktop.DBus", "--object-path", "/org/freedesktop/DBus",
+                                "--method", "org.freedesktop.DBus.GetConnectionUnixProcessID", "org.freedesktop.Notifications"],
+                               env=env, capture_output=True, text=True, timeout=10)
+            m = re.search(r"uint32 (\d+)", r.stdout)
+            return int(m.group(1)) if m else None
+        check("while plasmashell holds the name the shell does not get it", owner() == fake.pid, str(owner()))
+        # the shell asks its helper to clean up after 20 s of running; the panel goes, then the name
+        ok = ss.wait_until(lambda: owner() == sess.shell.pid, 45, 0.5)
+        check("the helper restarts plasmashell once and the shell's panels module owns org.freedesktop.Notifications again",
+              bool(ok) and os.path.exists(restarted), f"owner {owner()} shell {sess.shell.pid} restarted {os.path.exists(restarted)}")
+        check("… the fallback marker is gone", not os.path.exists(marker))
+        r = subprocess.run(["notify-send", "Wieder da", "Die Mitteilungen sind wieder bei Kristall."], env=env, capture_output=True, text=True, timeout=10)
+        check("a notification sent afterwards is accepted by the shell's server", r.returncode == 0, r.stderr.strip())
+    finally:
+        if fake and fake.poll() is None:
+            fake.kill()
+        sess.stop()
+
+
 SECTIONS = {"realbridge": test_realbridge, "static": test_static, "shortcuts": test_shortcuts, "ctl": test_ctl, "reconnect": test_reconnect, "controls": test_controls, "menus": test_menus, "reveal": test_reveal, "core": test_core, "appmenu": test_appmenu, "scale": test_scale, "fallback": test_fallback,
-            "modules": test_modules, "restart": test_restart, "plasma": test_plasma, "gallery": test_gallery}
+            "modules": test_modules, "restart": test_restart, "plasma": test_plasma, "gallery": test_gallery, "notifyreclaim": test_notifyreclaim}
 
 if __name__ == "__main__":
     wanted = sys.argv[1:] or [k for k in SECTIONS if k != "realbridge"] + ["realbridge"]

@@ -35,6 +35,7 @@ system: screenshot-region            alt+shift+4             global shortcut 'sc
 system: screenshot-tool              alt+shift+5             global shortcut 'screenshot-tool'
 system: emoji                        ctrl+alt+space          global shortcut 'emoji'
 system: assistant                    win+space               global shortcut 'assistant'
+system: copilot                      win+shift+f23           global shortcut 'copilot'
 ⌘Tab app switcher                    alt+tab                 KWin switcher (Meta+Tab)
 ⌘M / ⌘H / ⌃⌘F                                                minimise / hide app / full screen (KWin)
 foot (real terminal)                 ctrl+c / alt+c / alt+v  0x03 / nothing / paste

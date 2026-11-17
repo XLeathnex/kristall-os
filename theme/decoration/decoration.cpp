@@ -7,6 +7,7 @@
 #include "decoration.h"
 #include "button.h"
 #include "shadow.h"
+#include "titles.h"
 
 #include <KDecoration3/DecoratedWindow>
 #include <KDecoration3/DecorationSettings>
@@ -190,8 +191,9 @@ void Decoration::paint(QPainter *painter, const QRectF &repaintArea)
         painter->drawRect(bar);
     }
 
-    // title: centred over the whole width, elided so it never runs under the buttons
-    const QString caption = w->caption();
+    // title: centred over the whole width, elided so it never runs under the buttons; our app
+    // names instead of KDE's product names ("Home — Dateien", titles.h)
+    const QString caption = ownerCaption(w->caption());
     if (!caption.isEmpty()) {
         // the system title font (kdeglobals [WM] activeFont, Inter 13 px); Mac titles are bold
         QFont font = settings()->font();

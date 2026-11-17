@@ -138,6 +138,23 @@ Scope {
             const it = h.item;
             return JSON.stringify({ shown: it.shown !== undefined ? it.shown : it.value, checked: it.checked, on: it.on, index: it.currentIndex });
         }
+        // texts under the named control that do not fit (elided or cut after the last line)
+        function truncated(name: string): string {
+            const h = hooks.findAny(name);
+            if (!h)
+                return "missing";
+            const out = [];
+            const walk = it => {
+                if (!it || it.visible === false)
+                    return;
+                if (it.truncated === true)
+                    out.push(it.text);
+                for (const k of (it.children || []))
+                    walk(k);
+            };
+            walk(h.item);
+            return JSON.stringify(out);
+        }
         function segment(name: string, index: int): string {
             const h = hooks.findAny(name);
             if (!h || typeof h.item.select !== "function")

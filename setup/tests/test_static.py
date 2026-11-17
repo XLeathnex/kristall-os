@@ -44,6 +44,19 @@ for path in [os.path.join(SETUP, "data", "50-setup.json"), os.path.join(MOD, "st
         ok = False
     check(f"valid JSON: {os.path.relpath(path, REPO)}", ok)
 
+# install.sh: System Settings' main entry opens Kristall's first page (the block run on a copy)
+src = open(os.path.join(SETUP, "image", "install.sh")).read()
+block = src[src.index("# System Settings opens on Kristall"):src.index("# the Setup Assistant's shell module")]
+with tempfile.TemporaryDirectory() as pre:
+    os.makedirs(os.path.join(pre, "share", "applications"))
+    desk = os.path.join(pre, "share", "applications", "systemsettings.desktop")
+    open(desk, "w").write("[Desktop Entry]\nExec=systemsettings\nName=System Settings\n\n[Desktop Action Users]\nExec=systemsettings kcm_users\n")
+    for _ in range(2):
+        subprocess.run(["bash", "-c", "set -euo pipefail\n" + block], env=dict(os.environ, PREFIX=pre), check=True)
+    text = open(desk).read()
+check("install: System Settings opens on Kristall's About page (Exec), actions untouched, idempotent",
+      text.count("Exec=systemsettings kcm_kristall_about") == 1 and "Exec=systemsettings kcm_users" in text and "\nExec=systemsettings\n" not in text, text)
+
 d = json.load(open(os.path.join(SETUP, "data", "50-setup.json")))
 check("defaults drop-in holds only our top-level keys (keyboard, setup)", sorted(d) == ["keyboard", "setup"], str(sorted(d)))
 check("defaults: Mac shortcuts on, setup not done", d["keyboard"]["macShortcuts"] is True and d["keyboard"]["commandKey"] == "ctrl" and d["setup"]["done"] is False)
