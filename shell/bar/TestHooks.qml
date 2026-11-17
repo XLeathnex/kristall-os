@@ -68,6 +68,8 @@ Scope {
             const levels = [];
             for (let i = 0; i < host.levelModel.count; ++i) {
                 const p = host.panelAt(i);
+                if (p && !p.placed)
+                    return JSON.stringify(null);   // still waiting for the surface's size: no real geometry yet
                 levels.push({ anchorRow: host._levels[i] ? host._levels[i].anchorRow : -1, current: p ? p.currentIndex : -1,
                               x: p ? p.x : 0, y: p ? p.y : 0, w: p ? p.width : 0, h: p ? p.height : 0,
                               rows: p ? p.entries.map((e, k) => p.rowRect(k)) : [] });
@@ -188,8 +190,8 @@ Scope {
             if (host) {
                 for (let i = 0; i < host.levelModel.count; ++i) {
                     const p = host.panelAt(i);
-                    if (p)
-                        levels.push({ x: p.x, y: p.y, w: p.width, h: p.height, selected: p.currentIndex, scheme: p.scheme,
+                    if (p)               // placed: x/y are real only once the menu surface has its size
+                        levels.push({ x: p.x, y: p.y, w: p.width, h: p.height, placed: p.placed, selected: p.currentIndex, scheme: p.scheme,
                                       items: p.entries.map(e => (e.type || "item") === "item" ? (e.label + (e.enabled === false ? " [disabled]" : "") + (e.checked ? " [x]" : "") + (e.shortcut ? " {" + e.shortcut + "}" : "") + ((e.sub || e.children) ? " >" : "")) : "-" + (e.type || "")) });
                 }
             }

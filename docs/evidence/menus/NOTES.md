@@ -65,3 +65,7 @@ Tools: scratchpad/menus/tools (copy of polish tools), containers kristall-menus-
   (173 PASS, 0 FAIL); theme exit 0 (107 PASS, 7 SKIP) after gating its GTK 3 checks on adw-gtk3 (gtk3-devel brings
   gtk3-widget-factory/gtk3-demo into the plain devenv, where adw-gtk3 is absent → they used to be skipped).
 - integ container removed (kristall-integ:latest kept). Next: publish, watch CI.
+- CI round 1 afdace6: Build OS image 44055625978 SUCCESS; Component tests 44055626278: 14/15, shell FAIL
+  (menus safe-triangle: test read panel geometry before the menu surface had its size — with the new `placed`
+  guard hover there hit nothing). FIX TestHooks: menuState null until placed; state levels carry `placed`;
+  press-drag test waits for it. Local shell suite exit 0 (173 PASS). Republishing.

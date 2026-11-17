@@ -448,7 +448,7 @@ def test_appmenu():
         edit = [r for r in rects if r["text"] == "Bearbeiten"][0]
         idx = [r["text"] for r in rects].index("Bearbeiten")
         sess.ipc("test", "openMenu", idx, "")
-        st = wait_state(sess, lambda s: s["levels"])
+        st = wait_state(sess, lambda s: s["levels"] and s["levels"][0]["placed"])
         lv = st["levels"][0]
         sess.ipc("test", "close")
         y = lv["y"] + 5 + 24 * 1 + 12      # second row: Ausschneiden
